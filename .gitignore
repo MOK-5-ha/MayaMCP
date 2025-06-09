@@ -94,6 +94,11 @@ maya_memvid_output.log
 test_*.py
 test_maya.py
 
+# Test modules and pytest files
+tests/
+pytest.ini
+.pytest_cache/
+
 # Memvid video memory files (generated at runtime)
 assets/maya_memory.mp4
 assets/maya_memory_index.json

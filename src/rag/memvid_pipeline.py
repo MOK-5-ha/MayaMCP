@@ -3,7 +3,7 @@ Memvid-enhanced RAG pipeline for Maya
 """
 
 import google.generativeai as genai
-from typing import List, Optional
+from typing import List
 
 from .memvid_store import search_memvid_documents
 from ..config.logging_config import get_logger

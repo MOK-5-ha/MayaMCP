@@ -1,6 +1,6 @@
 """Main conversation processing logic."""
 
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Any
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 # RAG pipeline imports moved to top for performance
@@ -24,7 +24,7 @@ from .phase_manager import ConversationPhaseManager
 logger = get_logger(__name__)
 
 def _process_drink_context(drink_context: str) -> str:
-    \"\"\"
+    """
     Process multi-token drink context into a single drink item.
     
     Args:
@@ -32,9 +32,9 @@ def _process_drink_context(drink_context: str) -> str:
         
     Returns:
         Processed drink string suitable for add_to_order tool
-    \"\"\"
+    """
     if not drink_context:
-        return \"\"
+        return ""
     
     # Split and clean drink context
     drink_tokens = [token.strip() for token in drink_context.split() if token.strip()]
