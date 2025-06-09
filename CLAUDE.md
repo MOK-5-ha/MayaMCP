@@ -130,3 +130,11 @@ All configuration is handled through environment variables loaded from `.env` fi
 
 **Error Handling:**
 The application includes comprehensive error handling with fallbacks for RAG and TTS failures, ensuring Maya continues to function even when external services are unavailable.
+
+## Code Writing Principles
+
+### Variable Naming
+- Always ensure to use descriptive variable names.
+
+### Functional Programming Principle
+- Always try to implement with functional programming before attempting object-oriented programming.

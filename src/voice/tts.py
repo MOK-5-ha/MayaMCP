@@ -13,6 +13,59 @@ logger = get_logger(__name__)
 # Define retryable exceptions for Cartesia
 CARTESIA_RETRYABLE_EXCEPTIONS = (ConnectionError, TimeoutError)
 
+def clean_text_for_tts(text: str) -> str:
+    """
+    Clean text for TTS to improve pronunciation and remove unwanted punctuation.
+    
+    Args:
+        text: Raw text to be spoken
+        
+    Returns:
+        Cleaned text suitable for TTS
+    """
+    if not text:
+        return text
+    
+    # Replace "MOK 5-ha" with "Moksha" for proper pronunciation
+    cleaned_text = re.sub(r'MOK 5-ha', 'Moksha', text, flags=re.IGNORECASE)
+    
+    # Remove problematic punctuation that TTS might pronounce
+    # Keep periods, commas, question marks, exclamation marks for natural pauses
+    # Remove: asterisks, hashtags, underscores, brackets, etc.
+    punctuation_to_remove = [
+        r'\*+',           # Asterisks (*,**,***)
+        r'#+',            # Hashtags (#,##,###)
+        r'_+',            # Underscores (_,__,___)
+        r'`+',            # Backticks (`,'',''')
+        r'\[.*?\]',       # Square brackets [text]
+        r'[\[\]]',        # Individual square brackets
+        r'\{.*?\}',       # Curly brackets {text}
+        r'[{}]',          # Individual curly brackets
+        r'<.*?>',         # Angle brackets <text>
+        r'[<>]',          # Individual angle brackets
+        r'~+',            # Tildes (~,~~)
+        r'\^+',           # Carets (^,^^)
+        r'=+',            # Equals signs (=,==,===)
+        r'\|+',           # Pipes (|,||)
+        r'\\+',           # Backslashes (\,\\)
+        r'@+',            # At symbols (@,@@)
+        r'&+',            # Ampersands (&,&&)
+        r'%+',            # Percent signs (%,%%)
+        r'\$+',           # Dollar signs ($,$$)
+    ]
+    
+    for pattern in punctuation_to_remove:
+        cleaned_text = re.sub(pattern, ' ', cleaned_text)
+    
+    # Clean up extra whitespace
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+    
+    # Log if significant changes were made
+    if cleaned_text != text:
+        logger.info(f"Cleaned TTS text: '{text[:30]}...' → '{cleaned_text[:30]}...'")
+    
+    return cleaned_text
+
 def initialize_cartesia_client(api_key: str):
     """
     Initialize Cartesia client.
@@ -71,10 +124,8 @@ def get_voice_audio(
         if voice_id is None:
             voice_id = config["voice_id"]
         
-        # Replace "MOK 5-ha" with "Moksha" for pronunciation in TTS
-        text_for_tts = re.sub(r'MOK 5-ha', 'Moksha', text_to_speak, flags=re.IGNORECASE)
-        if text_for_tts != text_to_speak:
-            logger.info("Applied 'MOK 5-ha' → 'Moksha' pronunciation for TTS.")
+        # Clean text for TTS (pronunciation fixes and punctuation removal)
+        text_for_tts = clean_text_for_tts(text_to_speak)
 
         logger.info(f"Requesting TTS from Cartesia (Voice ID: {voice_id}) for: '{text_for_tts[:50]}...'")
 

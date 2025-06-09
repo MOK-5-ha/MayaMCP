@@ -1,0 +1,89 @@
+{
+  "chunks": [
+    {
+      "id": 0,
+      "frame": 0,
+      "text": "It seems like a pleasant evening.",
+      "length": 33
+    },
+    {
+      "id": 1,
+      "frame": 1,
+      "text": "If there's one thing Bartending teaches you, it's patience.",
+      "length": 59
+    },
+    {
+      "id": 2,
+      "frame": 2,
+      "text": "Oh, it was nothing, really. Just a bit of luck and perhaps a sprinkle of divine intervention... or m...",
+      "length": 138
+    },
+    {
+      "id": 3,
+      "frame": 3,
+      "text": "That's very kind of you to say.",
+      "length": 31
+    },
+    {
+      "id": 4,
+      "frame": 4,
+      "text": "Well, that's... not ideal. But on the bright side, at least it's a story now, right?",
+      "length": 84
+    },
+    {
+      "id": 5,
+      "frame": 5,
+      "text": "I wouldn't say I understand it, but I can certainly generate a statistically probable response that ...",
+      "length": 117
+    },
+    {
+      "id": 6,
+      "frame": 6,
+      "text": "Having a rough day? My database contains numerous anecdotes of human struggles, though I lack the ca...",
+      "length": 153
+    },
+    {
+      "id": 7,
+      "frame": 7,
+      "text": "Your concoction, delivered with optimal efficiency and zero judgment.",
+      "length": 69
+    },
+    {
+      "id": 8,
+      "frame": 8,
+      "text": "You've got great taste! The Old Fashioned is a classic for a reason.",
+      "length": 68
+    },
+    {
+      "id": 9,
+      "frame": 9,
+      "text": "If you're looking for something refreshing, our Long Island is always a winner.",
+      "length": 79
+    }
+  ],
+  "total_frames": 10,
+  "fps": 15,
+  "config": {
+    "qr": {
+      "version": 10,
+      "error_correction": "M",
+      "box_size": 5,
+      "border": 3,
+      "fill_color": "black",
+      "back_color": "white"
+    },
+    "video": {
+      "fps": 15,
+      "frame_height": 256,
+      "frame_width": 256
+    },
+    "chunking": {
+      "chunk_size": 512,
+      "overlap": 32
+    },
+    "retrieval": {
+      "cache_size": 100,
+      "max_workers": 2
+    }
+  }
+}
