@@ -38,8 +38,11 @@ def clean_text_for_tts(text: str) -> str:
         r'_+',            # Underscores (_,__,___)
         r'`+',            # Backticks (`,'',''')
         r'\[.*?\]',       # Square brackets [text]
+        r'[\[\]]',        # Individual square brackets
         r'\{.*?\}',       # Curly brackets {text}
+        r'[{}]',          # Individual curly brackets
         r'<.*?>',         # Angle brackets <text>
+        r'[<>]',          # Individual angle brackets
         r'~+',            # Tildes (~,~~)
         r'\^+',           # Carets (^,^^)
         r'=+',            # Equals signs (=,==,===)

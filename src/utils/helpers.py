@@ -151,21 +151,22 @@ def detect_speech_acts(user_input: str, conversation_context: List[str] = None) 
                 r'\bthis is\b.*(?:your|the)',
                 r'\bthat was\b.*(?:your|the)',
                 r'\byour \w+ is ready\b',
-                r'\bone \w+ for you\b'
+                r'\bone \w+ for you\b',
+                r'\bthis is your\b'
             ],
-            'order_indicators': ['drink', 'order', 'whiskey', 'cocktail', 'beverage']
+            'order_indicators': ['drink', 'order', 'whiskey', 'cocktail', 'beverage', 'manhattan']
         },
         'directive': {  # Direct requests
             'patterns': [
-                r'\bplease\b.*(?:get|make|prepare)',
-                r'\bcan you\b.*(?:get|make|prepare)',
-                r'\bwould you\b.*(?:get|make|prepare)',
-                r'\bi want\b.*(?:whiskey|beer|cocktail)',
-                r'\bi need\b.*(?:whiskey|beer|cocktail)',
-                r'\bi\'d like\b.*(?:whiskey|beer|cocktail)',
-                r'\bmay i have\b.*(?:whiskey|beer|cocktail)'
+                r'\bplease\b',
+                r'\bcan you\b',
+                r'\bwould you\b',
+                r'\bi want\b',
+                r'\bi need\b',
+                r'\bi\'d like\b',
+                r'\bmay i have\b'
             ],
-            'order_indicators': ['whiskey', 'beer', 'cocktail', 'drink']
+            'order_indicators': ['whiskey', 'beer', 'cocktail', 'drink', 'rocks', 'manhattan']
         }
     }
     
@@ -197,9 +198,9 @@ def detect_speech_acts(user_input: str, conversation_context: List[str] = None) 
     # Return highest confidence detection
     if detected_acts:
         best_act = max(detected_acts, key=lambda x: x['confidence'])
-        if best_act['confidence'] > 0.3:  # Threshold for action
+        if best_act['confidence'] >= 0.3:  # Threshold for action
             return {
-                'intent': 'order_confirmation' if best_act['speech_act'] == 'commissive' else 'order_request',
+                'intent': 'order_confirmation' if best_act['speech_act'] in ('commissive', 'assertive') else 'order_request',
                 'speech_act': best_act['speech_act'],
                 'confidence': best_act['confidence'],
                 'drink_context': best_act['drink_context']

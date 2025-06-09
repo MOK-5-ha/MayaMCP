@@ -48,8 +48,28 @@ class MemvidEncoder:
     
     def build_video_simple(self, output_path: str, index_path: str) -> bool:
         """
-        Build video memory using simple image sequence (fallback method)
+        Build video memory using simple image sequence (refactored for reduced complexity)
         """
+        if not self._validate_build_prerequisites():
+            return False
+        
+        try:
+            video_writer = self._create_video_writer(output_path)
+            if video_writer is None:
+                return False
+            
+            index_data = self._initialize_index_data()
+            frame_count = self._process_all_chunks(video_writer, index_data)
+            
+            self._finalize_video_build(video_writer, index_data, frame_count, index_path, output_path)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Video creation failed: {e}")
+            return False
+    
+    def _validate_build_prerequisites(self) -> bool:
+        """Validate that video building can proceed"""
         if not self.dependencies_available:
             logger.error("Cannot build video - missing dependencies")
             return False
@@ -58,82 +78,94 @@ class MemvidEncoder:
             logger.error("No chunks to encode")
             return False
         
-        try:
-            import cv2
-            
-            # Video configuration
-            video_config = self.config["video"]
-            frame_size = (video_config["frame_width"], video_config["frame_height"])
-            fps = video_config["fps"]
-            
-            # Create video writer
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, frame_size)
-            
-            if not out.isOpened():
-                logger.error("Failed to create video writer")
-                return False
-            
-            # Create index data
-            index_data = {
-                "chunks": [],
-                "total_frames": 0,
-                "fps": fps,
-                "config": self.config
-            }
-            
-            frame_count = 0
-            
-            # Process each chunk
-            for i, chunk in enumerate(tqdm(self.chunks, desc="Encoding chunks")):
-                # Create chunk data
-                chunk_data = {
-                    "id": i,
-                    "text": chunk,
-                    "frame": frame_count
-                }
-                
-                # Encode to QR
-                qr_image = encode_to_qr(json.dumps(chunk_data))
-                if qr_image is None:
-                    logger.warning(f"Failed to encode chunk {i}")
-                    continue
-                
-                # Convert to video frame
-                frame = qr_to_frame(qr_image, frame_size)
-                if frame is None:
-                    logger.warning(f"Failed to convert chunk {i} to frame")
-                    continue
-                
-                # Write frame to video
-                out.write(frame)
-                
-                # Add to index
-                index_data["chunks"].append({
-                    "id": i,
-                    "frame": frame_count,
-                    "text": chunk[:100] + "..." if len(chunk) > 100 else chunk,  # Preview text
-                    "length": len(chunk)
-                })
-                
+        return True
+    
+    def _create_video_writer(self, output_path: str):
+        """Create and validate video writer"""
+        import cv2
+        
+        video_config = self.config["video"]
+        frame_size = (video_config["frame_width"], video_config["frame_height"])
+        fps = video_config["fps"]
+        
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(output_path, fourcc, fps, frame_size)
+        
+        if not video_writer.isOpened():
+            logger.error("Failed to create video writer")
+            return None
+        
+        return video_writer
+    
+    def _initialize_index_data(self) -> Dict[str, Any]:
+        """Initialize index data structure"""
+        return {
+            "chunks": [],
+            "total_frames": 0,
+            "fps": self.config["video"]["fps"],
+            "config": self.config
+        }
+    
+    def _process_all_chunks(self, video_writer, index_data: Dict[str, Any]) -> int:
+        """Process all chunks and write to video"""
+        frame_count = 0
+        frame_size = (self.config["video"]["frame_width"], self.config["video"]["frame_height"])
+        
+        for i, chunk in enumerate(tqdm(self.chunks, desc="Encoding chunks")):
+            if self._process_single_chunk(chunk, i, frame_count, frame_size, video_writer, index_data):
                 frame_count += 1
-            
-            # Finalize video
-            out.release()
-            index_data["total_frames"] = frame_count
-            
-            # Save index
-            with open(index_path, 'w') as f:
-                json.dump(index_data, f, indent=2)
-            
-            logger.info(f"Successfully created video with {frame_count} frames: {output_path}")
-            logger.info(f"Index saved: {index_path}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Video creation failed: {e}")
+        
+        return frame_count
+    
+    def _process_single_chunk(self, chunk: str, chunk_id: int, frame_count: int, 
+                            frame_size: tuple, video_writer, index_data: Dict[str, Any]) -> bool:
+        """Process a single chunk and add to video"""
+        chunk_data = {
+            "id": chunk_id,
+            "text": chunk,
+            "frame": frame_count
+        }
+        
+        # Encode to QR
+        qr_image = encode_to_qr(json.dumps(chunk_data))
+        if qr_image is None:
+            logger.warning(f"Failed to encode chunk {chunk_id}")
             return False
+        
+        # Convert to video frame
+        frame = qr_to_frame(qr_image, frame_size)
+        if frame is None:
+            logger.warning(f"Failed to convert chunk {chunk_id} to frame")
+            return False
+        
+        # Write frame to video
+        video_writer.write(frame)
+        
+        # Add to index
+        self._add_chunk_to_index(chunk, chunk_id, frame_count, index_data)
+        return True
+    
+    def _add_chunk_to_index(self, chunk: str, chunk_id: int, frame_count: int, index_data: Dict[str, Any]):
+        """Add chunk metadata to index"""
+        preview_text = chunk[:100] + "..." if len(chunk) > 100 else chunk
+        index_data["chunks"].append({
+            "id": chunk_id,
+            "frame": frame_count,
+            "text": preview_text,
+            "length": len(chunk)
+        })
+    
+    def _finalize_video_build(self, video_writer, index_data: Dict[str, Any], 
+                            frame_count: int, index_path: str, output_path: str):
+        """Finalize video creation and save index"""
+        video_writer.release()
+        index_data["total_frames"] = frame_count
+        
+        with open(index_path, 'w') as f:
+            json.dump(index_data, f, indent=2)
+        
+        logger.info(f"Successfully created video with {frame_count} frames: {output_path}")
+        logger.info(f"Index saved: {index_path}")
     
     def build_memory_files(self, base_path: str) -> bool:
         """

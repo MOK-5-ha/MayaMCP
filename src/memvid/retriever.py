@@ -72,19 +72,25 @@ class MemvidRetriever:
     
     def search_simple(self, query: str, top_k: int = 5) -> List[str]:
         """
-        Simple text-based search (fallback when no embeddings available)
+        Simple text-based search (optimized for performance)
         """
-        query_lower = query.lower()
+        # Preprocess query words once for efficiency
+        query_words = [word.lower() for word in query.split() if word.strip()]
+        if not query_words:
+            return []
+        
         results = []
         
-        # Score chunks based on keyword overlap
+        # Score chunks based on keyword overlap with optimized matching
         scored_chunks = []
         for chunk_info in self.index_data["chunks"]:
-            text = chunk_info.get("text", "")
-            # Simple keyword matching score
-            score = sum(1 for word in query.split() if word.lower() in text.lower())
-            if score > 0:
-                scored_chunks.append((score, chunk_info))
+            chunk_text = chunk_info.get("text", "").lower()
+            # Optimized keyword matching score
+            matching_words = sum(1 for word in query_words if word in chunk_text)
+            if matching_words > 0:
+                # Normalize score by query length for better ranking
+                normalized_score = matching_words / len(query_words)
+                scored_chunks.append((normalized_score, chunk_info))
         
         # Sort by score and return top results
         scored_chunks.sort(reverse=True, key=lambda x: x[0])

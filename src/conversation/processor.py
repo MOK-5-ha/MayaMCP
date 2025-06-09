@@ -3,6 +3,17 @@
 from typing import List, Dict, Tuple, Any, Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
+# RAG pipeline imports moved to top for performance
+try:
+    from ..rag.memvid_pipeline import memvid_rag_pipeline
+except ImportError:
+    memvid_rag_pipeline = None
+
+try:
+    from ..rag.pipeline import rag_pipeline
+except ImportError:
+    rag_pipeline = None
+
 from ..config.logging_config import get_logger
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools
@@ -11,6 +22,46 @@ from ..utils.state_manager import is_order_finished, get_current_order_state
 from .phase_manager import ConversationPhaseManager
 
 logger = get_logger(__name__)
+
+def _process_drink_context(drink_context: str) -> str:
+    \"\"\"
+    Process multi-token drink context into a single drink item.
+    
+    Args:
+        drink_context: Space-separated drink terms from conversation context
+        
+    Returns:
+        Processed drink string suitable for add_to_order tool
+    \"\"\"
+    if not drink_context:
+        return \"\"
+    
+    # Split and clean drink context
+    drink_tokens = [token.strip() for token in drink_context.split() if token.strip()]
+    
+    # Handle common drink combinations
+    drink_combinations = {
+        ('whiskey', 'rocks'): 'whiskey on the rocks',
+        ('whiskey', 'neat'): 'whiskey neat',
+        ('old', 'fashioned'): 'old fashioned',
+        ('long', 'island'): 'long island iced tea'
+    }
+    
+    # Check for known combinations
+    for combo, result in drink_combinations.items():
+        if all(token in drink_tokens for token in combo):
+            return result
+    
+    # Prioritize actual drink names over modifiers
+    drink_priorities = ['whiskey', 'beer', 'wine', 'cocktail', 'vodka', 'gin', 'rum', 'tequila',
+                       'old fashioned', 'manhattan', 'martini', 'negroni', 'mojito']
+    
+    for drink in drink_priorities:
+        if drink in drink_tokens:
+            return drink
+    
+    # Fallback to first token if no priority match
+    return drink_tokens[0] if drink_tokens else \"\"
 
 def process_order(
     user_input_text: str,
@@ -29,7 +80,8 @@ def process_order(
         current_session_history: Session history for Gradio
         llm: Initialized LLM instance
         rag_index: FAISS index for RAG (optional)
-        rag_documents: Documents for RAG (optional) 
+        rag_documents: Documents for RAG (optional)
+        rag_retriever: Memvid retriever for video-based RAG (optional)
         api_key: API key for RAG pipeline (optional)
         
     Returns:
@@ -63,21 +115,31 @@ def process_order(
         tools = get_all_tools()
         tool_map = {tool.name: tool for tool in tools}
         
-        # Extract drink from context and add to order
+        # Extract drink from context and add to order with improved error handling
         drink_context = speech_act_result.get('drink_context', '')
         if drink_context:
-            # Try to add the contextual drink to order
-            try:
-                # Use add_to_order tool with detected drink
-                add_result = tool_map['add_to_order'].invoke({'item': drink_context})
-                agent_response_text = f"Perfect! {add_result}"
+            # Guard against missing add_to_order tool
+            if 'add_to_order' not in tool_map:
+                logger.error("add_to_order tool not available in tool_map")
+                agent_response_text = "I understand you'd like that drink, but I'm having trouble processing orders right now."
+            else:
+                # Process multi-token drink context
+                processed_drink_items = _process_drink_context(drink_context)
                 
-                # Update phase since order was placed
-                phase_manager.update_phase(order_placed=True)
-                
-            except Exception as e:
-                logger.warning(f"Failed to add contextual drink {drink_context}: {e}")
-                agent_response_text = "Got it! I'll prepare that for you."
+                try:
+                    # Use add_to_order tool with processed drink
+                    add_result = tool_map['add_to_order'].invoke({'item': processed_drink_items})
+                    agent_response_text = f"Perfect! {add_result}"
+                    
+                    # Update phase since order was placed
+                    phase_manager.update_phase(order_placed=True)
+                    
+                except KeyError as e:
+                    logger.error(f"Tool invocation failed - missing key: {e}")
+                    agent_response_text = "I understand your order, but I'm having trouble processing it right now."
+                except Exception as e:
+                    logger.warning(f"Failed to add contextual drink {processed_drink_items}: {e}")
+                    agent_response_text = "Got it! I'll prepare that for you."
         else:
             agent_response_text = "Absolutely! I'll take care of that for you."
             
@@ -165,26 +227,31 @@ def process_order(
                 # If this appears to be casual conversation and RAG is available, try enhancing with RAG
                 if should_use_rag and api_key is not None:
                     try:
-                        # Try Memvid first, then FAISS
-                        if rag_retriever is not None:
+                        # Try Memvid first, then FAISS with improved error handling
+                        rag_response = ""
+                        if rag_retriever is not None and memvid_rag_pipeline is not None:
                             logger.info("Enhancing response with Memvid RAG for casual conversation")
-                            from ..rag.memvid_pipeline import memvid_rag_pipeline
-                            rag_response = memvid_rag_pipeline(
-                                query_text=user_input_text,
-                                memvid_retriever=rag_retriever,
-                                api_key=api_key
-                            )
-                        elif rag_index is not None and rag_documents is not None:
+                            try:
+                                rag_response = memvid_rag_pipeline(
+                                    query_text=user_input_text,
+                                    memvid_retriever=rag_retriever,
+                                    api_key=api_key
+                                )
+                            except Exception as memvid_error:
+                                logger.warning(f"Memvid RAG failed: {memvid_error}")
+                        elif rag_index is not None and rag_documents is not None and rag_pipeline is not None:
                             logger.info("Enhancing response with FAISS RAG for casual conversation")
-                            from ..rag.pipeline import rag_pipeline
-                            rag_response = rag_pipeline(
-                                query_text=user_input_text,
-                                index=rag_index,
-                                documents=rag_documents,
-                                api_key=api_key
-                            )
+                            try:
+                                rag_response = rag_pipeline(
+                                    query_text=user_input_text,
+                                    index=rag_index,
+                                    documents=rag_documents,
+                                    api_key=api_key
+                                )
+                            except Exception as faiss_error:
+                                logger.warning(f"FAISS RAG failed: {faiss_error}")
                         else:
-                            rag_response = ""
+                            logger.debug("No RAG system available or imports failed")
                         
                         if rag_response and len(rag_response) > 0:
                             # Log original response for comparison
