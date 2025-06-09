@@ -61,7 +61,7 @@ def _process_drink_context(drink_context: str) -> str:
             return drink
     
     # Fallback to first token if no priority match
-    return drink_tokens[0] if drink_tokens else \"\"
+    return drink_tokens[0] if drink_tokens else ""
 
 def process_order(
     user_input_text: str,
