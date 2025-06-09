@@ -84,3 +84,12 @@ temp_outputs/
 conversation_history/
 chat_logs/
 cascade_chat_logs/
+
+# MayaMCP specific files
+maya_output.log
+test_maya.py
+*.log
+
+# Runtime files
+.gradio_cache/
+gradio_flagged/
