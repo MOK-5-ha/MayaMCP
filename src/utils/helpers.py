@@ -1,6 +1,7 @@
 """Helper functions for conversation management."""
 
-from typing import Dict
+from typing import Dict, List, Any
+import re
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -109,9 +110,135 @@ def determine_next_phase(current_state: Dict, order_placed: bool) -> str:
     # Default fallback
     return 'small_talk'
 
+def detect_speech_acts(user_input: str, conversation_context: List[str] = None) -> Dict[str, Any]:
+    """
+    Detect speech acts using Austin's framework for better intent recognition.
+    
+    Args:
+        user_input: Current user input
+        conversation_context: Previous conversation messages for context
+        
+    Returns:
+        Dictionary with speech act type, intent, and confidence
+    """
+    user_text = user_input.lower().strip()
+    context = conversation_context or []
+    
+    # Extract recent drink mentions from context
+    drink_context = extract_drink_context(context)
+    
+    # Speech act patterns based on Austin's theory
+    speech_acts = {
+        'commissive': {  # Commitments to action (I will/can/shall)
+            'patterns': [
+                r'\bi can\b.*(?:get|make|prepare|serve)',
+                r'\bi will\b.*(?:get|make|prepare|serve)', 
+                r'\bi shall\b.*(?:get|make|prepare|serve)',
+                r'\bcertainly\b.*(?:get|make|prepare|serve)',
+                r'\bof course\b.*(?:get|make|prepare|serve)',
+                r'\babsolutely\b.*(?:get|make|prepare|serve)',
+                r'\bsure\b.*(?:get|make|prepare|serve)',
+                r'\bcoming right up\b',
+                r'\bone \w+ coming up\b'
+            ],
+            'order_indicators': ['whiskey', 'beer', 'cocktail', 'drink', 'beverage', 
+                               'old fashioned', 'manhattan', 'martini', 'rocks', 'neat']
+        },
+        'assertive': {  # Statements about order completion
+            'patterns': [
+                r'\bhere is\b.*(?:your|the)',
+                r'\bhere\'s\b.*(?:your|the)', 
+                r'\bthis is\b.*(?:your|the)',
+                r'\bthat was\b.*(?:your|the)',
+                r'\byour \w+ is ready\b',
+                r'\bone \w+ for you\b'
+            ],
+            'order_indicators': ['drink', 'order', 'whiskey', 'cocktail', 'beverage']
+        },
+        'directive': {  # Direct requests
+            'patterns': [
+                r'\bplease\b.*(?:get|make|prepare)',
+                r'\bcan you\b.*(?:get|make|prepare)',
+                r'\bwould you\b.*(?:get|make|prepare)',
+                r'\bi want\b.*(?:whiskey|beer|cocktail)',
+                r'\bi need\b.*(?:whiskey|beer|cocktail)',
+                r'\bi\'d like\b.*(?:whiskey|beer|cocktail)',
+                r'\bmay i have\b.*(?:whiskey|beer|cocktail)'
+            ],
+            'order_indicators': ['whiskey', 'beer', 'cocktail', 'drink']
+        }
+    }
+    
+    detected_acts = []
+    
+    for act_type, config in speech_acts.items():
+        for pattern in config['patterns']:
+            if re.search(pattern, user_text):
+                # Check if order indicators are present
+                order_confidence = 0
+                for indicator in config['order_indicators']:
+                    if indicator in user_text:
+                        order_confidence += 0.3
+                    # Also check drink context from conversation
+                    if drink_context and indicator in drink_context:
+                        order_confidence += 0.2
+                
+                # Special case: commissive acts with drink context get high confidence
+                if act_type == 'commissive' and drink_context:
+                    order_confidence = min(1.0, order_confidence + 0.5)
+                
+                detected_acts.append({
+                    'speech_act': act_type,
+                    'pattern': pattern,
+                    'confidence': min(1.0, order_confidence),
+                    'drink_context': drink_context
+                })
+    
+    # Return highest confidence detection
+    if detected_acts:
+        best_act = max(detected_acts, key=lambda x: x['confidence'])
+        if best_act['confidence'] > 0.3:  # Threshold for action
+            return {
+                'intent': 'order_confirmation' if best_act['speech_act'] == 'commissive' else 'order_request',
+                'speech_act': best_act['speech_act'],
+                'confidence': best_act['confidence'],
+                'drink_context': best_act['drink_context']
+            }
+    
+    return {'intent': None, 'speech_act': None, 'confidence': 0, 'drink_context': drink_context}
+
+def extract_drink_context(conversation_history: List[str]) -> str:
+    """
+    Extract drink mentions from recent conversation history.
+    
+    Args:
+        conversation_history: List of recent conversation messages
+        
+    Returns:
+        String containing drink context or empty string
+    """
+    if not conversation_history:
+        return ""
+    
+    drinks = ['whiskey', 'beer', 'cocktail', 'wine', 'vodka', 'gin', 'rum', 'tequila',
+              'old fashioned', 'manhattan', 'martini', 'negroni', 'mojito', 'rocks', 'neat']
+    
+    # Look at last 3 messages for drink context
+    recent_messages = conversation_history[-3:] if len(conversation_history) >= 3 else conversation_history
+    
+    found_drinks = []
+    for message in recent_messages:
+        message_lower = message.lower()
+        for drink in drinks:
+            if drink in message_lower and drink not in found_drinks:
+                found_drinks.append(drink)
+    
+    return " ".join(found_drinks)
+
 def is_casual_conversation(user_input: str) -> bool:
     """
     Determine if user input is casual conversation vs order-related.
+    Enhanced with speech act detection.
     
     Args:
         user_input: User's input text
@@ -119,6 +246,11 @@ def is_casual_conversation(user_input: str) -> bool:
     Returns:
         True if this appears to be casual conversation
     """
+    # First check for speech acts that indicate ordering
+    speech_act_result = detect_speech_acts(user_input)
+    if speech_act_result['intent'] in ['order_confirmation', 'order_request']:
+        return False
+    
     order_related_keywords = [
         'order', 'menu', 'drink', 'beer', 'cocktail', 'price', 
         'cost', 'bill', 'payment', 'tip'

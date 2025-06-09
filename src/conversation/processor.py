@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Tool
 from ..config.logging_config import get_logger
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools
-from ..utils.helpers import detect_order_inquiry
+from ..utils.helpers import detect_order_inquiry, detect_speech_acts
 from ..utils.state_manager import is_order_finished, get_current_order_state
 from .phase_manager import ConversationPhaseManager
 
@@ -48,9 +48,48 @@ def process_order(
         from ..utils.state_manager import initialize_state
         initialize_state()
 
-    # Helper function for fuzzy intent detection
+    # Extract conversation context for speech act analysis
+    conversation_context = [entry.get('content', '') for entry in current_session_history[-5:]]  # Last 5 messages
+    
+    # Enhanced intent detection using speech acts
+    speech_act_result = detect_speech_acts(user_input_text, conversation_context)
     intent_match = detect_order_inquiry(user_input_text)
-    if intent_match['intent'] and intent_match['confidence'] >= 0.5:
+    
+    # Check speech acts first for order confirmation patterns
+    if speech_act_result['intent'] == 'order_confirmation' and speech_act_result['confidence'] > 0.4:
+        logger.info(f"Detected order confirmation via speech act: {speech_act_result['speech_act']} with confidence {speech_act_result['confidence']}")
+        
+        # Handle commissive speech acts ("I can get you that whiskey")
+        tools = get_all_tools()
+        tool_map = {tool.name: tool for tool in tools}
+        
+        # Extract drink from context and add to order
+        drink_context = speech_act_result.get('drink_context', '')
+        if drink_context:
+            # Try to add the contextual drink to order
+            try:
+                # Use add_to_order tool with detected drink
+                add_result = tool_map['add_to_order'].invoke({'item': drink_context})
+                agent_response_text = f"Perfect! {add_result}"
+                
+                # Update phase since order was placed
+                phase_manager.update_phase(order_placed=True)
+                
+            except Exception as e:
+                logger.warning(f"Failed to add contextual drink {drink_context}: {e}")
+                agent_response_text = "Got it! I'll prepare that for you."
+        else:
+            agent_response_text = "Absolutely! I'll take care of that for you."
+            
+        # Update history for Gradio display
+        updated_history_for_gradio = current_session_history[:] 
+        updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
+        updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
+            
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(), None
+    
+    # Fallback to traditional intent detection
+    elif intent_match['intent'] and intent_match['confidence'] >= 0.5:
         logger.info(f"Detected order intent: {intent_match['intent']} with confidence {intent_match['confidence']}")
         
         # Directly call the appropriate tool based on intent
