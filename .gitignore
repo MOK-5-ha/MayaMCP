@@ -87,8 +87,16 @@ cascade_chat_logs/
 
 # MayaMCP specific files
 maya_output.log
-test_maya.py
+maya_memvid_output.log
 *.log
+
+# Test files (temporary/development)
+test_*.py
+test_maya.py
+
+# Memvid video memory files (generated at runtime)
+assets/maya_memory.mp4
+assets/maya_memory_index.json
 
 # Runtime files
 .gradio_cache/
