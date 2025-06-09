@@ -18,6 +18,7 @@ def process_order(
     llm,
     rag_index=None,
     rag_documents: List[str] = None,
+    rag_retriever=None,
     api_key: str = None
 ) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
     """
@@ -123,16 +124,29 @@ def process_order(
                 should_use_rag = phase_manager.should_use_rag(user_input_text)
                 
                 # If this appears to be casual conversation and RAG is available, try enhancing with RAG
-                if should_use_rag and rag_index is not None and rag_documents is not None and api_key is not None:
+                if should_use_rag and api_key is not None:
                     try:
-                        logger.info("Enhancing response with RAG for casual conversation")
-                        from ..rag.pipeline import rag_pipeline
-                        rag_response = rag_pipeline(
-                            query_text=user_input_text,
-                            index=rag_index,
-                            documents=rag_documents,
-                            api_key=api_key
-                        )
+                        # Try Memvid first, then FAISS
+                        if rag_retriever is not None:
+                            logger.info("Enhancing response with Memvid RAG for casual conversation")
+                            from ..rag.memvid_pipeline import memvid_rag_pipeline
+                            rag_response = memvid_rag_pipeline(
+                                query_text=user_input_text,
+                                memvid_retriever=rag_retriever,
+                                api_key=api_key
+                            )
+                        elif rag_index is not None and rag_documents is not None:
+                            logger.info("Enhancing response with FAISS RAG for casual conversation")
+                            from ..rag.pipeline import rag_pipeline
+                            rag_response = rag_pipeline(
+                                query_text=user_input_text,
+                                index=rag_index,
+                                documents=rag_documents,
+                                api_key=api_key
+                            )
+                        else:
+                            rag_response = ""
+                        
                         if rag_response and len(rag_response) > 0:
                             # Log original response for comparison
                             logger.info(f"Original response: {agent_response_text}")

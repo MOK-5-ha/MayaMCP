@@ -15,6 +15,7 @@ def handle_gradio_input(
     cartesia_client=None,
     rag_index=None,
     rag_documents: List[str] = None,
+    rag_retriever=None,
     api_key: str = None
 ) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
     """
@@ -42,6 +43,7 @@ def handle_gradio_input(
         llm=llm,
         rag_index=rag_index,
         rag_documents=rag_documents,
+        rag_retriever=rag_retriever,
         api_key=api_key
     )
 

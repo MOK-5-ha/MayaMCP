@@ -19,7 +19,7 @@ from src.config import (
 )
 from src.config.logging_config import get_logger
 from src.llm import initialize_llm, get_all_tools
-from src.rag import initialize_vector_store
+from src.rag import initialize_vector_store, initialize_memvid_store
 from src.voice import initialize_cartesia_client
 from src.ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
 from src.utils import initialize_state
@@ -49,13 +49,22 @@ def main():
         llm = initialize_llm(api_key=api_keys["google_api_key"], tools=tools)
         logger.info(f"LLM initialized with {len(tools)} tools")
         
-        # Initialize RAG system
+        # Initialize RAG system - try Memvid first, fallback to FAISS
         try:
-            rag_index, rag_documents = initialize_vector_store()
-            logger.info(f"RAG system initialized with {len(rag_documents)} documents")
+            # Try Memvid first
+            logger.info("Attempting to initialize Memvid-based RAG...")
+            rag_retriever, rag_documents = initialize_memvid_store()
+            rag_index = None  # Memvid uses retriever instead of index
+            logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
         except Exception as e:
-            logger.warning(f"RAG initialization failed: {e}. Continuing without RAG.")
-            rag_index, rag_documents = None, None
+            logger.warning(f"Memvid initialization failed: {e}. Falling back to FAISS...")
+            try:
+                rag_index, rag_documents = initialize_vector_store()
+                rag_retriever = None  # FAISS uses index instead of retriever
+                logger.info(f"FAISS RAG system initialized with {len(rag_documents)} documents")
+            except Exception as e2:
+                logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
+                rag_index, rag_documents, rag_retriever = None, None, None
         
         # Initialize Cartesia TTS client
         try:
@@ -66,12 +75,16 @@ def main():
             cartesia_client = None
         
         # Create partially applied handler functions with dependencies
+        # Pass the rag_retriever from our local scope
+        rag_retriever_param = rag_retriever if 'rag_retriever' in locals() else None
+        
         handle_input_with_deps = partial(
             handle_gradio_input,
             llm=llm,
             cartesia_client=cartesia_client,
             rag_index=rag_index,
             rag_documents=rag_documents,
+            rag_retriever=rag_retriever_param,
             api_key=api_keys["google_api_key"]
         )
         
