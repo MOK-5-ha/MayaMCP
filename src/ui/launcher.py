@@ -13,7 +13,7 @@ def launch_bartender_interface(
     avatar_path: Optional[str] = None,
     share: bool = True,
     debug: bool = True
-) -> None:
+) -> gr.Blocks:
     """
     Launch the Gradio interface for Maya the bartender.
     
@@ -88,6 +88,6 @@ def launch_bartender_interface(
         clear_outputs = [chatbot_display, history_state, order_state, agent_audio_output]
         clear_btn.click(clear_state_fn, None, clear_outputs)
 
-    # Launch the interface
-    logger.info(f"Launching Gradio interface (share={share}, debug={debug})")
-    demo.launch(debug=debug, share=share)
+    # Return the interface for Modal to serve
+    logger.info(f"Gradio interface ready (share={share}, debug={debug})")
+    return demo
