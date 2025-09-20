@@ -102,7 +102,7 @@ def main():
         # Launch the Gradio interface
         logger.info("Launching Gradio interface...")
         try:
-            interface = launch_bartender_interface(
+            launch_bartender_interface(
                 handle_input_fn=handle_input_with_deps,
                 clear_state_fn=clear_chat_state
             )

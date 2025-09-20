@@ -1,10 +1,12 @@
 """Embedding generation for RAG system."""
 
-from google import genai
+import google.generativeai as genai
 from tenacity import retry, stop_after_attempt, wait_exponential
 from typing import Optional, List
 from ..config.logging_config import get_logger
 from ..utils.errors import classify_and_log_genai_error
+from ..config.api_keys import get_google_api_key
+
 
 
 logger = get_logger(__name__)
@@ -12,8 +14,6 @@ logger = get_logger(__name__)
 
 
 
-# Initialize client once at module level (reads API key from environment)
-_client = genai.Client()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_embedding(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> Optional[List[float]]:
@@ -21,10 +21,15 @@ def get_embedding(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> Optional[
         Embedding vector as list of floats, or None if failed.
     """
     try:
-        # Modern embedding model and API call
-        response = _client.models.embed_content(
+        # Configure and call Embeddings API (free Gemini API)
+        api_key = get_google_api_key()
+        if not api_key:
+            logger.error("GEMINI_API_KEY not set; cannot generate embeddings.")
+            return None
+        genai.configure(api_key=api_key)
+        response = genai.embed_content(
             model="text-embedding-004",
-            input=text,
+            content=text,
         )
 
         # Parse the response to extract embedding vector
@@ -64,11 +69,17 @@ def get_embeddings_batch(texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
     if not texts:
         return []
 
-    # Fallback: if SDK doesn't support batch, do per-item calls to maintain compatibility
-    has_batch = hasattr(getattr(_client, "models", None), "batch_embed_contents")
-    if not has_batch:
-        logger.info("Batch embeddings not supported by current SDK; falling back to per-item calls")
-        return [get_embedding(t, task_type) for t in texts]
+    # Configure API
+    api_key = get_google_api_key()
+    if not api_key:
+        logger.error("GEMINI_API_KEY not set; cannot generate batch embeddings.")
+        return [None] * len(texts)
+    genai.configure(api_key=api_key)
+    # If batch API isn't available in the installed SDK, fall back to per-item calls
+    if not hasattr(genai, "batch_embed_contents"):
+        logger.info("batch_embed_contents not available; falling back to sequential embed_content calls.")
+        return [get_embedding(t, task_type=task_type) for t in texts]
+
 
     BATCH_SIZE = 64  # conservative default; adjust if higher limits are guaranteed
     results: List[Optional[List[float]]] = []
@@ -76,10 +87,10 @@ def get_embeddings_batch(texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     def _call_batch(batch: List[str]):
         try:
-            # Use the modern batch embeddings endpoint
-            resp = _client.models.batch_embed_contents(
+            # Use the Google AI Studio batch embeddings endpoint
+            resp = genai.batch_embed_contents(
                 model="text-embedding-004",
-                requests=[{"input": t, "task_type": task_type} for t in batch],
+                requests=[{"content": t} for t in batch],
             )
             return resp
         except Exception as e:

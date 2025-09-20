@@ -21,12 +21,20 @@ image = (
     # Add the project and install it so absolute imports work without sys.path hacks
     .add_local_dir(".", "/app")
     .pip_install("/app")
-    # Optionally also stage raw source for debugging/reference
-    .add_local_dir("src", "/root/src")
 )
+
+# Optionally stage raw source for debugging/reference to avoid bloating the image by default
+_stage_debug = os.getenv("STAGE_DEBUG_SOURCE") or os.getenv("DEBUG")
+if (_stage_debug or "").strip().lower() in {"1", "true", "yes", "on"}:
+    image = image.add_local_dir("src", "/root/src")
 # Resource configuration (configurable via environment variables)
 MEMORY_MB = int(os.environ.get("MODAL_MEMORY_MB", "4096"))
 MAX_CONTAINERS = int(os.environ.get("MODAL_MAX_CONTAINERS", "3"))
+
+if MEMORY_MB <= 0:
+    raise ValueError(f"MODAL_MEMORY_MB must be positive, got {MEMORY_MB}")
+if MAX_CONTAINERS <= 0:
+    raise ValueError(f"MODAL_MAX_CONTAINERS must be positive, got {MAX_CONTAINERS}")
 
 
 @app.function(
@@ -84,6 +92,7 @@ def serve_maya():
                     break
             return current, limit
         except Exception:
+            logger.debug("Failed to read cgroup memory", exc_info=True)
             return None, None
 
     # Read container CPU usage from cgroups
@@ -122,7 +131,7 @@ def serve_maya():
     # Validate and fetch required API keys early
     def _require_env(name: str) -> str:
         val = os.getenv(name)
-        if val is None or str(val).strip() == "":
+        if not val or not val.strip():
             raise RuntimeError(f"Missing required environment variable: {name}")
         return val
 
@@ -222,8 +231,20 @@ def serve_maya():
     @web_app.get("/metrics")
     def metrics():
         return PlainTextResponse(_metrics_text(), media_type="text/plain")
+
     @web_app.get("/healthz")
     def healthz():
+        # Check critical dependencies
+        checks = []
+        if llm is None:
+            checks.append("LLM not initialized")
+
+        if checks:
+            return PlainTextResponse(
+                f"unhealthy: {', '.join(checks)}",
+                status_code=503,
+                media_type="text/plain",
+            )
         return PlainTextResponse("ok", media_type="text/plain")
 
 

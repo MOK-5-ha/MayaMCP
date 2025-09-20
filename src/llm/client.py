@@ -1,8 +1,6 @@
 """LLM client initialization and API calls."""
 
-from google import genai
-from google.genai import types
-import google.genai.types as genai_types
+import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging
@@ -42,19 +40,24 @@ GenaiTimeoutError = getattr(genai_errors, "TimeoutError", _NoSDKError) if genai_
 
 # ---- Unified Google GenAI client/wrapper utilities ----
 
-def get_genai_client(api_key: str) -> genai.Client:
-    """Create and return a configured Google GenAI client."""
-    return genai.Client(api_key=api_key)
+def configure_genai(api_key: str) -> None:
+    """Configure the Google Generative AI client for API key auth."""
+    genai.configure(api_key=api_key)
 
 
-def build_generate_config(config_dict: Dict[str, Any]) -> types.GenerateContentConfig:
-    """Map our generation config dict to the SDK's GenerateContentConfig."""
-    return types.GenerateContentConfig(
-        temperature=config_dict.get("temperature"),
-        top_p=config_dict.get("top_p"),
-        top_k=config_dict.get("top_k"),
-        max_output_tokens=config_dict.get("max_output_tokens"),
-    )
+def get_generative_model(model_name: str) -> genai.GenerativeModel:
+    """Return a GenerativeModel for the given model name."""
+    return genai.GenerativeModel(model_name)
+
+
+def build_generate_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Map our generation config dict for google-generativeai (dict-based)."""
+    return {
+        "temperature": config_dict.get("temperature"),
+        "top_p": config_dict.get("top_p"),
+        "top_k": config_dict.get("top_k"),
+        "max_output_tokens": config_dict.get("max_output_tokens"),
+    }
 
 
 def get_model_name() -> str:
@@ -121,7 +124,7 @@ def call_gemini_api(
     prompt_content: List[Dict],
     config: Dict,
     api_key: str
-) -> genai_types.GenerateContentResponse:
+) -> Any:
     """
     Internal function to call the Gemini API with retry logic.
 
@@ -135,21 +138,21 @@ def call_gemini_api(
     """
     logger.debug("Calling Gemini API...")
 
-    # Initialize Google GenAI client (modern SDK)
-    client = get_genai_client(api_key)
+    # Configure Google Generative AI (free Gemini API)
+    configure_genai(api_key)
 
     # Get model name from shared config
     model_name = get_model_name()
 
-    # Map our config dict to the new SDK's GenerateContentConfig
+    # Map our config dict to generation_config (dict)
     gen_config = build_generate_config(config)
 
-    # Call the API
+    # Call the API via GenerativeModel
     try:
-        response = client.models.generate_content(
-            model=model_name,
+        model = get_generative_model(model_name)
+        response = model.generate_content(
             contents=prompt_content,
-            config=gen_config,
+            generation_config=gen_config,
         )
     except GenaiRateLimitError as e:
         logger.warning(f"Rate limit hit calling Gemini: {e}")
@@ -166,13 +169,8 @@ def call_gemini_api(
         error_code = getattr(e, "error_code", None)
 
         # Detect timeouts via common exception types
-        is_timeout = False
-        try:
-            # Built-in timeout
-            if isinstance(e, TimeoutError):
-                is_timeout = True
-        except Exception:
-            pass
+        # Check for built-in timeout
+        is_timeout = isinstance(e, TimeoutError)
         if not is_timeout and httpx is not None:
             httpx_timeout_types = tuple(
                 t for t in [

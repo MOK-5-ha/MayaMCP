@@ -32,7 +32,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 - Unified Google GenAI client wrapper in `src/llm/client.py` centralizes API key usage and generation config mapping for both LangChain and direct SDK calls
 - Model validation at startup warns if `GEMINI_MODEL_VERSION` is unrecognized but continues to run
-- Modernized Google GenAI SDK usage via `google-genai`, while maintaining backward compatibility with LangChain and the legacy `google-generativeai` SDK
+- Uses the Google AI Studio SDK (`google-generativeai`) for the free-tier Gemini API; LangChain integration via `langchain-google-genai`.
 
 ### Model Information
 
@@ -84,7 +84,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Note: `pip install -r requirements.txt` installs both the modern Google GenAI SDK (`google-genai`) used throughout `src/`, and the legacy `google-generativeai` kept for compatibility (e.g., legacy notebook).
+Note: `pip install -r requirements.txt` installs the Google AI Studio SDK (`google-generativeai`) used throughout `src/` and the LangChain integration. If `google-genai` is present, it is not used in this project.
 
 ## API Keys Required
 
@@ -177,14 +177,14 @@ Use these to:
 - Monitor headroom vs. actual usage
 - Iterate on `MODAL_MEMORY_MB` and `MODAL_MAX_CONTAINERS` based on load and p95 latency
 
-API keys (`GOOGLE_API_KEY`, `CARTESIA_API_KEY`) are still expected via environment variables/secrets as before.
+API keys (`GEMINI_API_KEY`, `CARTESIA_API_KEY`) are still expected via environment variables/secrets as before.
 
 ### Deployment checklist
 
 Use this quick checklist when deploying on Modal:
 
 - API keys configured
-  - `GOOGLE_API_KEY`
+  - `GEMINI_API_KEY`
   - `CARTESIA_API_KEY`
 - Resource tuning (optional)
   - `MODAL_MEMORY_MB` (e.g., 4096, 8192)

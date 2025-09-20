@@ -1,6 +1,6 @@
 """Complete RAG pipeline orchestration."""
 
-from google import genai
+import google.generativeai as genai
 from typing import List, Optional
 from .retrieval import retrieve_relevant_passages
 from ..config.logging_config import get_logger
@@ -46,14 +46,10 @@ Question: {query_oneline}
 Answer:"""
 
     try:
-        # Initialize Google GenAI client (API-key variant)
-        client = genai.Client(vertexai=True, api_key=api_key)
-
-        # Generate response
-        resp = client.models.generate_content(
-            model=model_version,
-            contents=prompt,
-        )
+        # Configure and call Google Generative AI (free Gemini API)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_version)
+        resp = model.generate_content(prompt)
         return getattr(resp, "text", "") or ""
 
     except Exception as e:

@@ -1,5 +1,6 @@
 """Shared error classification and logging helpers."""
 from typing import Protocol
+import re
 
 # We accept any logger-like object that supports .warning and .error
 class _LoggerLike(Protocol):
@@ -19,9 +20,9 @@ def classify_and_log_genai_error(e: Exception, logger: _LoggerLike, context: str
     """
     msg = str(e)
     try:
-        if "429" in msg or "rate" in msg.lower():
+        if ("429" in msg) or re.search(r"\brate\s*limit\b", msg, re.IGNORECASE):
             logger.warning(f"Rate limit {context}: {e}")
-        elif "401" in msg or "403" in msg or "auth" in msg.lower():
+        elif ("401" in msg) or ("403" in msg) or re.search(r"\b(auth|authentication|authorization)\b", msg, re.IGNORECASE):
             logger.error(f"Authentication error {context}: {e}")
         elif "timeout" in msg.lower():
             logger.warning(f"Timeout {context}: {e}")

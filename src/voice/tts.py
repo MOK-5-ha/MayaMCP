@@ -34,13 +34,20 @@ def clean_text_for_tts(text: str) -> str:
         amount = match.group(1)
         try:
             if '.' in amount:
-                dollars_str, cents_str = amount.split('.')
+                dollars_str, frac_str = amount.split('.', 1)
                 dollars = int(dollars_str)
-                cents = int(cents_str.ljust(2, '0')[:2])  # Handle .5 as 50 cents
+                # Round fractional part to nearest cent
+                try:
+                    cents = int(round(float(f"0.{frac_str}") * 100))
+                except ValueError:
+                    cents = 0
+                if cents >= 100:
+                    dollars += 1
+                    cents = 0
             else:
                 dollars = int(amount)
                 cents = 0
-                
+
             if dollars == 0:
                 return f"{cents} cents"
             elif cents == 0:
