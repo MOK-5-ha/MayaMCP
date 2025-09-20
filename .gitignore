@@ -37,6 +37,8 @@ pip-delete-this-directory.txt
 *.swp
 *.swo
 .DS_Store
+.claude/
+CLAUDE.md
 
 # Environment variables
 .env

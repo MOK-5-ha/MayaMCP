@@ -29,6 +29,31 @@ def clean_text_for_tts(text: str) -> str:
     # Replace "MOK 5-ha" with "Moksha" for proper pronunciation
     cleaned_text = re.sub(r'MOK 5-ha', 'Moksha', text, flags=re.IGNORECASE)
     
+    # Convert monetary amounts to speech-friendly format
+    def format_money_for_speech(match):
+        amount = match.group(1)
+        try:
+            if '.' in amount:
+                dollars_str, cents_str = amount.split('.')
+                dollars = int(dollars_str)
+                cents = int(cents_str.ljust(2, '0')[:2])  # Handle .5 as 50 cents
+            else:
+                dollars = int(amount)
+                cents = 0
+                
+            if dollars == 0:
+                return f"{cents} cents"
+            elif cents == 0:
+                return f"{dollars} dollars"
+            else:
+                return f"{dollars} dollars and {cents} cents"
+        except ValueError:
+            # If parsing fails, just remove the dollar sign
+            return amount
+    
+    # Pattern to match valid $XX.XX format and convert to speech-friendly text
+    cleaned_text = re.sub(r'\$(\d+(?:\.\d{1,2})?)(?![\.\d])', format_money_for_speech, cleaned_text)
+    
     # Remove problematic punctuation that TTS might pronounce
     # Keep periods, commas, question marks, exclamation marks for natural pauses
     # Remove: asterisks, hashtags, underscores, brackets, etc.

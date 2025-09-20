@@ -2,13 +2,16 @@
 Memvid-enhanced RAG pipeline for Maya
 """
 
-import google.generativeai as genai
+from google import genai
 from typing import List
 
 from .memvid_store import search_memvid_documents
 from ..config.logging_config import get_logger
+from ..utils.errors import classify_and_log_genai_error
 
 logger = get_logger(__name__)
+
+
 
 def generate_memvid_response(
     query_text: str,
@@ -18,13 +21,13 @@ def generate_memvid_response(
 ) -> str:
     """
     Generate a response augmented with Memvid-retrieved documents.
-    
+
     Args:
         query_text: User query
         retrieved_documents: Documents retrieved from Memvid
         api_key: Google API key
         model_version: Gemini model version to use
-        
+
     Returns:
         Generated response text
     """
@@ -47,19 +50,19 @@ Question: {query_oneline}
 Answer:"""
 
     try:
-        # Configure genai with the provided API key
-        genai.configure(api_key=api_key)
-        
-        # Initialize model
-        model = genai.GenerativeModel(model_version)
-        
+        # Initialize Google GenAI client (modern SDK)
+        client = genai.Client(api_key=api_key)
+
         # Generate response
-        response = model.generate_content(prompt)
-        
-        return response.text
-        
+        resp = client.models.generate_content(
+            model=model_version,
+            contents=prompt,
+        )
+
+        return getattr(resp, "text", "") or ""
+
     except Exception as e:
-        logger.error(f"Error generating Memvid-enhanced response: {e}")
+        classify_and_log_genai_error(e, logger, context="while generating Memvid-enhanced response")
         # Fallback response
         return "I'm Maya, your bartender at MOK 5-ha. My video memory seems to be having a moment. Can I get you something from the menu?"
 
@@ -71,13 +74,13 @@ def memvid_rag_pipeline(
 ) -> str:
     """
     Complete Memvid-based RAG pipeline for query processing.
-    
+
     Args:
         query_text: User query
         memvid_retriever: MemvidRetriever instance
         api_key: Google API key
         model_version: Gemini model version to use
-        
+
     Returns:
         Generated response text
     """
@@ -88,12 +91,12 @@ def memvid_rag_pipeline(
             query_text=query_text,
             n_results=2  # Get 2 relevant passages for richer context
         )
-        
+
         # If no relevant passages found, return empty string
         if not relevant_passages:
             logger.warning("No relevant passages found for query: %s", query_text)
             return ""
-            
+
         # Generate Memvid-enhanced response
         enhanced_response = generate_memvid_response(
             query_text=query_text,
@@ -101,9 +104,9 @@ def memvid_rag_pipeline(
             api_key=api_key,
             model_version=model_version
         )
-        
+
         return enhanced_response
-        
+
     except Exception as e:
-        logger.error(f"Error in Memvid RAG pipeline: {e}")
+        classify_and_log_genai_error(e, logger, context="in Memvid RAG pipeline")
         return ""

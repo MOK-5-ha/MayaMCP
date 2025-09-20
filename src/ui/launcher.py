@@ -10,19 +10,18 @@ logger = get_logger(__name__)
 def launch_bartender_interface(
     handle_input_fn: Callable,
     clear_state_fn: Callable,
-    avatar_path: Optional[str] = None,
-    share: bool = True,
-    debug: bool = True
+    avatar_path: Optional[str] = None
 ) -> gr.Blocks:
     """
-    Launch the Gradio interface for Maya the bartender.
-    
+    Create the Gradio interface for Maya the bartender and return it.
+
     Args:
         handle_input_fn: Function to handle user input
         clear_state_fn: Function to clear chat state
         avatar_path: Path to avatar image (will setup default if None)
-        share: Whether to create a public share link
-        debug: Whether to run in debug mode
+
+    Returns:
+        gr.Blocks: The interface object (not launched), suitable for external serving
     """
     # Setup avatar if not provided
     if avatar_path is None:
@@ -88,6 +87,6 @@ def launch_bartender_interface(
         clear_outputs = [chatbot_display, history_state, order_state, agent_audio_output]
         clear_btn.click(clear_state_fn, None, clear_outputs)
 
-    # Return the interface for Modal to serve
-    logger.info(f"Gradio interface ready (share={share}, debug={debug})")
+    # Return the interface for external serving
+    logger.info("Gradio interface object ready")
     return demo

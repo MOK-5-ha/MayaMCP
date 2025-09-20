@@ -4,6 +4,8 @@ Modal Labs deployment for Maya MCP
 """
 
 import modal
+import os
+import time
 
 # Create Modal app
 app = modal.App("maya-mcp")
@@ -11,13 +13,21 @@ app = modal.App("maya-mcp")
 # Define persistent storage for Memvid files
 storage = modal.Volume.from_name("maya-storage", create_if_missing=True)
 
-# Define the container image with all dependencies and copy source code
+# Define the container image with all dependencies and install the package
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender-dev", "libgomp1")
     .pip_install_from_requirements("requirements.txt")
+    # Add the project and install it so absolute imports work without sys.path hacks
+    .add_local_dir(".", "/app")
+    .pip_install("/app")
+    # Optionally also stage raw source for debugging/reference
     .add_local_dir("src", "/root/src")
 )
+# Resource configuration (configurable via environment variables)
+MEMORY_MB = int(os.environ.get("MODAL_MEMORY_MB", "4096"))
+MAX_CONTAINERS = int(os.environ.get("MODAL_MAX_CONTAINERS", "3"))
+
 
 @app.function(
     image=image,
@@ -25,8 +35,8 @@ image = (
     volumes={"/assets": storage},
     scaledown_window=300,
     timeout=600,
-    memory=1024,
-    max_containers=1,  # Only 1 container for Gradio web server
+    memory=MEMORY_MB,
+    max_containers=MAX_CONTAINERS,
 )
 @modal.asgi_app()
 def serve_maya():
@@ -34,37 +44,99 @@ def serve_maya():
     import os
     import sys
     from functools import partial
-    
+
     # Add paths for imports
-    sys.path.insert(0, "/root")
-    sys.path.insert(0, "/root/src")
-    
-    # Import Maya components with correct paths
-    from src.config.logging_config import setup_logging
-    from src.llm.client import initialize_llm
-    from src.llm.tools import get_all_tools
-    from src.rag.memvid_store import initialize_memvid_store
-    from src.voice.tts import initialize_cartesia_client
-    from src.ui.launcher import launch_bartender_interface
-    from src.ui.handlers import handle_gradio_input
-    from src.utils.state_manager import initialize_state
-    
+
+    # Import Maya components using absolute package imports (package is installed in image)
+    from config.logging_config import setup_logging
+    from llm.client import initialize_llm
+    from llm.tools import get_all_tools
+    from rag.memvid_store import initialize_memvid_store
+    from voice.tts import initialize_cartesia_client
+    from ui.launcher import launch_bartender_interface
+    from ui.handlers import handle_gradio_input
+    from utils.state_manager import initialize_state
     # Setup logging
     logger = setup_logging()
     logger.info("Starting Maya on Modal Labs...")
-    
-    # Get API keys from Modal secrets (environment variables)
-    google_api_key = os.environ["GOOGLE_API_KEY"]
-    cartesia_api_key = os.environ["CARTESIA_API_KEY"]
-    
+
+    # Log configured resources for observability
+    logger.info(f"Configured resources: MEMORY_MB={MEMORY_MB}, MAX_CONTAINERS={MAX_CONTAINERS}")
+
+    # Read container memory usage from cgroups (v2 or v1) for monitoring
+    def _read_cgroup_memory():
+        try:
+            # Current usage
+            current = None
+            for p in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"):
+                if os.path.exists(p):
+                    with open(p, "r") as f:
+                        current = int(f.read().strip())
+                    break
+            # Memory limit
+            limit = None
+            for p in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+                if os.path.exists(p):
+                    with open(p, "r") as f:
+                        raw = f.read().strip()
+                        if raw != "max":
+                            limit = int(raw)
+                    break
+            return current, limit
+        except Exception:
+            return None, None
+
+    # Read container CPU usage from cgroups
+    def _read_cgroup_cpu_seconds():
+        try:
+            # cgroup v2: cpu.stat contains usage_usec
+            p_v2 = "/sys/fs/cgroup/cpu.stat"
+            if os.path.exists(p_v2):
+                with open(p_v2, "r") as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if len(parts) == 2 and parts[0] == "usage_usec":
+                            usec = int(parts[1])
+                            return usec / 1_000_000.0
+            # cgroup v1: cpuacct.usage contains nanoseconds
+            p_v1 = "/sys/fs/cgroup/cpuacct/cpuacct.usage"
+            if os.path.exists(p_v1):
+                with open(p_v1, "r") as f:
+                    ns = int(f.read().strip())
+                    return ns / 1_000_000_000.0
+        except Exception:
+            return None
+        return None
+
+    cur, lim = _read_cgroup_memory()
+    if cur is not None:
+        cur_mb = cur / (1024 * 1024)
+        if lim:
+            lim_mb = lim / (1024 * 1024)
+            logger.info(f"Container memory usage at start: {cur_mb:.1f} MB / {lim_mb:.1f} MB")
+        else:
+            logger.info(f"Container memory usage at start: {cur_mb:.1f} MB (no cgroup limit detected)")
+
+
+
+    # Validate and fetch required API keys early
+    def _require_env(name: str) -> str:
+        val = os.getenv(name)
+        if val is None or str(val).strip() == "":
+            raise RuntimeError(f"Missing required environment variable: {name}")
+        return val
+
+    google_api_key = _require_env("GOOGLE_API_KEY")
+    cartesia_api_key = _require_env("CARTESIA_API_KEY")
+
     # Initialize state
     initialize_state()
-    
+
     # Initialize LLM
     tools = get_all_tools()
     llm = initialize_llm(api_key=google_api_key, tools=tools)
     logger.info(f"LLM initialized with {len(tools)} tools")
-    
+
     # Initialize RAG with Memvid (will build video on first run)
     try:
         logger.info("Initializing Memvid RAG system...")
@@ -74,7 +146,7 @@ def serve_maya():
     except Exception as e:
         logger.warning(f"Memvid initialization failed: {e}")
         rag_index, rag_documents, rag_retriever = None, None, None
-    
+
     # Initialize Cartesia TTS
     try:
         cartesia_client = initialize_cartesia_client(cartesia_api_key)
@@ -82,7 +154,7 @@ def serve_maya():
     except Exception as e:
         logger.warning(f"Cartesia initialization failed: {e}")
         cartesia_client = None
-    
+
     # Create handler with dependencies
     handle_input_with_deps = partial(
         handle_gradio_input,
@@ -93,24 +165,68 @@ def serve_maya():
         rag_retriever=rag_retriever,
         api_key=google_api_key
     )
-    
+
     # Import clear state function
-    from src.ui.handlers import clear_chat_state
-    
-    # Create Gradio interface  
+    from ui.handlers import clear_chat_state
+
+    # Create Gradio interface
     logger.info("Creating Maya's Gradio interface...")
     interface = launch_bartender_interface(
         handle_input_fn=handle_input_with_deps,
-        clear_state_fn=clear_chat_state,
-        share=False,  # Modal handles sharing
-        debug=False
+        clear_state_fn=clear_chat_state
     )
-    
+
     # Mount Gradio app with FastAPI for Modal
     from fastapi import FastAPI
+    from fastapi.responses import PlainTextResponse
     from gradio.routes import mount_gradio_app
-    
+
     web_app = FastAPI()
+
+    # Track process start time for uptime metric
+    START_TIME = time.time()
+
+    # Prometheus-style metrics endpoint
+    def _metrics_text():
+        lines = []
+        # Configured resources
+        lines.append('# HELP maya_config_memory_mb Configured container memory in MB')
+        lines.append('# TYPE maya_config_memory_mb gauge')
+        lines.append(f'maya_config_memory_mb {MEMORY_MB}')
+        lines.append('# HELP maya_config_max_containers Configured max containers for autoscaling')
+        lines.append('# TYPE maya_config_max_containers gauge')
+        lines.append(f'maya_config_max_containers {MAX_CONTAINERS}')
+        # cgroup memory
+        cur, lim = _read_cgroup_memory()
+        if cur is not None:
+            lines.append('# HELP maya_container_memory_usage_bytes Container memory usage in bytes')
+            lines.append('# TYPE maya_container_memory_usage_bytes gauge')
+            lines.append(f'maya_container_memory_usage_bytes {cur}')
+        if lim is not None:
+            lines.append('# HELP maya_container_memory_limit_bytes Container memory limit in bytes')
+            lines.append('# TYPE maya_container_memory_limit_bytes gauge')
+            lines.append(f'maya_container_memory_limit_bytes {lim}')
+        # CPU usage seconds total
+        cpu_sec = _read_cgroup_cpu_seconds()
+        if cpu_sec is not None:
+            lines.append('# HELP maya_container_cpu_usage_seconds_total Total container CPU time in seconds')
+            lines.append('# TYPE maya_container_cpu_usage_seconds_total counter')
+            lines.append(f'maya_container_cpu_usage_seconds_total {cpu_sec}')
+        # Uptime seconds
+        uptime = max(0.0, time.time() - START_TIME)
+        lines.append('# HELP maya_process_uptime_seconds Process uptime in seconds')
+        lines.append('# TYPE maya_process_uptime_seconds gauge')
+        lines.append(f'maya_process_uptime_seconds {uptime}')
+        return "\n".join(lines) + "\n"
+
+    @web_app.get("/metrics")
+    def metrics():
+        return PlainTextResponse(_metrics_text(), media_type="text/plain")
+    @web_app.get("/healthz")
+    def healthz():
+        return PlainTextResponse("ok", media_type="text/plain")
+
+
     return mount_gradio_app(
         app=web_app,
         blocks=interface,

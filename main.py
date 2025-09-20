@@ -19,6 +19,7 @@ from src.config import (
 )
 from src.config.logging_config import get_logger
 from src.llm import initialize_llm, get_all_tools
+from src.config.model_config import get_model_config, is_valid_gemini_model
 from src.rag import initialize_vector_store, initialize_memvid_store
 from src.voice import initialize_cartesia_client
 from src.ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
@@ -39,11 +40,21 @@ def main():
             sys.exit(1)
         
         logger.info("API keys validated successfully")
-        
+
+        # Proactive model validation (warning-only)
+        model_cfg = get_model_config()
+        model_name = model_cfg.get("model_version")
+        if model_name and not is_valid_gemini_model(model_name):
+            logger.warning(
+                f"Configured GEMINI_MODEL_VERSION '{model_name}' not in known list. "
+                "Maya will continue to start, but you may want to verify the model "
+                "identifier against Google AI docs: https://ai.google.dev/gemini-api/docs/models"
+            )
+
         # Initialize application state
         initialize_state()
         logger.info("Application state initialized")
-        
+
         # Initialize LLM with tools
         tools = get_all_tools()
         llm = initialize_llm(api_key=api_keys["google_api_key"], tools=tools)
@@ -90,12 +101,13 @@ def main():
         
         # Launch the Gradio interface
         logger.info("Launching Gradio interface...")
-        launch_bartender_interface(
-            handle_input_fn=handle_input_with_deps,
-            clear_state_fn=clear_chat_state,
-            share=True,
-            debug=True
-        )
+        try:
+            interface = launch_bartender_interface(
+                handle_input_fn=handle_input_with_deps,
+                clear_state_fn=clear_chat_state
+            )
+        except Exception as ui_err:
+            logger.warning(f"Failed to launch Gradio interface: {ui_err}. Application will continue without UI.")
         
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
