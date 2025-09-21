@@ -6,7 +6,6 @@ Unit tests for generation pathways using google-generativeai:
 - src.rag.memvid_pipeline.generate_memvid_response
 """
 
-import sys
 from types import SimpleNamespace as NS
 import pytest
 

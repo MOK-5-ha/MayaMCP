@@ -10,6 +10,7 @@ Command-line options:
 """
 
 import os
+import logging
 import pytest
 from src.config import setup_logging, get_api_keys
 from src.rag.memvid_store import initialize_memvid_store, search_memvid_documents
@@ -19,6 +20,9 @@ from tests.test_config import (
     ROUGH_DAY_QUERY,
     memvid_queries
 )
+
+# Get module-level logger
+logger = logging.getLogger(__name__)
 
 def test_memvid_integration(force_rebuild_flag):
     """
@@ -51,9 +55,9 @@ def test_memvid_integration(force_rebuild_flag):
         api_key=api_keys["google_api_key"]
     )
     assert response and len(response.strip()) > 0, "Should generate non-empty response"
-    print(f"Query: '{query}'")
-    print(f"Maya's Memvid-enhanced response: {response}")
-    print("\n🎉 Memvid integration test completed successfully!")
+    logger.info(f"Query: '{query}'")
+    logger.info(f"Maya's Memvid-enhanced response: {response}")
+    logger.info("\n🎉 Memvid integration test completed successfully!")
 
 
 def test_memvid_queries(force_rebuild_flag):
@@ -67,7 +71,7 @@ def test_memvid_queries(force_rebuild_flag):
         # Initialize Memvid store with configurable rebuild flag
         memvid_retriever, documents = initialize_memvid_store(force_rebuild=force_rebuild_flag)
         
-        if memvid_retriever and len(documents) > 0:
+        if memvid_retriever and documents:
             # Test with predefined queries
             test_queries = [DIFFICULT_CUSTOMERS_QUERY, ROUGH_DAY_QUERY] + memvid_queries
             
@@ -78,35 +82,34 @@ def test_memvid_queries(force_rebuild_flag):
                         memvid_retriever=memvid_retriever,
                         api_key=api_keys["google_api_key"]
                     )
-                    print(f"Query: '{query}'")
-                    print(f"Maya's Memvid-enhanced response: {response}")
+                    logger.info(f"Query: '{query}'")
+                    logger.info(f"Maya's Memvid-enhanced response: {response}")
                 except Exception as e:
                     error_msg = f"Query failed '{query}': {e}"
-                    print(f"❌ {error_msg}")
+                    logger.error(f"❌ {error_msg}", exc_info=True)
                     failures.append(error_msg)
         else:
             error_msg = "RAG pipeline skipped: memvid_retriever not initialized"
-            print(f"⚠️ {error_msg}")
+            logger.warning(f"⚠️ {error_msg}")
             failures.append(error_msg)
             
     except Exception as e:
         error_msg = f"RAG pipeline failed: {e}"
-        print(f"❌ {error_msg}")
+        logger.error(f"❌ {error_msg}", exc_info=True)
         failures.append(error_msg)
     
     # Check for failures and report them
     if failures:
         failure_summary = "\n".join(f"  - {failure}" for failure in failures)
-        print(f"\n❌ Test completed with {len(failures)} failure(s):")
-        print(failure_summary)
+        logger.error(f"\n❌ Test completed with {len(failures)} failure(s):")
+        logger.error(failure_summary)
         raise AssertionError(f"Memvid integration test failed with {len(failures)} error(s):\n{failure_summary}")
     else:
-        print("\n🎉 Memvid queries test completed successfully!")
+        logger.info("\n🎉 Memvid queries test completed successfully!")
 
 
 if __name__ == "__main__":
     # For standalone execution, we need to manually determine force_rebuild
-    import os
     force_rebuild = os.getenv("TEST_FORCE_REBUILD", "0") == "1"
     test_memvid_integration(force_rebuild)
     test_memvid_queries(force_rebuild)

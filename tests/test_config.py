@@ -10,13 +10,13 @@ The configuration follows Python best practices with proper type hints,
 comprehensive documentation, and extensibility for future test scenarios.
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Literal, NewType
 
 
 # Type aliases for better readability
-QueryText = str
-QueryDescription = str
-QueryCategory = str
+QueryText = NewType("QueryText", str)
+QueryDescription = NewType("QueryDescription", str)
+QueryCategory = Literal["basic", "edge_case", "stress_test"]
 
 
 class MemvidTestQueries:
@@ -34,12 +34,17 @@ class MemvidTestQueries:
         ALL_QUERIES: Combined dictionary of all query categories
     """
 
+    # Category constants
+    CATEGORY_BASIC = "basic"
+    CATEGORY_EDGE_CASE = "edge_case"
+    CATEGORY_STRESS_TEST = "stress_test"
+
     # Basic conversational queries - original hardcoded queries
     BASIC_QUERIES: Dict[QueryText, QueryDescription] = {
                 "What about difficult customers?": (
             "Query about handling challenging customer interactions"
         ),
-                "I\'m having a rough day": (
+        'I\'m having a rough day': (
             "Query expressing emotional difficulty or stress"
         ),
     }
@@ -52,36 +57,27 @@ class MemvidTestQueries:
             "Very long query to test length limits"
         ),
         "Help": "Very short, ambiguous query to test minimal context handling",
-                "I need advice on dealing with angry clients who won\'t listen to reason": (
+        "I need advice on dealing with angry clients who won't listen to reason": (
             "Complex multi-sentence query"
         ),
     }
 
     # Stress test queries for performance testing
     STRESS_TEST_QUERIES: Dict[QueryText, QueryDescription] = {
-                "Can you help me with customer service techniques for handling irate "
-        "customers who are being unreasonable and difficult to calm down?": (
+        "Can you help me with customer service techniques for handling irate customers who are being unreasonable and difficult to calm down?": (
             "Long, detailed query for stress testing"
         ),
-                "I\'m dealing with a very challenging customer situation": (
+        "I'm dealing with a very challenging customer situation": (
             "Vague query requiring context expansion"
         ),
     }
 
-    # Combined dictionary for easy access to all queries
-    ALL_QUERIES: Dict[QueryText, Tuple[QueryCategory, QueryDescription]] = {}
-
-    def __init__(self) -> None:
-        """Initialize the combined queries dictionary."""
-        # Populate the combined dictionary
-        for query, description in self.BASIC_QUERIES.items():
-            self.ALL_QUERIES[query] = ("basic", description)
-
-        for query, description in self.EDGE_CASE_QUERIES.items():
-            self.ALL_QUERIES[query] = ("edge_case", description)
-
-        for query, description in self.STRESS_TEST_QUERIES.items():
-            self.ALL_QUERIES[query] = ("stress_test", description)
+    # Combined dictionary built once at class definition time (immutable)
+    ALL_QUERIES: Dict[QueryText, Tuple[QueryCategory, QueryDescription]] = {
+        **{query: ("basic", description) for query, description in BASIC_QUERIES.items()},
+        **{query: ("edge_case", description) for query, description in EDGE_CASE_QUERIES.items()},
+        **{query: ("stress_test", description) for query, description in STRESS_TEST_QUERIES.items()}
+    }
 
     def get_queries_by_category(
         self, category: QueryCategory
@@ -100,10 +96,11 @@ class MemvidTestQueries:
         Raises:
             ValueError: If the category is not recognized
         """
-        if category not in ["basic", "edge_case", "stress_test"]:
+        valid_categories = [self.CATEGORY_BASIC, self.CATEGORY_EDGE_CASE, self.CATEGORY_STRESS_TEST]
+        if category not in valid_categories:
             raise ValueError(
-                f"Unknown category: {category}. Must be one of: basic, "
-                "edge_case, stress_test"
+                f"Unknown category: {category}. Must be one of: "
+                f"{', '.join(valid_categories)}"
             )
 
         return {
@@ -128,7 +125,7 @@ memvid_queries = MemvidTestQueries()
 
 # Convenience constants for backward compatibility and easy access
 DIFFICULT_CUSTOMERS_QUERY: QueryText = "What about difficult customers?"
-ROUGH_DAY_QUERY: QueryText = "I'm having a rough day"
+ROUGH_DAY_QUERY: QueryText = "I\'m having a rough day"
 
 # All basic queries as a list for easy iteration
 BASIC_TEST_QUERIES: List[QueryText] = [

@@ -62,9 +62,29 @@ def test_maya_interaction():
             logger.info("Initializing state manager...")
             initialize_state()
             logger.info("✅ State manager initialized")
-        except Exception as e:
-            error_msg = f"Failed to initialize state manager: {e}"
+        except FileNotFoundError as e:
+            error_msg = f"State manager initialization failed - required file not found: {e.filename if e.filename else 'unknown file'} ({e})"
             logger.error(error_msg)
+            raise
+        except PermissionError as e:
+            error_msg = f"State manager initialization failed - permission denied accessing: {e.filename if e.filename else 'unknown file'} ({e})"
+            logger.error(error_msg)
+            raise
+        except OSError as e:
+            error_msg = f"State manager initialization failed - OS error: {e.strerror if e.strerror else str(e)} (errno: {e.errno if e.errno else 'unknown'})"
+            logger.error(error_msg)
+            raise
+        except ValueError as e:
+            error_msg = f"State manager initialization failed - invalid configuration or value: {e}"
+            logger.error(error_msg)
+            raise
+        except ImportError as e:
+            error_msg = f"State manager initialization failed - missing required module: {e.name if e.name else 'unknown module'} ({e})"
+            logger.error(error_msg)
+            raise
+        except Exception as e:
+            error_msg = f"State manager initialization failed with unexpected error: {type(e).__name__}: {e}"
+            logger.error(error_msg, exc_info=True)
             raise
         
         try:
@@ -114,9 +134,30 @@ def test_maya_interaction():
             rag_documents=rag_documents,
             api_key=api_keys["google_api_key"]
         )
+        # Validate first response
+        if not isinstance(response, str) or not response.strip():
+            if logger:
+                logger.error("First interaction response is empty or not a string")
+            raise AssertionError("First interaction response is empty or not a string")
+        if not isinstance(updated_history, list) or not updated_history or not isinstance(updated_history[-1], dict):
+            if logger:
+                logger.error("Updated history after first interaction is missing or malformed")
+            raise AssertionError("Updated history after first interaction is missing or malformed")
+        if 'role' not in updated_history[-1] or 'content' not in updated_history[-1] or not updated_history[-1]['content']:
+            if logger:
+                logger.error("Updated history last entry after first interaction lacks required keys/content")
+            raise AssertionError("Updated history last entry after first interaction lacks required keys/content")
+        if len(updated_history) < 2:
+            if logger:
+                logger.error("Updated history after first interaction is unexpectedly short")
+            raise AssertionError("Updated history after first interaction is unexpectedly short")
+        if not isinstance(updated_order, list):
+            if logger:
+                logger.error("Updated order after first interaction is not a list")
+            raise AssertionError("Updated order after first interaction is not a list")
         
         # Test getting the order
-        response2, _, _, _, _ = process_order(
+        response2, updated_history2, _, _, _ = process_order(
             user_input_text="What's in my order?",
             current_session_history=updated_history,
             llm=llm,
@@ -124,20 +165,35 @@ def test_maya_interaction():
             rag_documents=rag_documents,
             api_key=api_keys["google_api_key"]
         )
+        # Validate second response
+        if not isinstance(response2, str) or not response2.strip():
+            if logger:
+                logger.error("Second interaction response is empty or not a string")
+            raise AssertionError("Second interaction response is empty or not a string")
+        if not isinstance(updated_history2, list) or not updated_history2 or not isinstance(updated_history2[-1], dict):
+            if logger:
+                logger.error("Updated history after second interaction is missing or malformed")
+            raise AssertionError("Updated history after second interaction is missing or malformed")
+        if 'role' not in updated_history2[-1] or 'content' not in updated_history2[-1] or not updated_history2[-1]['content']:
+            if logger:
+                logger.error("Updated history last entry after second interaction lacks required keys/content")
+            raise AssertionError("Updated history last entry after second interaction lacks required keys/content")
         
         # Test bill
         response3, _, _, _, _ = process_order(
             user_input_text="What's my bill?",
-            current_session_history=updated_history,
+            current_session_history=updated_history2,
             llm=llm,
             rag_index=rag_index,
             rag_documents=rag_documents, 
             api_key=api_keys["google_api_key"]
         )
+        # Validate third response
+        if not isinstance(response3, str) or not response3.strip():
+            if logger:
+                logger.error("Third interaction (bill) response is empty or not a string")
+            raise AssertionError("Third interaction (bill) response is empty or not a string")
         
-        if not response3:
-            logger.warning("Empty response for bill inquiry")
-            
         logger.info("✅ Maya interaction test completed successfully")
         return True
         
@@ -152,8 +208,97 @@ def test_maya_interaction():
         try:
             if logger:
                 logger.info("Performing cleanup after test failure...")
-            # Add any specific cleanup logic here if needed
-            # For example, clearing state, closing connections, etc.
+            
+            # Clean up LLM client
+            if llm is not None:
+                try:
+                    # Close LLM client if it has a close method
+                    if hasattr(llm, 'close'):
+                        llm.close()
+                        if logger:
+                            logger.info("✅ LLM client closed")
+                except Exception as llm_cleanup_error:
+                    if logger:
+                        logger.error(f"Failed to close LLM client: {llm_cleanup_error}")
+            
+            # Clean up vector store/RAG index
+            if rag_index is not None:
+                try:
+                    # Close vector store if it has cleanup methods
+                    if hasattr(rag_index, 'close'):
+                        rag_index.close()
+                        if logger:
+                            logger.info("✅ Vector store closed")
+                    elif hasattr(rag_index, 'cleanup'):
+                        rag_index.cleanup()
+                        if logger:
+                            logger.info("✅ Vector store cleaned up")
+                except Exception as rag_cleanup_error:
+                    if logger:
+                        logger.error(f"Failed to cleanup vector store: {rag_cleanup_error}")
+            
+            # Clean up Cartesia client
+            if cartesia_client is not None:
+                try:
+                    # Close Cartesia client if it has a close method
+                    if hasattr(cartesia_client, 'close'):
+                        cartesia_client.close()
+                        if logger:
+                            logger.info("✅ Cartesia client closed")
+                    # Clean up any active connections or sessions
+                    if hasattr(cartesia_client, 'cleanup'):
+                        cartesia_client.cleanup()
+                        if logger:
+                            logger.info("✅ Cartesia client cleaned up")
+                except Exception as cartesia_cleanup_error:
+                    if logger:
+                        logger.error(f"Failed to cleanup Cartesia client: {cartesia_cleanup_error}")
+            
+            # Reset state manager to clean state
+            try:
+                from src.utils.state_manager import reset_state, clear_session_data
+                # Clear any session data that might be lingering
+                if hasattr(sys.modules.get('src.utils.state_manager'), 'clear_session_data'):
+                    clear_session_data()
+                    if logger:
+                        logger.info("✅ Session data cleared")
+                
+                # Reset state manager to initial state
+                if hasattr(sys.modules.get('src.utils.state_manager'), 'reset_state'):
+                    reset_state()
+                    if logger:
+                        logger.info("✅ State manager reset")
+            except ImportError:
+                # Functions don't exist, skip silently
+                pass
+            except Exception as state_cleanup_error:
+                if logger:
+                    logger.error(f"Failed to cleanup state manager: {state_cleanup_error}")
+            
+            # Clean up any temporary files that might have been created
+            try:
+                import tempfile
+                temp_dir = Path(tempfile.gettempdir())
+                # Look for any temporary files that might have been created by this test
+                maya_temp_files = list(temp_dir.glob("maya_test_*"))
+                for temp_file in maya_temp_files:
+                    try:
+                        if temp_file.is_file():
+                            temp_file.unlink()
+                        elif temp_file.is_dir():
+                            import shutil
+                            shutil.rmtree(temp_file)
+                        if logger:
+                            logger.info(f"✅ Removed temporary file/dir: {temp_file}")
+                    except Exception as file_cleanup_error:
+                        if logger:
+                            logger.error(f"Failed to remove temporary file {temp_file}: {file_cleanup_error}")
+            except Exception as temp_cleanup_error:
+                if logger:
+                    logger.error(f"Failed during temporary file cleanup: {temp_cleanup_error}")
+            
+            if logger:
+                logger.info("✅ Cleanup completed")
         except Exception as cleanup_error:
             cleanup_msg = f"Cleanup failed: {cleanup_error}"
             if logger:

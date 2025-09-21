@@ -53,7 +53,8 @@ def test_maya_memvid_full():
             initialize_state()
             print("✅ State management initialized")
         except Exception as e:
-            logger.error(f"State initialization failed: {e}", exc_info=True) if logger else None
+            if logger:
+            logger.error(f"State initialization failed: {e}", exc_info=True)
             raise AssertionError(f"Failed to initialize state management: {e}") from e
         
         # Get LLM tools
@@ -124,7 +125,7 @@ def test_maya_memvid_full():
     print("\n🗣️  Testing drink order (should use tools, not RAG)")
     print("-" * 50)
     
-    response2, updated_history2, analysis_result2, rag_context2, tool_calls2 = process_order(
+    response_whiskey, history_after_whiskey, analysis_whiskey, rag_context_whiskey, tool_calls_whiskey = process_order(
         user_input_text="I'd like a whiskey on the rocks please",
         current_session_history=updated_history,
         llm=llm,
@@ -135,30 +136,30 @@ def test_maya_memvid_full():
     )
     
     # Validate drink order response quality
-    assert response2 is not None, "Drink order response should not be None"
-    assert isinstance(response2, str), f"Drink order response should be string, got {type(response2)}"
-    assert len(response2.strip()) > 0, "Drink order response should not be empty"
-    assert len(response2) > 10, f"Drink order response too short ({len(response2)} chars)"
+    assert response_whiskey is not None, "Drink order response should not be None"
+    assert isinstance(response_whiskey, str), f"Drink order response should be string, got {type(response_whiskey)}"
+    assert len(response_whiskey.strip()) > 0, "Drink order response should not be empty"
+    assert len(response_whiskey) > 10, f"Drink order response too short ({len(response_whiskey)} chars)"
     
     # Validate history progression
-    assert updated_history2 is not None, "Updated history2 should not be None"
-    assert isinstance(updated_history2, list), f"Updated history2 should be list, got {type(updated_history2)}"
-    assert len(updated_history2) > len(updated_history), "History should continue growing"
+    assert history_after_whiskey is not None, "Updated history2 should not be None"
+    assert isinstance(history_after_whiskey, list), f"Updated history2 should be list, got {type(history_after_whiskey)}"
+    assert len(history_after_whiskey) > len(updated_history), "History should continue growing"
     
     # Validate order state was affected (drink order should update state)
     current_state = get_current_order_state()
     assert current_state is not None, "Order state should exist after drink order"
     
-    print(f"🤖 Maya's response: {response2}")
+    print(f"🤖 Maya's response: {response_whiskey}")
     print(f"🛒 Order state: {current_state}")
-    print(f"✅ Drink order validation passed: {len(response2)} chars, history: {len(updated_history2)} entries")
+    print(f"✅ Drink order validation passed: {len(response_whiskey)} chars, history: {len(history_after_whiskey)} entries")
     
     print("\n🗣️  Testing casual follow-up (should use Memvid again)")
     print("-" * 55)
     
     response3, updated_history3, analysis_result3, rag_context3, tool_calls3 = process_order(
         user_input_text="You seem wise for a bartender",
-        current_session_history=updated_history2,  # Use history from drink order
+        current_session_history=history_after_whiskey,  # Use history from drink order
         llm=llm,
         rag_index=None,
         rag_documents=rag_documents,
@@ -187,7 +188,15 @@ def test_maya_memvid_full():
     print(f"📊 Final order history: {get_order_history()}")
     
     # Show video memory stats
-    print(f"📹 Memvid stats: {memvid_retriever.get_stats()}")
+    assert hasattr(memvid_retriever, 'get_stats'), "Memvid retriever should have get_stats method"
+    assert callable(getattr(memvid_retriever, 'get_stats')), "get_stats should be callable"
+    
+    try:
+        stats = memvid_retriever.get_stats()
+        print(f"📹 Memvid stats: {stats}")
+    except Exception as e:
+        logger.error(f"Failed to get Memvid stats: {e}", exc_info=True) if logger else None
+        pytest.fail(f"memvid_retriever.get_stats() failed: {e}")
 
 if __name__ == "__main__":
     test_maya_memvid_full()
