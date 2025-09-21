@@ -54,7 +54,7 @@ def test_maya_memvid_full():
             print("✅ State management initialized")
         except Exception as e:
             if logger:
-            logger.error(f"State initialization failed: {e}", exc_info=True)
+                logger.error(f"State initialization failed: {e}", exc_info=True)
             raise AssertionError(f"Failed to initialize state management: {e}") from e
         
         # Get LLM tools
@@ -99,10 +99,53 @@ def test_maya_memvid_full():
         raise AssertionError(error_msg) from e
     
     finally:
-        # Cleanup resources if needed
-        # Note: Most components don't require explicit cleanup, but this is where
-        # you would add it if needed (e.g., closing connections, files, etc.)
-        pass
+        # Best-effort cleanup of resources
+        print("🧹 Cleaning up resources...")
+        
+        # Cleanup LLM client
+        if llm is not None:
+            try:
+                if hasattr(llm, 'close'):
+                    llm.close()
+                elif hasattr(llm, 'shutdown'):
+                    llm.shutdown()
+                elif hasattr(llm, '__del__'):
+                    del llm
+            except Exception as cleanup_error:
+                print(f"⚠️  Warning: LLM cleanup failed: {cleanup_error}")
+        
+        # Cleanup Memvid retriever
+        if memvid_retriever is not None:
+            try:
+                if hasattr(memvid_retriever, 'close'):
+                    memvid_retriever.close()
+                elif hasattr(memvid_retriever, 'shutdown'):
+                    memvid_retriever.shutdown()
+                elif hasattr(memvid_retriever, 'cleanup'):
+                    memvid_retriever.cleanup()
+            except Exception as cleanup_error:
+                print(f"⚠️  Warning: Memvid retriever cleanup failed: {cleanup_error}")
+        
+        # Cleanup logger handlers if possible
+        if logger is not None:
+            try:
+                if hasattr(logger, 'handlers'):
+                    for handler in logger.handlers[:]:  # Copy list to avoid modification during iteration
+                        if hasattr(handler, 'close'):
+                            handler.close()
+                        logger.removeHandler(handler)
+            except Exception as cleanup_error:
+                print(f"⚠️  Warning: Logger cleanup failed: {cleanup_error}")
+        
+        # Clear large objects to help with memory cleanup
+        if rag_documents is not None:
+            try:
+                rag_documents.clear() if hasattr(rag_documents, 'clear') else None
+                del rag_documents
+            except Exception as cleanup_error:
+                print(f"⚠️  Warning: RAG documents cleanup failed: {cleanup_error}")
+        
+        print("✅ Cleanup completed")
     
     # Test conversation with Memvid enhancement
     session_history = []
@@ -176,7 +219,7 @@ def test_maya_memvid_full():
     # Validate final history state
     assert updated_history3 is not None, "Final updated history should not be None"
     assert isinstance(updated_history3, list), f"Final updated history should be list, got {type(updated_history3)}"
-    assert len(updated_history3) > len(updated_history2), "Final history should be longest"
+    assert len(updated_history3) > len(history_after_whiskey), "Final history should be longest"
     
     # For casual conversation, we expect potential RAG context usage
     # (though we can't guarantee it will be used, depending on the conversation flow)
