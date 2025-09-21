@@ -92,12 +92,7 @@ maya_output.log
 maya_memvid_output.log
 *.log
 
-# Test files (temporary/development)
-test_*.py
-test_maya.py
-
-# Test modules and pytest files
-tests/
+# Pytest files
 pytest.ini
 .pytest_cache/
 

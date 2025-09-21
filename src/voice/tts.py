@@ -37,9 +37,10 @@ def clean_text_for_tts(text: str) -> str:
                 dollars_str, frac_str = amount.split('.', 1)
                 dollars = int(dollars_str)
                 # Round fractional part to nearest cent
-                try:
+                # Validate that frac_str contains only digits before conversion
+                if frac_str.isdigit():
                     cents = int(round(float(f"0.{frac_str}") * 100))
-                except ValueError:
+                else:
                     cents = 0
                 if cents >= 100:
                     dollars += 1

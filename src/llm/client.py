@@ -124,7 +124,7 @@ def call_gemini_api(
     prompt_content: List[Dict],
     config: Dict,
     api_key: str
-) -> Any:
+) -> genai.types.GenerateContentResponse:
     """
     Internal function to call the Gemini API with retry logic.
 
