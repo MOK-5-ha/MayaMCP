@@ -5,6 +5,7 @@ Test script to verify Maya's functionality. Used by Claude.
 
 import sys
 import os
+import pytest
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, Tuple, Any, Generator
@@ -173,6 +174,8 @@ def _validate_history(history: list, description: str, min_length: int = 1) -> N
             )
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(os.getenv("RUN_E2E") != "1", reason="E2E tests disabled")
 def test_maya_interaction() -> bool:
     """Test Maya's full interaction workflow."""
 

@@ -60,7 +60,7 @@ def clean_text_for_tts(text: str) -> str:
             return amount
     
     # Pattern to match valid $XX.XX format and convert to speech-friendly text
-    cleaned_text = re.sub(r'\$(\d+(?:\.\d{1,2})?)(?![\.\d])', format_money_for_speech, cleaned_text)
+    cleaned_text = re.sub(r'\$(\d+(?:\.\d{1,2})?)(?!\d)', format_money_for_speech, cleaned_text)
     
     # Remove problematic punctuation that TTS might pronounce
     # Keep periods, commas, question marks, exclamation marks for natural pauses

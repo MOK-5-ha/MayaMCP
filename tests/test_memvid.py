@@ -37,6 +37,10 @@ def test_memvid_integration(force_rebuild_flag):
     logger = setup_logging()
     api_keys = get_api_keys()
     
+    # Check for required API keys before proceeding
+    if not api_keys.get("google_api_key"):
+        pytest.skip("Google API key not available - skipping Memvid integration test")
+    
     # Initialize Memvid store with configurable rebuild flag
     # This will be False by default (for CI efficiency) unless overridden
     memvid_retriever, documents = initialize_memvid_store(force_rebuild=force_rebuild_flag)
@@ -67,13 +71,17 @@ def test_memvid_queries(force_rebuild_flag):
     api_keys = get_api_keys()
     failures = []
     
+    # Check for required API keys before proceeding
+    if not api_keys.get("google_api_key"):
+        pytest.skip("Google API key not available - skipping Memvid queries test")
+    
     try:
         # Initialize Memvid store with configurable rebuild flag
         memvid_retriever, documents = initialize_memvid_store(force_rebuild=force_rebuild_flag)
         
         if memvid_retriever and documents:
             # Test with predefined queries
-            test_queries = [DIFFICULT_CUSTOMERS_QUERY, ROUGH_DAY_QUERY] + memvid_queries
+            test_queries = [DIFFICULT_CUSTOMERS_QUERY, ROUGH_DAY_QUERY] + memvid_queries.queries
             
             for query in test_queries:
                 try:

@@ -98,55 +98,6 @@ def test_maya_memvid_full():
             logger.error(error_msg, exc_info=True)
         raise AssertionError(error_msg) from e
     
-    finally:
-        # Best-effort cleanup of resources
-        print("🧹 Cleaning up resources...")
-        
-        # Cleanup LLM client
-        if llm is not None:
-            try:
-                if hasattr(llm, 'close'):
-                    llm.close()
-                elif hasattr(llm, 'shutdown'):
-                    llm.shutdown()
-                elif hasattr(llm, '__del__'):
-                    del llm
-            except Exception as cleanup_error:
-                print(f"⚠️  Warning: LLM cleanup failed: {cleanup_error}")
-        
-        # Cleanup Memvid retriever
-        if memvid_retriever is not None:
-            try:
-                if hasattr(memvid_retriever, 'close'):
-                    memvid_retriever.close()
-                elif hasattr(memvid_retriever, 'shutdown'):
-                    memvid_retriever.shutdown()
-                elif hasattr(memvid_retriever, 'cleanup'):
-                    memvid_retriever.cleanup()
-            except Exception as cleanup_error:
-                print(f"⚠️  Warning: Memvid retriever cleanup failed: {cleanup_error}")
-        
-        # Cleanup logger handlers if possible
-        if logger is not None:
-            try:
-                if hasattr(logger, 'handlers'):
-                    for handler in logger.handlers[:]:  # Copy list to avoid modification during iteration
-                        if hasattr(handler, 'close'):
-                            handler.close()
-                        logger.removeHandler(handler)
-            except Exception as cleanup_error:
-                print(f"⚠️  Warning: Logger cleanup failed: {cleanup_error}")
-        
-        # Clear large objects to help with memory cleanup
-        if rag_documents is not None:
-            try:
-                rag_documents.clear() if hasattr(rag_documents, 'clear') else None
-                del rag_documents
-            except Exception as cleanup_error:
-                print(f"⚠️  Warning: RAG documents cleanup failed: {cleanup_error}")
-        
-        print("✅ Cleanup completed")
-    
     # Test conversation with Memvid enhancement
     session_history = []
     
@@ -240,6 +191,54 @@ def test_maya_memvid_full():
     except Exception as e:
         logger.error(f"Failed to get Memvid stats: {e}", exc_info=True) if logger else None
         pytest.fail(f"memvid_retriever.get_stats() failed: {e}")
+    
+    # Best-effort cleanup of resources
+    print("🧹 Cleaning up resources...")
+    
+    # Cleanup LLM client
+    if llm is not None:
+        try:
+            if hasattr(llm, 'close'):
+                llm.close()
+            elif hasattr(llm, 'shutdown'):
+                llm.shutdown()
+            elif hasattr(llm, '__del__'):
+                del llm
+        except Exception as cleanup_error:
+            print(f"⚠️  Warning: LLM cleanup failed: {cleanup_error}")
+    
+    # Cleanup Memvid retriever
+    if memvid_retriever is not None:
+        try:
+            if hasattr(memvid_retriever, 'close'):
+                memvid_retriever.close()
+            elif hasattr(memvid_retriever, 'shutdown'):
+                memvid_retriever.shutdown()
+            elif hasattr(memvid_retriever, 'cleanup'):
+                memvid_retriever.cleanup()
+        except Exception as cleanup_error:
+            print(f"⚠️  Warning: Memvid retriever cleanup failed: {cleanup_error}")
+    
+    # Cleanup logger handlers if possible
+    if logger is not None:
+        try:
+            if hasattr(logger, 'handlers'):
+                for handler in logger.handlers[:]:  # Copy list to avoid modification during iteration
+                    if hasattr(handler, 'close'):
+                        handler.close()
+                    logger.removeHandler(handler)
+        except Exception as cleanup_error:
+            print(f"⚠️  Warning: Logger cleanup failed: {cleanup_error}")
+    
+    # Clear large objects to help with memory cleanup
+    if rag_documents is not None:
+        try:
+            rag_documents.clear() if hasattr(rag_documents, 'clear') else None
+            del rag_documents
+        except Exception as cleanup_error:
+            print(f"⚠️  Warning: RAG documents cleanup failed: {cleanup_error}")
+    
+    print("✅ Cleanup completed")
 
 if __name__ == "__main__":
     test_maya_memvid_full()

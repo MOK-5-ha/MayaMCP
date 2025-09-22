@@ -10,7 +10,7 @@ The configuration follows Python best practices with proper type hints,
 comprehensive documentation, and extensibility for future test scenarios.
 """
 
-from typing import Dict, List, Tuple, Literal, NewType
+from typing import ClassVar, Dict, List, Tuple, Literal, NewType
 
 
 # Type aliases for better readability
@@ -40,7 +40,7 @@ class MemvidTestQueries:
     CATEGORY_STRESS_TEST = "stress_test"
 
     # Basic conversational queries - original hardcoded queries
-    BASIC_QUERIES: Dict[QueryText, QueryDescription] = {
+    BASIC_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
                 "What about difficult customers?": (
             "Query about handling challenging customer interactions"
         ),
@@ -50,7 +50,7 @@ class MemvidTestQueries:
     }
 
     # Edge case queries for boundary testing
-    EDGE_CASE_QUERIES: Dict[QueryText, QueryDescription] = {
+    EDGE_CASE_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
         "": "Empty query to test input validation",
         "   ": "Whitespace-only query to test trimming and validation",
                 "What about difficult customers? " * 10: (
@@ -63,7 +63,7 @@ class MemvidTestQueries:
     }
 
     # Stress test queries for performance testing
-    STRESS_TEST_QUERIES: Dict[QueryText, QueryDescription] = {
+    STRESS_TEST_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
         "Can you help me with customer service techniques for handling irate customers who are being unreasonable and difficult to calm down?": (
             "Long, detailed query for stress testing"
         ),
@@ -73,7 +73,7 @@ class MemvidTestQueries:
     }
 
     # Combined dictionary built once at class definition time (immutable)
-    ALL_QUERIES: Dict[QueryText, Tuple[QueryCategory, QueryDescription]] = {
+    ALL_QUERIES: ClassVar[Dict[QueryText, Tuple[QueryCategory, QueryDescription]]] = {
         **{query: (CATEGORY_BASIC, description) for query, description in BASIC_QUERIES.items()},
         **{query: (CATEGORY_EDGE_CASE, description) for query, description in EDGE_CASE_QUERIES.items()},
         **{query: (CATEGORY_STRESS_TEST, description) for query, description in STRESS_TEST_QUERIES.items()}

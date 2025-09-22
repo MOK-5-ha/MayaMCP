@@ -22,11 +22,10 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.gr.Button')
     def test_launch_bartender_interface_with_default_avatar(
         self, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
-        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme
+        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
     ):
         """Test interface creation with default avatar setup."""
         # Setup mocks
-        mock_setup_avatar = Mock()
         mock_setup_avatar.return_value = "assets/bartender_avatar.jpg"
         
         mock_theme_instance = Mock()
