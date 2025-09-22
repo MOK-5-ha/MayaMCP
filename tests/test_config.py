@@ -117,6 +117,15 @@ class MemvidTestQueries:
         """
         return list(self.ALL_QUERIES.keys())
 
+    @property
+    def queries(self) -> List[QueryText]:
+        """
+        Get all query texts as a list.
+
+        Returns:
+            List of all query texts across all categories
+        """
+        return self.get_all_queries()
 
 
 # Module-level instance for easy access

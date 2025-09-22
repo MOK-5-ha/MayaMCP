@@ -126,22 +126,4 @@ def force_rebuild_flag(request):
     return False
 
 
-@pytest.fixture(autouse=True, scope="session")
-def setup_src_path():
-    """
-    Automatically add the src directory to sys.path for all tests.
-    This ensures that imports like 'src.llm.client' work correctly.
-    """
-    import sys
-    from pathlib import Path
 
-    # Get the repository root directory (parent of tests directory)
-    repo_root = Path(__file__).parent.parent
-    src_path = repo_root / "src"
-
-    # Convert to absolute path string
-    src_path_str = str(src_path.resolve())
-
-    # Only add to sys.path if not already present
-    if src_path_str not in sys.path:
-        sys.path.insert(0, src_path_str)

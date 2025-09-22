@@ -23,23 +23,35 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Check if virtual environment should be created
-if [ ! -d "venv" ]; then
-    echo "📦 Creating virtual environment..."
-    python3 -m venv venv
+# Determine virtual environment directory (prefer .venv, fallback to venv)
+VENV_DIR=""
+if [ -d ".venv" ]; then
+    VENV_DIR=".venv"
+elif [ -d "venv" ]; then
+    VENV_DIR="venv"
+else
+    echo "📦 Creating virtual environment (.venv)..."
+    python3 -m venv .venv
+    VENV_DIR=".venv"
 fi
 
 # Activate virtual environment
-echo "🔧 Activating virtual environment..."
-source venv/bin/activate
+echo "🔧 Activating virtual environment ($VENV_DIR)..."
+# shellcheck disable=SC1090
+source "$VENV_DIR/bin/activate"
 
-# Install dependencies
-echo "📥 Installing dependencies..."
-pip install -r requirements.txt
+# Install in editable mode so imports work without path hacks
+echo "📥 Installing project in editable mode..."
+python -m pip install --upgrade pip setuptools wheel >/dev/null
+python -m pip install -e .
 
 # Create assets directory if it doesn't exist
 mkdir -p assets
 
-# Run the application
+# Run the application via console script (fallback to python main.py)
 echo "🚀 Launching Maya..."
-python main.py
+if command -v mayamcp &> /dev/null; then
+    mayamcp
+else
+    python main.py
+fi

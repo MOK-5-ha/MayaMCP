@@ -7,9 +7,6 @@ import sys
 from types import SimpleNamespace as NS
 import pytest
 
-# Ensure 'src' is on sys.path (consistent with other tests in this repo)
-sys.path.insert(0, 'src')
-
 import src.rag.embeddings as emb
 
 

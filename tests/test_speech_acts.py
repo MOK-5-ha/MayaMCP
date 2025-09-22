@@ -6,7 +6,6 @@ Pytest-based tests for speech act detection functionality
 import pytest
 import sys
 import os
-sys.path.insert(0, 'src')
 
 from src.utils.helpers import detect_speech_acts
 

@@ -7,9 +7,6 @@ import sys
 import re
 import pytest
 
-# Ensure 'src' is on sys.path
-sys.path.insert(0, 'src')
-
 from src.utils.errors import classify_and_log_genai_error
 
 

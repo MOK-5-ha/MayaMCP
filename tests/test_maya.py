@@ -13,7 +13,6 @@ from typing import Optional, Tuple, Any, Generator
 # Compute absolute path to src directory based on this test file's location
 test_file_dir = Path(__file__).resolve().parent
 repo_root_dir = test_file_dir.parent
-sys.path.insert(0, str(repo_root_dir))
 
 from src.config import get_api_keys, setup_logging
 from src.llm import initialize_llm, get_all_tools

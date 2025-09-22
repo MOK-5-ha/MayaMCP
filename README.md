@@ -69,20 +69,28 @@ PYTHON_ENV=development
 DEBUG=True
 ```
 
-1. Run Maya using the convenience script:
+1. Install and run Maya (recommended):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
+mayamcp
+```
+
+Alternative run:
+
+```bash
+python main.py
+```
+
+Legacy script (optional):
 
 ```bash
 ./run_maya.sh
 ```
 
-Or manually:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
+Note: `pip install -e .` installs dependencies from `requirements.txt` and sets up the `mayamcp` console command.
 
 Note: `pip install -r requirements.txt` installs the Google AI Studio SDK (`google-generativeai`) used throughout `src/` and the LangChain integration. If `google-genai` is present, it is not used in this project.
 

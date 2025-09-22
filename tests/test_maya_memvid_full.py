@@ -202,8 +202,6 @@ def test_maya_memvid_full():
                 llm.close()
             elif hasattr(llm, 'shutdown'):
                 llm.shutdown()
-            elif hasattr(llm, '__del__'):
-                del llm
         except Exception as cleanup_error:
             print(f"⚠️  Warning: LLM cleanup failed: {cleanup_error}")
     
@@ -233,7 +231,8 @@ def test_maya_memvid_full():
     # Clear large objects to help with memory cleanup
     if rag_documents is not None:
         try:
-            rag_documents.clear() if hasattr(rag_documents, 'clear') else None
+            if hasattr(rag_documents, 'clear'):
+                rag_documents.clear()
             del rag_documents
         except Exception as cleanup_error:
             print(f"⚠️  Warning: RAG documents cleanup failed: {cleanup_error}")
