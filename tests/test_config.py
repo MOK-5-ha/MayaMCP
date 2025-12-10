@@ -74,9 +74,9 @@ class MemvidTestQueries:
 
     # Combined dictionary built once at class definition time (immutable)
     ALL_QUERIES: ClassVar[Dict[QueryText, Tuple[QueryCategory, QueryDescription]]] = {
-        **{query: (CATEGORY_BASIC, description) for query, description in BASIC_QUERIES.items()},
-        **{query: (CATEGORY_EDGE_CASE, description) for query, description in EDGE_CASE_QUERIES.items()},
-        **{query: (CATEGORY_STRESS_TEST, description) for query, description in STRESS_TEST_QUERIES.items()}
+        **{query: ("basic", description) for query, description in BASIC_QUERIES.items()},
+        **{query: ("edge_case", description) for query, description in EDGE_CASE_QUERIES.items()},
+        **{query: ("stress_test", description) for query, description in STRESS_TEST_QUERIES.items()}
     }
 
     def get_queries_by_category(

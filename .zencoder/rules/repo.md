@@ -6,7 +6,7 @@ alwaysApply: true
 # MayaMCP Information
 
 ## Summary
-MayaMCP is an AI Bartending Agent that uses generative AI to create a conversational ordering system. Originally created as a capstone project for Kaggle's Gen AI Intensive Course, it has evolved to incorporate the Multi-party Computation Protocol (MCP). The agent, named Maya, provides a conversational interface for ordering drinks, with features including real-time streaming voice chat, menu management, and simulated transactions.
+MayaMCP is an AI Bartending Agent that uses generative AI to create a conversational ordering system. Originally created as a capstone project for Kaggle's Gen AI Intensive Course, it has evolved to incorporate the Model Context Protocol (MCP).
 
 ## Structure
 - `src/`: Core source code with modular organization (conversation, llm, rag, voice, ui, etc.)

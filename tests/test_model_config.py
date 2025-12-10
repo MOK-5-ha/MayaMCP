@@ -74,7 +74,9 @@ class TestParseFloatEnv:
         """Test parsing non-numeric string returns default."""
         result = _parse_float_env('TEST_FLOAT', 3.3)
         assert result == 3.3
-        mock_logger.warning.assert_called_once()
+        mock_logger.warning.assert_called_once_with(
+            "Invalid TEST_FLOAT value 'not_a_number', falling back to 3.3"
+        )
 
 
 class TestParseIntEnv:

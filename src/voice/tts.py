@@ -50,11 +50,21 @@ def clean_text_for_tts(text: str) -> str:
                 cents = 0
 
             if dollars == 0:
-                return f"{cents} cents"
+                if cents == 0:
+                    return "zero dollars"
+                elif cents == 1:
+                    return "1 cent"
+                else:
+                    return f"{cents} cents"
             elif cents == 0:
-                return f"{dollars} dollars"
+                if dollars == 1:
+                    return "1 dollar"
+                else:
+                    return f"{dollars} dollars"
             else:
-                return f"{dollars} dollars and {cents} cents"
+                dollar_str = "1 dollar" if dollars == 1 else f"{dollars} dollars"
+                cent_str = "1 cent" if cents == 1 else f"{cents} cents"
+                return f"{dollar_str} and {cent_str}"
         except ValueError:
             # If parsing fails, just remove the dollar sign
             return amount

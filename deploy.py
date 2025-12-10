@@ -153,8 +153,15 @@ def serve_maya():
         rag_index = None
         logger.info(f"Memvid RAG initialized with {len(rag_documents)} documents")
     except Exception as e:
-        logger.warning(f"Memvid initialization failed: {e}")
-        rag_index, rag_documents, rag_retriever = None, None, None
+        logger.warning(f"Memvid initialization failed: {e}. Attempting FAISS fallback...")
+        try:
+            from rag.vector_store import initialize_vector_store
+            rag_index, rag_documents = initialize_vector_store()
+            rag_retriever = None
+            logger.info(f"FAISS RAG initialized with {len(rag_documents)} documents")
+        except Exception as e2:
+            logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
+            rag_index, rag_documents, rag_retriever = None, None, None
 
     # Initialize Cartesia TTS
     try:

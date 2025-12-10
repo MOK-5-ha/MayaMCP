@@ -31,7 +31,7 @@ Homepage = "https://github.com/MOK-5-ha/MayaMCP"
 Repository = "https://github.com/MOK-5-ha/MayaMCP"
 
 [project.scripts]
-mayamcp = "main:main"
+mayamcp = "mayamcp_cli:main"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

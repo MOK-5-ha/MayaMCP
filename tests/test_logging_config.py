@@ -64,6 +64,8 @@ class TestLoggingConfig:
             force=True
         )
 
+        assert logger.name == "mayamcp"
+
     @patch.dict(os.environ, {'DEBUG': 'false'})
     @patch('logging.basicConfig')
     def test_setup_logging_debug_env_false(self, mock_basic_config):
@@ -76,6 +78,8 @@ class TestLoggingConfig:
             force=True
         )
 
+        assert logger.name == "mayamcp"
+
     @patch.dict(os.environ, {'DEBUG': 'invalid'})
     @patch('logging.basicConfig')
     def test_setup_logging_debug_env_invalid(self, mock_basic_config):
@@ -87,6 +91,8 @@ class TestLoggingConfig:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             force=True
         )
+
+        assert logger.name == "mayamcp"
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('logging.basicConfig')
@@ -114,6 +120,8 @@ class TestLoggingConfig:
             force=True
         )
 
+        assert logger.name == "mayamcp"
+
     @patch.dict(os.environ, {}, clear=True)
     @patch('logging.basicConfig')
     def test_setup_logging_custom_format(self, mock_basic_config):
@@ -126,6 +134,8 @@ class TestLoggingConfig:
             format=custom_format,
             force=True
         )
+
+        assert logger.name == "mayamcp"
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('logging.basicConfig')
@@ -140,6 +150,8 @@ class TestLoggingConfig:
             force=True
         )
 
+        assert logger.name == "mayamcp"
+
     @patch.dict(os.environ, {'DEBUG': 'true'})
     @patch('logging.basicConfig')
     def test_setup_logging_explicit_level_overrides_env(self, mock_basic_config):
@@ -151,6 +163,8 @@ class TestLoggingConfig:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             force=True
         )
+
+        assert logger.name == "mayamcp"
 
     @patch.dict(os.environ, {}, clear=True)
     def test_setup_logging_empty_level_string(self):
@@ -177,6 +191,8 @@ class TestLoggingConfig:
             force=True
         )
 
+        assert logger.name == "mayamcp"
+
     @patch.dict(os.environ, {}, clear=True)
     @patch('logging.basicConfig')
     def test_setup_logging_empty_format_string(self, mock_basic_config):
@@ -188,6 +204,8 @@ class TestLoggingConfig:
             format="",
             force=True
         )
+
+        assert logger.name == "mayamcp"
 
     @patch('logging.getLogger')
     def test_get_logger_returns_correct_logger(self, mock_get_logger):
@@ -242,8 +260,8 @@ class TestLoggingConfig:
     @patch.dict(os.environ, {}, clear=True)
     @patch('logging.basicConfig')
     @patch('logging.getLogger')
-    def test_setup_logging_integration(self, mock_get_logger, mock_basic_config):
-        """Test full integration of setup_logging function."""
+    def test_setup_logging_calls_logging_functions(self, mock_get_logger, mock_basic_config):
+        """Test that setup_logging calls basicConfig and getLogger."""
         mock_logger = MagicMock()
         mock_logger.name = "mayamcp"
         mock_get_logger.return_value = mock_logger

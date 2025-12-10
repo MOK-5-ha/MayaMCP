@@ -101,5 +101,5 @@ def rag_pipeline(
         return augmented_response
 
     except Exception as e:
-        classify_and_log_genai_error(e, logger, context="in RAG pipeline")
+        logger.error("Error in RAG pipeline: %s", str(e), exc_info=True)
         return ""

@@ -9,9 +9,9 @@ import logging
 from mayamcp.config import get_api_keys, setup_logging
 from mayamcp.llm import initialize_llm, get_all_tools  
 from mayamcp.rag import initialize_memvid_store
-from mayamcp.voice import initialize_cartesia_client
+
 from mayamcp.conversation.processor import process_order
-from mayamcp.utils.state_manager import initialize_state, get_current_order_state, get_order_history
+from mayamcp.utils.state_manager import initialize_state, get_current_order_state, get_order_history, reset_session_state
 
 def test_maya_memvid_full():
     """Test Maya's full interaction workflow with Memvid"""
@@ -88,9 +88,10 @@ def test_maya_memvid_full():
         
         print("✅ All components initialized with Memvid RAG")
         
-    except (AssertionError, pytest.skip.Exception):
-        # Re-raise test control exceptions
+    except AssertionError:
+        # Re-raise assertion errors
         raise
+    # pytest.skip() exceptions propagate naturally - no need to catch
     except Exception as e:
         # Catch any other unexpected errors
         error_msg = f"Unexpected error during test initialization: {e}"
@@ -136,7 +137,7 @@ def test_maya_memvid_full():
     assert len(response_whiskey) > 10, f"Drink order response too short ({len(response_whiskey)} chars)"
     
     # Validate history progression
-    assert history_after_whiskey is not None, "Updated history2 should not be None"
+    assert history_after_whiskey is not None, "Updated history should not be None"
     assert isinstance(history_after_whiskey, list), f"Updated history2 should be list, got {type(history_after_whiskey)}"
     assert len(history_after_whiskey) > len(updated_history), "History should continue growing"
     
@@ -236,6 +237,12 @@ def test_maya_memvid_full():
             del rag_documents
         except Exception as cleanup_error:
             print(f"⚠️  Warning: RAG documents cleanup failed: {cleanup_error}")
+    
+    # Reset global state to prevent interference with other tests
+    try:
+        reset_session_state()
+    except Exception as cleanup_error:
+        print(f"⚠️  Warning: State reset failed: {cleanup_error}")
     
     print("✅ Cleanup completed")
 

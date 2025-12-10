@@ -289,10 +289,11 @@ class TestSetupAvatar:
 
     @patch('src.ui.components.logger')
     @patch('src.ui.components.requests.get')
+    @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
     @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_logging_behavior(
-        self, mock_file, mock_image_new, mock_requests_get, mock_logger
+        self, mock_file, mock_image_new, mock_image_open, mock_requests_get, mock_logger
     ):
         """Test that appropriate logging occurs during avatar setup."""
         # Setup mocks for successful case
@@ -302,7 +303,7 @@ class TestSetupAvatar:
         mock_requests_get.return_value = mock_response
 
         mock_image = Mock()
-        mock_image_new.return_value = mock_image
+        mock_image_open.return_value = mock_image
 
         # Execute function
         setup_avatar()

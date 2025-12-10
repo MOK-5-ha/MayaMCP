@@ -82,7 +82,11 @@ def clear_chat_state() -> Tuple[List, List, List, None]:
     logger.info("Clear button clicked - Resetting session state.")
     
     # Reset the backend state
-    reset_session_state()
+    # Reset the backend state
+    try:
+        reset_session_state()
+    except Exception as e:
+        logger.error(f"Failed to reset session state: {e}")
     
     # Return empty lists for Chatbot/history/order, and None for the audio component
     return [], [], [], None

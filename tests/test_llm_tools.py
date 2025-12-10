@@ -638,5 +638,4 @@ class TestGetAllTools:
             assert expected_tool in tool_names
 
         # Verify correct count
-        # Verify correct count
         assert len(tools) == len(expected_tools)

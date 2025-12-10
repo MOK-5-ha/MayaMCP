@@ -148,7 +148,7 @@ Maya speaks! Enable audio in your browser to hear her responses.
 
 ## Testing
 
-This project includes comprehensive tests for all major components. Tests are organized in the  directory and use pytest for test discovery and execution.
+This project includes comprehensive tests for all major components. Tests are organized in the `tests/` directory and use pytest for test discovery and execution.
 
 ### Running Tests
 
@@ -177,9 +177,9 @@ Prerequisites: Python 3.12+ and pip installed; activate your virtual environment
 
 ### Test Configuration
 
-The project uses  for test configuration with the following features:
+The project uses `pytest.ini` for test configuration with the following features:
 
-- Automatic test discovery in the  directory
+- Automatic test discovery in the `tests/` directory
 - Custom markers for test categorization
 - Strict configuration enforcement
 - Colorized output for better readability
@@ -189,8 +189,8 @@ The project uses  for test configuration with the following features:
 
 When writing new tests:
 
-1. Place test files in the  directory
-2. Use descriptive test names following the  pattern
+1. Place test files in the `tests/` directory
+2. Use descriptive test names following the `test_*.py` pattern
 3. Use appropriate pytest markers to categorize tests
 4. Include both positive and negative test cases
 5. Mock external dependencies when possible
@@ -226,7 +226,7 @@ Tests are designed to run in CI environments with:
 
 ### Troubleshooting
 
-**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test running methods above. The  file automatically handles path setup for pytest runs.
+**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test running methods above. The `tests/conftest.py` file automatically handles path setup for pytest runs.
 
 **Missing Dependencies**: Install requirements and test tooling:
 
@@ -334,4 +334,3 @@ Exposed metrics (subset):
 - `maya_container_memory_limit_bytes` (gauge)
 - `maya_container_cpu_usage_seconds_total` (counter)
 - `maya_process_uptime_seconds` (gauge)
-..

@@ -9,20 +9,18 @@ import os
 import sys
 from functools import partial
 
-
-
-from src.config import (
+from config import (
     setup_logging, 
     get_api_keys, 
     validate_api_keys
 )
-from src.config.logging_config import get_logger
-from src.llm import initialize_llm, get_all_tools
-from src.config.model_config import get_model_config, is_valid_gemini_model
-from src.rag import initialize_vector_store, initialize_memvid_store
-from src.voice import initialize_cartesia_client
-from src.ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
-from src.utils import initialize_state
+from config.logging_config import get_logger
+from llm import initialize_llm, get_all_tools
+from config.model_config import get_model_config, is_valid_gemini_model
+from rag import initialize_vector_store, initialize_memvid_store
+from voice import initialize_cartesia_client
+from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
+from utils import initialize_state
 
 def main():
     """Main application entry point."""

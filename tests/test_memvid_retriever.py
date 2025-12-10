@@ -48,6 +48,21 @@ class TestMemvidRetriever:
             }
         }
 
+    @pytest.fixture
+    def mock_retriever_deps(self, sample_index_data):
+        """Common mocks for retriever tests (Default: ImportError for dependencies)."""
+        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()), \
+             patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))), \
+             patch('src.memvid.retriever.get_memvid_config', return_value={}), \
+             patch('src.memvid.retriever.Path') as mock_path:
+            mock_path.return_value.absolute.return_value = "/path/to/file"
+            yield
+
+    @pytest.fixture
+    def retriever(self, mock_retriever_deps):
+        """Initialized MemvidRetriever with mocked dependencies."""
+        return MemvidRetriever("video.mp4", "index.json")
+
     @patch('src.memvid.retriever.check_dependencies')
     @patch('src.memvid.retriever.get_memvid_config')
     @patch('builtins.open', new_callable=mock_open)
@@ -196,91 +211,21 @@ class TestMemvidRetriever:
             retriever = MemvidRetriever("video.mp4", "index.json")
             assert retriever.dependencies_available is True
 
-    def test_search_simple_empty_query(self, sample_index_data):
-        """Test simple search with empty query."""
-        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
-            with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
-                with patch('src.memvid.retriever.get_memvid_config', return_value={}):
-                    with patch('src.memvid.retriever.Path') as mock_path:
-                        mock_path.return_value.absolute.return_value = "/path/to/file"
-
-                        retriever = MemvidRetriever("video.mp4", "index.json")
-                        result = retriever.search_simple("", top_k=5)
-                        assert result == []
-
-    def test_search_simple_whitespace_query(self, sample_index_data):
-        """Test simple search with whitespace-only query."""
-        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
-            with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
-                with patch('src.memvid.retriever.get_memvid_config', return_value={}):
-                    with patch('src.memvid.retriever.Path') as mock_path:
-                        mock_path.return_value.absolute.return_value = "/path/to/file"
-
-                        retriever = MemvidRetriever("video.mp4", "index.json")
-                        result = retriever.search_simple("   \t\n  ", top_k=5)
-                        assert result == []
-
-    def test_search_simple_matching_keywords(self, sample_index_data):
-        """Test simple search with matching keywords."""
-        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
-            with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
-                with patch('src.memvid.retriever.get_memvid_config', return_value={}):
-                    with patch('src.memvid.retriever.Path') as mock_path:
-                        mock_path.return_value.absolute.return_value = "/path/to/file"
-
-                        retriever = MemvidRetriever("video.mp4", "index.json")
-
-                        with patch.object(retriever, '_get_chunk_from_video', return_value=None):
-                            result = retriever.search_simple("bartending", top_k=5)
-                            # Should return the matching chunk text from index
-                            assert len(result) == 1
-                            assert "bartending basics" in result[0]
-
-    def test_search_simple_multiple_matches(self, sample_index_data):
-        """Test simple search with multiple matching chunks."""
-        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
-            with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
-                with patch('src.memvid.retriever.get_memvid_config', return_value={}):
-                    with patch('src.memvid.retriever.Path') as mock_path:
-                        mock_path.return_value.absolute.return_value = "/path/to/file"
-
-                        retriever = MemvidRetriever("video.mp4", "index.json")
-
-                        with patch.object(retriever, '_get_chunk_from_video', return_value=None):
-                            result = retriever.search_simple("chunk", top_k=5)
-                            # Should return all matching chunks (all contain "chunk")
-                            assert len(result) == 3
-
-    def test_search_simple_top_k_limit(self, sample_index_data):
-        """Test simple search respects top_k limit."""
-        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
-            with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
-                with patch('src.memvid.retriever.get_memvid_config', return_value={}):
-                    with patch('src.memvid.retriever.Path') as mock_path:
-                        mock_path.return_value.absolute.return_value = "/path/to/file"
-
-                        retriever = MemvidRetriever("video.mp4", "index.json")
-
-                        with patch.object(retriever, '_get_chunk_from_video', return_value=None):
-                            result = retriever.search_simple("chunk", top_k=2)
-                            # Should limit to top 2 results
-                            assert len(result) == 2
-
-    def test_search_simple_case_insensitive(self, sample_index_data):
-        """Test simple search is case insensitive."""
-        with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
-            with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
-                with patch('src.memvid.retriever.get_memvid_config', return_value={}):
-                    with patch('src.memvid.retriever.Path') as mock_path:
-                        mock_path.return_value.absolute.return_value = "/path/to/file"
-
-                        retriever = MemvidRetriever("video.mp4", "index.json")
-
-                        with patch.object(retriever, '_get_chunk_from_video', return_value=None):
-                            result1 = retriever.search_simple("BARTENDING", top_k=5)
-                            result2 = retriever.search_simple("bartending", top_k=5)
-                            assert result1 == result2
-                            assert len(result1) == 1
+    @pytest.mark.parametrize("query,top_k,expected_count,match_content", [
+        ("", 5, 0, None),
+        ("   \t\n  ", 5, 0, None),
+        ("bartending", 5, 1, "bartending basics"),
+        ("chunk", 5, 3, None),
+        ("chunk", 2, 2, None),  # Top-k limit
+        ("BARTENDING", 5, 1, None),  # Case insensitive
+    ])
+    def test_search_simple_parametrized(self, query, top_k, expected_count, match_content, retriever):
+        """Parametrized tests for search_simple."""
+        with patch.object(retriever, '_get_chunk_from_video', return_value=None):
+            result = retriever.search_simple(query, top_k=top_k)
+            assert len(result) == expected_count
+            if match_content:
+                assert any(match_content in r for r in result)
 
     def test_get_chunk_from_video_without_dependencies(self, sample_index_data):
         """Test chunk retrieval when dependencies not available."""

@@ -138,6 +138,9 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 32) -> List[str]
     """
     Split text into overlapping chunks (simplified)
     """
+    if overlap >= chunk_size:
+        raise ValueError("Overlap must be smaller than chunk size")
+
     chunks = []
     start = 0
     

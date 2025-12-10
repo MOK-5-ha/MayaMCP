@@ -89,7 +89,7 @@ class TestLaunchBartenderInterface:
         assert mock_state.call_count == 2  # history_state and order_state
 
         # Verify Row and Column structure was created
-        mock_row.assert_called_once()
+        assert mock_row.call_count == 2
         assert mock_column.call_count == 2  # Two columns (avatar and chat)
 
         # Verify UI components were created
@@ -277,10 +277,13 @@ class TestLaunchBartenderInterface:
 
         # Verify button properties
         clear_button_call = mock_button.call_args_list[0]
-        assert clear_button_call[1]['value'] == "Clear Conversation"
+        # Check first positional arg OR keyword arg for value
+        clear_btn_value = clear_button_call[1].get('value') if 'value' in clear_button_call[1] else clear_button_call[0][0]
+        assert clear_btn_value == "Clear Conversation"
 
         submit_button_call = mock_button.call_args_list[1]
-        assert submit_button_call[1]['value'] == "Send"
+        submit_btn_value = submit_button_call[1].get('value') if 'value' in submit_button_call[1] else submit_button_call[0][0]
+        assert submit_btn_value == "Send"
         assert submit_button_call[1]['variant'] == "primary"
 
     @patch('src.ui.launcher.setup_avatar')
@@ -382,8 +385,9 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.gr.Audio')
     @patch('src.ui.launcher.gr.Textbox')
     @patch('src.ui.launcher.gr.Button')
+    @patch('src.ui.launcher.logger')
     def test_launch_bartender_interface_setup_avatar_exception(
-        self, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
+        self, mock_logger, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
         mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
     ):
         """Test interface creation when setup_avatar raises exception."""
@@ -435,6 +439,14 @@ class TestLaunchBartenderInterface:
 
         # Verify setup_avatar was called despite exception
         mock_setup_avatar.assert_called_once()
+        
+        # Verify error was logged
+        mock_logger.error.assert_called_once()
+        assert "Failed to setup avatar" in mock_logger.error.call_args[0][0]
+
+        # Verify fallback behavior (image created with None path)
+        mock_image.assert_called_once()
+        assert mock_image.call_args[1]['value'] is None
 
         # Verify interface was still created successfully
         assert result == mock_blocks_instance

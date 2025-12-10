@@ -221,9 +221,8 @@ class TestConversationPhaseManager:
 
     def test_edge_cases(self):
         """Test edge cases and boundary conditions."""
-        # Test increment_small_talk with no prior small_talk_count
+        # Test increment_small_talk with default state (no prior small_talk_count set)
         update_conversation_state({'phase': 'small_talk'})
-        # Remove small_talk_count to test default handling
         
         self.manager.increment_small_talk()
         

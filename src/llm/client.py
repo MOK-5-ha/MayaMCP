@@ -1,6 +1,7 @@
 """LLM client initialization and API calls."""
 
 import google.generativeai as genai
+import threading
 from langchain_google_genai import ChatGoogleGenerativeAI
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging
@@ -40,9 +41,19 @@ GenaiTimeoutError = getattr(genai_errors, "TimeoutError", _NoSDKError) if genai_
 
 # ---- Unified Google GenAI client/wrapper utilities ----
 
+_GENAI_CONFIGURED = False
+_CONFIG_LOCK = threading.Lock()
+
 def configure_genai(api_key: str) -> None:
     """Configure the Google Generative AI client for API key auth."""
-    genai.configure(api_key=api_key)
+    global _GENAI_CONFIGURED
+    if _GENAI_CONFIGURED:
+        return
+
+    with _CONFIG_LOCK:
+        if not _GENAI_CONFIGURED:
+            genai.configure(api_key=api_key)
+            _GENAI_CONFIGURED = True
 
 
 def get_generative_model(model_name: str) -> genai.GenerativeModel:
@@ -104,7 +115,9 @@ def initialize_llm(api_key: str, tools: Optional[List] = None) -> ChatGoogleGene
         # Bind tools if provided
         if tools:
             llm = llm.bind_tools(tools)
-            logger.info(f"Successfully initialized LangChain ChatGoogleGenerativeAI model bound with {len(tools)} tools.")
+            tool_count = len(tools)
+            tool_word = "tool" if tool_count == 1 else "tools"
+            logger.info(f"Successfully initialized LangChain ChatGoogleGenerativeAI model bound with {tool_count} {tool_word}.")
         else:
             logger.info(f"Successfully initialized LangChain ChatGoogleGenerativeAI model without tools.")
 

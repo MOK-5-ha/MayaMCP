@@ -304,7 +304,7 @@ class TestGetMemvidConfig:
         original_qr_version = config["qr"]["version"]
 
         # Create a deep copy for comparison
-        config_copy = copy.deepcopy(config)
+
 
         # Modify the nested structure
         config["qr"]["version"] = 999

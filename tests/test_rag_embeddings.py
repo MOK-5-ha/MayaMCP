@@ -32,7 +32,8 @@ class TestGetEmbedding:
         # Verify embed_content was called with correct parameters
         mock_embed_content.assert_called_once_with(
             model="text-embedding-004",
-            content="test text"
+            content="test text",
+            task_type="RETRIEVAL_DOCUMENT"
         )
 
         # Verify return value
@@ -333,7 +334,6 @@ class TestGetEmbeddingsBatch:
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')
-    @patch('src.rag.embeddings.genai.batch_embed_contents')
     def test_get_embeddings_batch_with_different_task_type(self, mock_batch_embed, mock_configure, mock_get_api_key):
         """Test batch embedding with different task type."""
         # Setup mocks
@@ -353,6 +353,7 @@ class TestGetEmbeddingsBatch:
         assert call_args[1]['model'] == "text-embedding-004"
         assert len(call_args[1]['requests']) == 1
         assert call_args[1]['requests'][0]['content'] == "text1"
+        assert call_args[1]['requests'][0]['task_type'] == "CLASSIFICATION"
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')

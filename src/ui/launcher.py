@@ -25,7 +25,11 @@ def launch_bartender_interface(
     """
     # Setup avatar if not provided
     if avatar_path is None:
-        avatar_path = setup_avatar()
+        try:
+            avatar_path = setup_avatar()
+        except Exception as e:
+            logger.error(f"Failed to setup avatar: {e}")
+            avatar_path = None
     
     # Create the interface
     ui_theme = gr.themes.Ocean()

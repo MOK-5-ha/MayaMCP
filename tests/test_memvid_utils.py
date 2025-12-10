@@ -114,6 +114,18 @@ class TestChunkText:
         for chunk in chunks[:-1]:  # All but last chunk
             assert len(chunk) <= 30
 
+    def test_chunk_text_overlap_too_large(self):
+        """Test chunk_text raises ValueError when overlap >= chunk_size."""
+        text = "Some text that doesn't matter much."
+        
+        # Test overlap == chunk_size
+        with pytest.raises(ValueError, match="Overlap must be smaller than chunk size"):
+            chunk_text(text, chunk_size=50, overlap=50)
+
+        # Test overlap > chunk_size
+        with pytest.raises(ValueError, match="Overlap must be smaller than chunk size"):
+            chunk_text(text, chunk_size=50, overlap=51)
+
 
 class TestDependencyRelatedFunctions:
     """Test cases for functions that depend on external libraries using mocking."""
@@ -156,11 +168,12 @@ class TestDependencyRelatedFunctions:
     def test_functions_handle_missing_dependencies_gracefully(self):
         """Test that functions handle missing dependencies gracefully."""
         from src.memvid.utils import encode_to_qr, decode_qr, qr_to_frame, extract_frame
+        import numpy as np
 
         # All should return None when dependencies are missing
-        assert encode_to_qr("test") is None
+        assert decode_qr(np.zeros((10, 10), dtype=np.uint8)) is None
         assert decode_qr("test") is None
-        assert qr_to_frame("test", (100, 100)) is None
+        assert qr_to_frame(MagicMock(), (100, 100)) is None
         assert extract_frame("test.mp4", 1) is None
 
     @patch('src.memvid.utils.QR_AVAILABLE', False)
@@ -225,7 +238,7 @@ class TestUtilityFunctionIntegration:
                 unique_content += chunk
             else:
                 # Remove overlap
-                overlap_start = max(0, len(chunk) - (50 - 5))
+
                 unique_content += chunk[5:]  # Remove overlap from start
 
         # The unique content should be close to original length

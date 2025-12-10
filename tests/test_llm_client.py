@@ -336,12 +336,47 @@ class TestLLMClient:
         with pytest.raises(Exception):
             call_gemini_api(prompt_content, config, api_key)
 
-    @patch('src.llm.client.retry')
-    def test_call_gemini_api_retry_decorator(self, mock_retry):
-        """Test that call_gemini_api has retry decorator applied."""
-        # This test verifies the retry decorator is applied
-        # We can't easily test the actual retry behavior without complex mocking
-        assert hasattr(call_gemini_api, '__wrapped__') or 'retry' in str(call_gemini_api)
+    @patch('src.llm.client.get_generative_model')
+    @patch('src.llm.client.configure_genai')
+    @patch('src.llm.client.get_model_name')
+    @patch('src.llm.client.build_generate_config')
+    def test_call_gemini_api_retry_behavior(self, mock_build_config, mock_get_model_name,
+                                          mock_configure, mock_get_model):
+        """Test call_gemini_api retries on failure."""
+        # Setup mocks
+        mock_get_model_name.return_value = "gemini-1.5-flash"
+        mock_build_config.return_value = {"temperature": 0.7}
+        mock_model = MagicMock()
+        mock_response = MagicMock()
+        mock_get_model.return_value = mock_model
+        
+        # Configure side_effect to fail twice then succeed
+        # We use a generic Exception which is caught and reraised by call_gemini_api, triggering retry
+        mock_model.generate_content.side_effect = [
+            Exception("Fail 1"),
+            Exception("Fail 2"),
+            mock_response
+        ]
+        
+        # Determine strictness of the call_gemini_api object
+        # With tenacity, .retry is an object attached to the wrapper
+        original_sleep = call_gemini_api.retry.sleep
+        call_gemini_api.retry.sleep = lambda x: None
+        
+        try:
+            prompt_content = [{"role": "user", "content": "Test prompt"}]
+            config = {"temperature": 0.7}
+            api_key = "test_api_key"
+            
+            result = call_gemini_api(prompt_content, config, api_key)
+            
+            # Verify it was called 3 times (2 failures + 1 success)
+            assert mock_model.generate_content.call_count == 3
+            assert result == mock_response
+            
+        finally:
+            # Restore sleep to avoid side effects on other tests
+            call_gemini_api.retry.sleep = original_sleep
 
     def test_module_imports(self):
         """Test that all necessary modules are imported correctly."""
@@ -379,7 +414,7 @@ class TestLLMClient:
             tools = [{"name": "test_tool"}]
             initialize_llm("test_key", tools)
             mock_logger.info.assert_called_with(
-                "Successfully initialized LangChain ChatGoogleGenerativeAI model bound with 1 tools."
+                "Successfully initialized LangChain ChatGoogleGenerativeAI model bound with 1 tool."
             )
 
     @patch('src.llm.client.logger')

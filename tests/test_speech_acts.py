@@ -93,6 +93,7 @@ class TestSpeechActDetection:
         assert result['intent'] == 'order_confirmation'
         assert result['speech_act'] == 'commissive'
         assert result['confidence'] >= 0.8
+        assert 'drink_context' in result and result['drink_context'] is not None
         assert 'whiskey' in result['drink_context']
         assert 'rocks' in result['drink_context']
     
@@ -110,8 +111,11 @@ class TestSpeechActDetection:
             []
         )
         
-        if high_conf_result['intent'] and low_conf_result['intent']:
-            assert high_conf_result['confidence'] > low_conf_result['confidence']
+        # Both cases should have detected an intent
+        assert high_conf_result['intent'] is not None, "High confidence case should detect an intent"
+        assert low_conf_result['intent'] is not None, "Low confidence case should detect an intent"
+        assert high_conf_result['confidence'] > low_conf_result['confidence'], \
+            f"Expected high confidence ({high_conf_result['confidence']}) > low confidence ({low_conf_result['confidence']})"
     
     def test_empty_input_handling(self):
         """Test handling of empty or invalid inputs"""
@@ -133,16 +137,17 @@ class TestSpeechActDetection:
         
         result = detect_speech_acts("I can get that for you", context)
         
-        if result['drink_context']:
-            assert 'whiskey' in result['drink_context']
-            assert 'rocks' in result['drink_context']
+        assert result['drink_context'] is not None, "Should extract drink context from conversation history"
+        assert 'whiskey' in result['drink_context'], "Should extract 'whiskey' from context"
+        assert 'rocks' in result['drink_context'], "Should extract 'rocks' from context"
     
     def test_assertive_speech_act_mapping(self):
         """Test that assertive speech acts map to order_confirmation"""
         result = detect_speech_acts(
             "Here is your drink",
-            ["I ordered a beer"]
-        )
+        # Should detect assertive pattern and map to order_confirmation
+        assert result['speech_act'] == 'assertive', "Should detect assertive speech act for 'Here is your drink'"
+        assert result['intent'] == 'order_confirmation', "Assertive speech acts should map to order_confirmation"
         
         # Should detect assertive pattern and map to order_confirmation
         if result['speech_act'] == 'assertive':

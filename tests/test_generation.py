@@ -92,7 +92,10 @@ def test_rag_pipeline_generate_augmented_response(mock_generativeai):
     assert 'doc2' in prompt_contents, "Document 'doc2' should be present in prompt"
     
     # Verify document joining format (regular RAG uses space separation)
-    reference_passage_section = prompt_contents[prompt_contents.find("Reference passage:"):prompt_contents.find("Question:")]
+    ref_start = prompt_contents.find("Reference passage:")
+    question_start = prompt_contents.find("Question:")
+    assert ref_start != -1 and question_start != -1, "Required sections not found in prompt"
+    reference_passage_section = prompt_contents[ref_start:question_start]
     assert "doc1 doc2" in reference_passage_section, "Documents should be space-separated in regular RAG pipeline"
     
     # Ensure documents are distinct and not merged incorrectly
@@ -138,7 +141,10 @@ def test_memvid_pipeline_generate_response(mock_generativeai):
     assert 'mem2' in memvid_prompt_contents, "Document 'mem2' should be present in Memvid prompt"
     
     # Verify Memvid document joining format (pipe separation)
-    insights_section = memvid_prompt_contents[memvid_prompt_contents.find("relevant insights:"):memvid_prompt_contents.find("Question:")]
+    insights_start = memvid_prompt_contents.find("relevant insights:")
+    question_start = memvid_prompt_contents.find("Question:")
+    assert insights_start != -1 and question_start != -1, "Required sections not found in Memvid prompt"
+    insights_section = memvid_prompt_contents[insights_start:question_start]
     assert "mem1 | mem2" in insights_section, "Memvid documents should be pipe-separated (mem1 | mem2)"
     
     # Verify Memvid-specific structure elements

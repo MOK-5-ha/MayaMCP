@@ -266,11 +266,11 @@ class TestApiKeys:
         
         result = get_api_keys()
         
-        # Keys should be returned as-is (no automatic trimming)
-        assert result['google_api_key'] == '  whitespace_key  '
-        assert result['cartesia_api_key'] == '\t\nkey_with_newlines\t\n'
+        # Keys should be stripped
+        assert result['google_api_key'] == 'whitespace_key'
+        assert result['cartesia_api_key'] == 'key_with_newlines'
         
-        # Validation should still work with whitespace (truthy check)
+        # Validation should work with stripped valid keys
         assert validate_api_keys() is True
 
     @patch('src.config.api_keys.os.getenv')
@@ -283,5 +283,5 @@ class TestApiKeys:
         
         result = validate_api_keys()
         
-        # Whitespace-only string is truthy in Python, so should pass
-        assert result is True
+        # Whitespace-only string becomes empty string after strip(), so should fail
+        assert result is False

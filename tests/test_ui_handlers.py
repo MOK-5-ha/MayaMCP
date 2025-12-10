@@ -27,11 +27,12 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function
+        mock_cartesia_client = Mock()
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             llm=Mock(),
-            cartesia_client=Mock(),
+            cartesia_client=mock_cartesia_client,
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
@@ -46,7 +47,7 @@ class TestHandleGradioInput:
         assert call_args[1]['api_key'] == "test_key"
 
         # Verify TTS was called
-        mock_get_voice_audio.assert_called_once_with("Here's your drink!", Mock())
+        mock_get_voice_audio.assert_called_once_with("Here's your drink!", mock_cartesia_client)
 
         # Verify get_current_order_state was called
         mock_get_current_order_state.assert_called_once()
@@ -201,8 +202,8 @@ class TestHandleGradioInput:
 
         # Verify return value structure for error case
         assert result[0] == ""  # empty_input
-        assert len(result[1]) == 2  # safe_history with error message
-        assert "I'm having a small hiccup" in result[1][1]['content']
+        assert len(result[1]) == 3  # safe_history with error message
+        assert "I'm having a small hiccup" in result[1][2]['content']
         assert result[2] == result[1]  # same history for gradio
         assert result[3] == [{'name': 'Martini', 'price': 13.0}]  # current order state
         assert result[4] is None  # no audio
