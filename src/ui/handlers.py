@@ -84,7 +84,7 @@ def clear_chat_state() -> Tuple[List, List, List, None]:
     # Reset the backend state
     try:
         reset_session_state()
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to reset session state")
         # Return empty state to ensure clean UI even if backend reset failed
         return [], [], [], None

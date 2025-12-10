@@ -98,11 +98,18 @@ def main():
         # Launch the Gradio interface
         logger.info("Launching Gradio interface...")
         try:
-            launch_bartender_interface(
+            interface = launch_bartender_interface(
                 handle_input_fn=handle_input_with_deps,
                 clear_state_fn=clear_chat_state
             )
-        except Exception as ui_err:
+            # Local/dev launch only; Modal serves via ASGI in deploy.py
+            if os.getenv("PYTHON_ENV", "development").lower() != "production":
+                interface.queue().launch(
+                    server_name=os.getenv("HOST", "0.0.0.0"),
+                    server_port=int(os.getenv("PORT", "8000")),
+                    debug=os.getenv("DEBUG", "False").lower() == "true",
+                )
+        except Exception:
             logger.exception("Failed to launch Gradio interface")
             raise
         

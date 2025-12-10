@@ -129,14 +129,23 @@ def serve_maya():
 
 
     # Validate and fetch required API keys early
-    def _require_env(name: str) -> str:
-        val = os.getenv(name)
-        if not val or not val.strip():
-            raise RuntimeError(f"Missing required environment variable: {name}")
-        return val
+    # Helper that checks multiple env var names for backwards compatibility
+    def _require_any(*names: str) -> str:
+        """Return the first set env var from names, or raise if none are set.
+        
+        Preferred name should come first (e.g., GEMINI_API_KEY before GOOGLE_API_KEY).
+        """
+        for name in names:
+            val = os.getenv(name)
+            if val and val.strip():
+                return val.strip()
+        raise RuntimeError(
+            f"Missing required environment variable: set one of {', '.join(names)}"
+        )
 
-    google_api_key = _require_env("GOOGLE_API_KEY")
-    cartesia_api_key = _require_env("CARTESIA_API_KEY")
+    # GEMINI_API_KEY is preferred (matches config.api_keys); GOOGLE_API_KEY for legacy support
+    google_api_key = _require_any("GEMINI_API_KEY", "GOOGLE_API_KEY")
+    cartesia_api_key = _require_any("CARTESIA_API_KEY")
 
     # Initialize state
     initialize_state()

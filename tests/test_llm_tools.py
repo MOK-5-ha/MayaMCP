@@ -1,6 +1,7 @@
 """Unit tests for LLM tools."""
 
 from unittest.mock import Mock, patch, MagicMock
+from typing import Optional
 import pytest
 from src.llm.tools import (
     get_menu, get_recommendation, add_to_order, get_order, confirm_order,
@@ -8,7 +9,7 @@ from src.llm.tools import (
 )
 
 
-def assert_contains_any(result: str, phrases: list[str], msg: str = None) -> None:
+def assert_contains_any(result: str, phrases: list[str], msg: Optional[str] = None) -> None:
     """Assert that result contains at least one of the given phrases.
     
     This helper reduces test brittleness by allowing alternative phrasings

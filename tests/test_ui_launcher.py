@@ -24,7 +24,8 @@ def ui_mocks():
     chatbot_instance = Mock()
     audio_instance = Mock()
     textbox_instance = Mock()
-    button_instance = Mock()
+    submit_button_instance = Mock()
+    clear_button_instance = Mock()
     
     # Setup context managers
     blocks_context = Mock()
@@ -53,7 +54,8 @@ def ui_mocks():
         'chatbot_instance': chatbot_instance,
         'audio_instance': audio_instance,
         'textbox_instance': textbox_instance,
-        'button_instance': button_instance,
+        'submit_button_instance': submit_button_instance,
+        'clear_button_instance': clear_button_instance,
     }
 
 
@@ -90,7 +92,10 @@ class TestLaunchBartenderInterface:
         mock_chatbot.return_value = ui_mocks['chatbot_instance']
         mock_audio.return_value = ui_mocks['audio_instance']
         mock_textbox.return_value = ui_mocks['textbox_instance']
-        mock_button.return_value = ui_mocks['button_instance']
+        mock_button.side_effect = [
+            ui_mocks['clear_button_instance'],
+            ui_mocks['submit_button_instance']
+        ]
 
         # Execute function
         result = launch_bartender_interface(
@@ -160,7 +165,10 @@ class TestLaunchBartenderInterface:
         mock_chatbot.return_value = ui_mocks['chatbot_instance']
         mock_audio.return_value = ui_mocks['audio_instance']
         mock_textbox.return_value = ui_mocks['textbox_instance']
-        mock_button.return_value = ui_mocks['button_instance']
+        mock_button.side_effect = [
+            ui_mocks['clear_button_instance'],
+            ui_mocks['submit_button_instance']
+        ]
 
         # Execute function with custom avatar
         result = launch_bartender_interface(
@@ -216,7 +224,10 @@ class TestLaunchBartenderInterface:
         mock_chatbot.return_value = ui_mocks['chatbot_instance']
         mock_audio.return_value = ui_mocks['audio_instance']
         mock_textbox.return_value = ui_mocks['textbox_instance']
-        mock_button.return_value = ui_mocks['button_instance']
+        mock_button.side_effect = [
+            ui_mocks['clear_button_instance'],
+            ui_mocks['submit_button_instance']
+        ]
 
         # Execute function
         launch_bartender_interface(
@@ -300,7 +311,10 @@ class TestLaunchBartenderInterface:
         mock_chatbot.return_value = ui_mocks['chatbot_instance']
         mock_audio.return_value = ui_mocks['audio_instance']
         mock_textbox.return_value = ui_mocks['textbox_instance']
-        mock_button.return_value = ui_mocks['button_instance']
+        mock_button.side_effect = [
+            ui_mocks['clear_button_instance'],
+            ui_mocks['submit_button_instance']
+        ]
 
         # Create mock handler functions
         mock_handle_input = Mock()
@@ -315,9 +329,9 @@ class TestLaunchBartenderInterface:
 
         # Verify event handlers were configured
         # The event handlers are set up in the context manager, so we verify
-        # that the submit and click methods were called on the UI components
+        # that the submit method was called on the textbox component
+        # Button click verifications are done per-button below
         ui_mocks['textbox_instance'].submit.assert_called()
-        ui_mocks['button_instance'].click.assert_called()
 
         # Verify the submit handler was configured with correct inputs/outputs
         submit_call = ui_mocks['textbox_instance'].submit.call_args
@@ -325,13 +339,15 @@ class TestLaunchBartenderInterface:
         assert len(submit_call[0][1]) == 2  # submit_inputs count
         assert len(submit_call[0][2]) == 5  # submit_outputs count
 
-        # Verify the click handler was configured for submit button
-        submit_button_click = ui_mocks['button_instance'].click.call_args_list[0]
-        assert submit_button_click[0][0] == mock_handle_input
+        # Verify the submit button click handler independently
+        submit_click = ui_mocks['submit_button_instance'].click
+        submit_click.assert_called_once()
+        assert submit_click.call_args[0][0] == mock_handle_input
 
-        # Verify the clear button click handler
-        clear_button_click = ui_mocks['button_instance'].click.call_args_list[1]
-        assert clear_button_click[0][0] == mock_clear_state
+        # Verify the clear button click handler independently
+        clear_click = ui_mocks['clear_button_instance'].click
+        clear_click.assert_called_once()
+        assert clear_click.call_args[0][0] == mock_clear_state
 
     @patch('src.ui.launcher.setup_avatar')
     @patch('src.ui.launcher.gr.themes.Ocean')
@@ -364,7 +380,10 @@ class TestLaunchBartenderInterface:
         mock_chatbot.return_value = ui_mocks['chatbot_instance']
         mock_audio.return_value = ui_mocks['audio_instance']
         mock_textbox.return_value = ui_mocks['textbox_instance']
-        mock_button.return_value = ui_mocks['button_instance']
+        mock_button.side_effect = [
+            ui_mocks['clear_button_instance'],
+            ui_mocks['submit_button_instance']
+        ]
 
         # Execute function - should still work even if avatar setup fails
         result = launch_bartender_interface(
