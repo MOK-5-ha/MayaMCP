@@ -299,18 +299,25 @@ class TestClearChatState:
         expected_result = ([], [], [], None)  # empty lists for chatbot, history, order, and None for audio
         assert result == expected_result
 
+    @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.reset_session_state')
-    def test_clear_chat_state_with_exception(self, mock_reset_session_state):
+    def test_clear_chat_state_with_exception(self, mock_reset_session_state, mock_get_current_order_state):
         """Test chat state clearing when reset_session_state raises exception."""
         # Setup mock to raise exception
         mock_reset_session_state.side_effect = Exception("Reset failed")
+        
+        # Setup mock for get_current_order_state
+        mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function
         result = clear_chat_state()
 
         # Verify reset_session_state was still called
         mock_reset_session_state.assert_called_once()
+        
+        # Verify get_current_order_state was called
+        mock_get_current_order_state.assert_called_once()
 
-        # Verify return value is still correct even with exception
-        expected_result = ([], [], [], None)
+        # Verify return value contains the current order state instead of empty list
+        expected_result = ([], [], [{'name': 'Martini', 'price': 13.0}], None)
         assert result == expected_result

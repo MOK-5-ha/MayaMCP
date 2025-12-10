@@ -104,7 +104,8 @@ def main():
                 clear_state_fn=clear_chat_state
             )
         except Exception as ui_err:
-            logger.warning(f"Failed to launch Gradio interface: {ui_err}. Application will continue without UI.")
+            logger.error(f"Failed to launch Gradio interface: {ui_err}")
+            raise
         
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")

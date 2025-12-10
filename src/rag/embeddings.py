@@ -121,7 +121,12 @@ def get_embeddings_batch(texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
             # Use the Google AI Studio batch embeddings endpoint
             resp = batch_embed_fn(
                 model="text-embedding-004",
-                requests=[{"content": t, "task_type": task_type} for t in batch],
+                requests=[
+                    {"content": t, "task_type": task_type}
+                    if task_type != DEFAULT_TASK_TYPE
+                    else {"content": t}
+                    for t in batch
+                ],
             )
             return resp
         except Exception as e:

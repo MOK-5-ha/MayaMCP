@@ -32,8 +32,7 @@ class TestGetEmbedding:
         # Verify embed_content was called with correct parameters
         mock_embed_content.assert_called_once_with(
             model="text-embedding-004",
-            content="test text",
-            task_type="RETRIEVAL_DOCUMENT"
+            content="test text"
         )
 
         # Verify return value
@@ -182,8 +181,11 @@ class TestGetEmbeddingsBatch:
         assert call_args[1]['model'] == "text-embedding-004"
         assert len(call_args[1]['requests']) == 3
         assert call_args[1]['requests'][0]['content'] == "text1"
+        assert 'task_type' not in call_args[1]['requests'][0]
         assert call_args[1]['requests'][1]['content'] == "text2"
+        assert 'task_type' not in call_args[1]['requests'][1]
         assert call_args[1]['requests'][2]['content'] == "text3"
+        assert 'task_type' not in call_args[1]['requests'][2]
 
         # Verify return value
         expected = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
@@ -323,8 +325,7 @@ class TestGetEmbeddingsBatch:
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')
-    @patch('src.rag.embeddings.genai.batch_embed_contents')
-    def test_get_embeddings_batch_empty_input(self, mock_batch_embed, mock_configure, mock_get_api_key):
+    def test_get_embeddings_batch_empty_input(self, mock_configure, mock_get_api_key):
         """Test batch embedding with empty input list."""
         # Execute function with empty list
         result = get_embeddings_batch([])
@@ -334,6 +335,7 @@ class TestGetEmbeddingsBatch:
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')
+    @patch('src.rag.embeddings.genai.batch_embed_contents')
     def test_get_embeddings_batch_with_different_task_type(self, mock_batch_embed, mock_configure, mock_get_api_key):
         """Test batch embedding with different task type."""
         # Setup mocks
