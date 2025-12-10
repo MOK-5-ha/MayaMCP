@@ -325,7 +325,7 @@ class TestLLMClient:
         rate_limit_error.status_code = 429
         mock_model.generate_content.side_effect = rate_limit_error
         
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Rate limit"):
             call_gemini_api(prompt_content, config, api_key)
         
         # Test 401 status code (auth error)
@@ -333,7 +333,7 @@ class TestLLMClient:
         auth_error.status_code = 401
         mock_model.generate_content.side_effect = auth_error
         
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Unauthorized"):
             call_gemini_api(prompt_content, config, api_key)
 
     @patch('src.llm.client.get_generative_model')

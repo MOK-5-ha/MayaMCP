@@ -8,7 +8,7 @@ After obtaining our Gen AI certificates from completing and submitting the first
 
 ![Image](https://github.com/user-attachments/assets/be6656c8-b338-4a7a-80df-dca6abbdfe34)
 
-So now this project has taken to the MCP turn. Where Anthropic's new protocol is taking the AI development by storm, creating yet another new paradigm is this ever accelerating industry.
+So now this project has taken to the MCP turn. Where Anthropic's new protocol is taking the AI development by storm, creating yet another new paradigm is this ever-accelerating industry.
 
 This second iteration of Maya, our AI agent, will be bolstered with the power of MCP, open-source AI frameworks, and hardware accelerators. Leaving behind the Google-based vendor lock-in it's initial iteration had with Gemini serving at it's base.
 
@@ -226,7 +226,7 @@ Tests are designed to run in CI environments with:
 
 ### Troubleshooting
 
-**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test running methods above. The `tests/conftest.py` file automatically handles path setup for pytest runs.
+**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test methods above. The `tests/conftest.py` file automatically handles path setup for pytest runs.
 
 **Missing Dependencies**: Install requirements and test tooling:
 

@@ -83,8 +83,7 @@ def main():
             cartesia_client = None
         
         # Create partially applied handler functions with dependencies
-        # Pass the rag_retriever from our local scope
-        rag_retriever_param = rag_retriever if 'rag_retriever' in locals() else None
+        rag_retriever_param = rag_retriever
         
         handle_input_with_deps = partial(
             handle_gradio_input,

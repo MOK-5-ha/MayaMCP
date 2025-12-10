@@ -4,8 +4,6 @@ Unit tests for src.memvid.config module.
 """
 
 import pytest
-from unittest.mock import patch
-import copy
 
 from src.memvid.config import (
     get_memvid_config,

@@ -190,6 +190,10 @@ class TestAddToOrder:
         item = call_args[1]
         assert item["modifiers"] == "no modifiers"
 
+        # Verify return message
+        assert "Successfully added" in result
+        assert "Water" in result
+
     @patch('src.llm.tools.get_menu')
     def test_add_to_order_item_not_found(self, mock_get_menu):
         """Test adding item not found in menu."""

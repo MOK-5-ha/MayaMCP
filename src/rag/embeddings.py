@@ -174,7 +174,7 @@ def get_embeddings_batch(texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
         out: List[Optional[List[float]]] = []
         seq = None
         if hasattr(resp, "embeddings"):
-            seq = getattr(resp, "embeddings")
+            seq = resp.embeddings
         elif isinstance(resp, dict):
             seq = resp.get("embeddings") or resp.get("results") or resp.get("data")
         elif isinstance(resp, list):
@@ -210,7 +210,7 @@ def get_embeddings_batch(texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
                 else:
                     batch_vecs = batch_vecs[: len(batch)]
         except Exception as e:
-            logger.error(f"Batch failed after retries (size={len(batch)}): {e}")
+            logger.exception(f"Batch failed after retries (size={len(batch)})")
             batch_vecs = [None] * len(batch)
         results.extend(batch_vecs)
 

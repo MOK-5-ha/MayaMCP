@@ -299,38 +299,29 @@ class TestClearChatState:
     @patch('src.ui.handlers.reset_session_state')
     def test_clear_chat_state_success(self, mock_reset_session_state):
         """Test successful chat state clearing."""
-        # Execute function with some history
-        result = clear_chat_state([{'role': 'user', 'content': 'prev'}])
+        # Execute function (no arguments needed)
+        result = clear_chat_state()
 
         # Verify reset_session_state was called
         mock_reset_session_state.assert_called_once()
 
-        # Verify return value structure (should still be cleared)
+        # Verify return value structure (should be cleared)
         expected_result = ([], [], [], None)
         assert result == expected_result
 
-    @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.reset_session_state')
-    def test_clear_chat_state_with_exception(self, mock_reset_session_state, mock_get_current_order_state):
+    def test_clear_chat_state_with_exception(self, mock_reset_session_state):
         """Test chat state clearing when reset_session_state raises exception."""
         # Setup mock to raise exception
         mock_reset_session_state.side_effect = Exception("Reset failed")
-        
-        # Setup mock for get_current_order_state
-        mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
-        # Create some prior history
-        prior_history = [{'role': 'user', 'content': 'message'}]
-
-        # Execute function passing the history
-        result = clear_chat_state(prior_history)
+        # Execute function (no arguments needed)
+        result = clear_chat_state()
 
         # Verify reset_session_state was still called
         mock_reset_session_state.assert_called_once()
-        
-        # Verify get_current_order_state was called
-        mock_get_current_order_state.assert_called_once()
 
-        # Verify return value contains the PRIOR history and current order, preserving state
-        expected_result = (prior_history, prior_history, [{'name': 'Martini', 'price': 13.0}], None)
+        # Verify return value is still empty lists even on error
+        # (user requested clear, so we clear regardless of backend error)
+        expected_result = ([], [], [], None)
         assert result == expected_result

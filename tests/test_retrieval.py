@@ -266,7 +266,7 @@ class TestRetrieval:
         mock_search.return_value = ["Doc 1"]
 
         # Call function
-        result = retrieve_relevant_passages(mock_index, documents, long_query)
+        retrieve_relevant_passages(mock_index, documents, long_query)
 
         # Check that debug logging was called
         mock_logger.debug.assert_called_once()

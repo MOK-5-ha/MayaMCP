@@ -72,28 +72,19 @@ def handle_gradio_input(
     # First return value is empty string to clear the input field
     return "", updated_history, updated_history, get_current_order_state(), audio_data
 
-def clear_chat_state(session_history: List[Dict[str, str]] = None) -> Tuple[List, List, List, None]:
+def clear_chat_state() -> Tuple[List, List, List, None]:
     """
     Clear UI/session state including audio.
     
-    Args:
-        session_history: Current session history (to preserve if reset fails)
-
     Returns:
         Tuple of (empty_chatbot, empty_history, empty_order, no_audio)
     """
     logger.info("Clear button clicked - Resetting session state.")
     
     # Reset the backend state
-
     try:
         reset_session_state()
     except Exception as e:
-        logger.error(f"Failed to reset session state: {e}")
-        # Preserve current state calling get_current_order_state for order
-        # and returning the passed-in history for chatbot/history
-        safe_history = session_history if session_history else []
-        return safe_history, safe_history, get_current_order_state(), None
-    
-    # Return empty lists for Chatbot/history/order, and None for the audio component
-    return [], [], [], None
+        logger.exception("Failed to reset session state")
+        # Return empty state to ensure clean UI even if backend reset failed
+        return [], [], [], None
