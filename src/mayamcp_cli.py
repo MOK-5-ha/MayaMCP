@@ -9,20 +9,18 @@ import os
 import sys
 from functools import partial
 
-# Add src to path so we can import our modules
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-from src.config import (
+from config import (
     setup_logging, 
     get_api_keys, 
     validate_api_keys
 )
-from src.config.logging_config import get_logger
-from src.llm import initialize_llm, get_all_tools
-from src.rag import initialize_vector_store, initialize_memvid_store
-from src.voice import initialize_cartesia_client
-from src.ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
-from src.utils import initialize_state
+from config.logging_config import get_logger
+from llm import initialize_llm, get_all_tools
+from config.model_config import get_model_config, is_valid_gemini_model
+from rag import initialize_vector_store, initialize_memvid_store
+from voice import initialize_cartesia_client
+from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
+from utils import initialize_state
 
 def main():
     """Main application entry point."""
@@ -39,11 +37,21 @@ def main():
             sys.exit(1)
         
         logger.info("API keys validated successfully")
-        
+
+        # Proactive model validation (warning-only)
+        model_cfg = get_model_config()
+        model_name = model_cfg.get("model_version")
+        if model_name and not is_valid_gemini_model(model_name):
+            logger.warning(
+                f"Configured GEMINI_MODEL_VERSION '{model_name}' not in known list. "
+                "Maya will continue to start, but you may want to verify the model "
+                "identifier against Google AI docs: https://ai.google.dev/gemini-api/docs/models"
+            )
+
         # Initialize application state
         initialize_state()
         logger.info("Application state initialized")
-        
+
         # Initialize LLM with tools
         tools = get_all_tools()
         llm = initialize_llm(api_key=api_keys["google_api_key"], tools=tools)
@@ -75,8 +83,7 @@ def main():
             cartesia_client = None
         
         # Create partially applied handler functions with dependencies
-        # Pass the rag_retriever from our local scope
-        rag_retriever_param = rag_retriever if 'rag_retriever' in locals() else None
+        rag_retriever_param = rag_retriever
         
         handle_input_with_deps = partial(
             handle_gradio_input,
@@ -90,12 +97,21 @@ def main():
         
         # Launch the Gradio interface
         logger.info("Launching Gradio interface...")
-        launch_bartender_interface(
-            handle_input_fn=handle_input_with_deps,
-            clear_state_fn=clear_chat_state,
-            share=True,
-            debug=True
-        )
+        try:
+            interface = launch_bartender_interface(
+                handle_input_fn=handle_input_with_deps,
+                clear_state_fn=clear_chat_state
+            )
+            # Local/dev launch only; Modal serves via ASGI in deploy.py
+            if os.getenv("PYTHON_ENV", "development").lower() != "production":
+                interface.queue().launch(
+                    server_name=os.getenv("HOST", "0.0.0.0"),
+                    server_port=int(os.getenv("PORT", "8000")),
+                    debug=os.getenv("DEBUG", "False").lower() == "true",
+                )
+        except Exception:
+            logger.exception("Failed to launch Gradio interface")
+            raise
         
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")

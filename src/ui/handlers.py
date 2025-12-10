@@ -37,20 +37,32 @@ def handle_gradio_input(
     logger.debug(f"Received session history state (len {len(session_history_state)}): {session_history_state}")
 
     # Call text processing logic first
-    response_text, updated_history, updated_history_for_gradio, updated_order, _ = process_order(
-        user_input_text=user_input,
-        current_session_history=session_history_state,
-        llm=llm,
-        rag_index=rag_index,
-        rag_documents=rag_documents,
-        rag_retriever=rag_retriever,
-        api_key=api_key
-    )
+    try:
+        response_text, updated_history, updated_history_for_gradio, updated_order, _ = process_order(
+            user_input_text=user_input,
+            current_session_history=session_history_state,
+            llm=llm,
+            rag_index=rag_index,
+            rag_documents=rag_documents,
+            rag_retriever=rag_retriever,
+            api_key=api_key
+        )
+    except Exception as e:
+        logger.exception(f"Error during process_order: {e}")
+        friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
+        safe_history = session_history_state[:]
+        safe_history.append({'role': 'user', 'content': user_input})
+        safe_history.append({'role': 'assistant', 'content': friendly})
+        return "", safe_history, safe_history, get_current_order_state(), None
 
     # --- Get Voice Audio ---
-    audio_data = None 
+    audio_data = None
     if cartesia_client and response_text and response_text.strip():
-        audio_data = get_voice_audio(response_text, cartesia_client) 
+        try:
+            audio_data = get_voice_audio(response_text, cartesia_client)
+        except Exception as tts_err:
+            logger.warning(f"TTS generation failed: {tts_err}")
+            audio_data = None
         if audio_data is None:
             logger.warning("Failed to get audio data from get_voice_audio.")
     else:
@@ -58,7 +70,7 @@ def handle_gradio_input(
 
     # Return updates including audio data (which might be None)
     # First return value is empty string to clear the input field
-    return "", updated_history, updated_history, get_current_order_state(), audio_data
+    return "", updated_history, updated_history_for_gradio, updated_order, audio_data
 
 def clear_chat_state() -> Tuple[List, List, List, None]:
     """
@@ -70,7 +82,12 @@ def clear_chat_state() -> Tuple[List, List, List, None]:
     logger.info("Clear button clicked - Resetting session state.")
     
     # Reset the backend state
-    reset_session_state()
-    
-    # Return empty lists for Chatbot/history/order, and None for the audio component
+    try:
+        reset_session_state()
+    except Exception:
+        logger.exception("Failed to reset session state")
+        # Return empty state to ensure clean UI even if backend reset failed
+        return [], [], [], None
+
+    # Return cleared state tuple
     return [], [], [], None

@@ -5,7 +5,7 @@ Cherry-picked and simplified from original memvid
 
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any, Union
 import base64
 import gzip
 
@@ -16,9 +16,14 @@ try:
     import numpy as np
     from PIL import Image
     QR_AVAILABLE = True
+    ImageType = Image.Image
+    ArrayType = np.ndarray
 except ImportError as e:
     logging.warning(f"QR/OpenCV dependencies not available: {e}")
     QR_AVAILABLE = False
+    # Use Any for type hints when imports fail
+    ImageType = Any
+    ArrayType = Any
 
 from .config import get_memvid_config
 
@@ -30,7 +35,7 @@ def check_dependencies():
         raise ImportError("Missing dependencies. Need: pip install qrcode[pil] opencv-python")
     return True
 
-def encode_to_qr(data: str) -> Optional[Image.Image]:
+def encode_to_qr(data: str) -> Optional[ImageType]:
     """
     Encode data to QR code image (simplified version)
     """
@@ -64,7 +69,7 @@ def encode_to_qr(data: str) -> Optional[Image.Image]:
         logger.error(f"QR encoding failed: {e}")
         return None
 
-def decode_qr(image: np.ndarray) -> Optional[str]:
+def decode_qr(image: ArrayType) -> Optional[str]:
     """
     Decode QR code from image (simplified version)
     """
@@ -85,7 +90,7 @@ def decode_qr(image: np.ndarray) -> Optional[str]:
         logger.warning(f"QR decode failed: {e}")
     return None
 
-def qr_to_frame(qr_image: Image.Image, frame_size: Tuple[int, int]) -> Optional[np.ndarray]:
+def qr_to_frame(qr_image: ImageType, frame_size: Tuple[int, int]) -> Optional[ArrayType]:
     """
     Convert QR PIL image to video frame
     """
@@ -110,7 +115,7 @@ def qr_to_frame(qr_image: Image.Image, frame_size: Tuple[int, int]) -> Optional[
         logger.error(f"Frame conversion failed: {e}")
         return None
 
-def extract_frame(video_path: str, frame_number: int) -> Optional[np.ndarray]:
+def extract_frame(video_path: str, frame_number: int) -> Optional[ArrayType]:
     """
     Extract single frame from video
     """
@@ -133,6 +138,9 @@ def chunk_text(text: str, chunk_size: int = 512, overlap: int = 32) -> List[str]
     """
     Split text into overlapping chunks (simplified)
     """
+    if overlap >= chunk_size:
+        raise ValueError("Overlap must be smaller than chunk size")
+
     chunks = []
     start = 0
     

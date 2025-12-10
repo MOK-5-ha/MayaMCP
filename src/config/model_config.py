@@ -1,19 +1,44 @@
 """Model configuration for MayaMCP."""
 
 import os
-from typing import Dict, Any
+from typing import Dict, Any, List
+from .logging_config import get_logger
+
+
+logger = get_logger(__name__)
+
+def _parse_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid {name} value '{raw}', falling back to {default}")
+        return default
+
+def _parse_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid {name} value '{raw}', falling back to {default}")
+        return default
+
 
 def get_model_config() -> Dict[str, Any]:
     """
     Get model configuration from environment variables.
-    
+
     Returns:
         Dictionary containing model configuration.
     """
     return {
-        "model_version": os.getenv("GEMINI_MODEL_VERSION", "gemini-2.5-flash-preview-04-17"),
-        "temperature": float(os.getenv("TEMPERATURE", "0.7")),
-        "max_output_tokens": int(os.getenv("MAX_OUTPUT_TOKENS", "2048")),
+        "model_version": os.getenv("GEMINI_MODEL_VERSION", "gemini-2.5-flash-lite"),
+        "temperature": _parse_float_env("TEMPERATURE", 0.7),
+        "max_output_tokens": _parse_int_env("MAX_OUTPUT_TOKENS", 2048),
         "top_p": 0.95,
         "top_k": 1
     }
@@ -21,7 +46,7 @@ def get_model_config() -> Dict[str, Any]:
 def get_generation_config() -> Dict[str, Any]:
     """
     Get generation configuration for LLM calls.
-    
+
     Returns:
         Dictionary containing generation parameters.
     """
@@ -36,7 +61,7 @@ def get_generation_config() -> Dict[str, Any]:
 def get_cartesia_config() -> Dict[str, Any]:
     """
     Get Cartesia TTS configuration.
-    
+
     Returns:
         Dictionary containing Cartesia configuration.
     """
@@ -50,3 +75,27 @@ def get_cartesia_config() -> Dict[str, Any]:
             "encoding": "pcm_f32le"
         }
     }
+
+# Known valid Gemini model identifiers (non-exhaustive; update as needed)
+KNOWN_GEMINI_MODELS: List[str] = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-exp",
+]
+
+def get_known_gemini_models() -> List[str]:
+    """Return the known list of valid Gemini model identifiers."""
+    return KNOWN_GEMINI_MODELS.copy()
+
+def is_valid_gemini_model(model_name: str) -> bool:
+    """Check if the provided model name is in the known valid list.
+
+    Note: This is a permissive check used for warnings only; the app will continue even if false.
+    """
+    try:
+        return str(model_name).strip() in KNOWN_GEMINI_MODELS
+    except (AttributeError, TypeError):
+        return False

@@ -212,12 +212,22 @@ def process_order(
         # --- LLM Interaction Loop (Handles Tool Calls) ---
         while True:
             # Invoke the LLM with current messages
-            ai_response: AIMessage = llm.invoke(messages)
-            
+            try:
+                ai_response: AIMessage = llm.invoke(messages)
+            except Exception as invoke_err:
+                logger.error(f"LLM invocation failed: {invoke_err}")
+                agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
+                break
+
             # Append the AI's response (could be text or tool call request)
+            if not hasattr(ai_response, "content"):
+                logger.warning("LLM returned a response without content; ending loop.")
+                agent_response_text = "I'm having a moment—could you repeat that while I get my bearings?"
+                break
             messages.append(ai_response)
 
-            if not ai_response.tool_calls:
+            tool_calls = getattr(ai_response, 'tool_calls', None)
+            if not tool_calls:
                 # No tool calls requested, this is the final response to the user
                 agent_response_text = ai_response.content
                 
@@ -226,54 +236,76 @@ def process_order(
                 
                 # If this appears to be casual conversation and RAG is available, try enhancing with RAG
                 if should_use_rag and api_key is not None:
-                    try:
-                        # Try Memvid first, then FAISS with improved error handling
-                        rag_response = ""
-                        if rag_retriever is not None and memvid_rag_pipeline is not None:
-                            logger.info("Enhancing response with Memvid RAG for casual conversation")
-                            try:
-                                rag_response = memvid_rag_pipeline(
-                                    query_text=user_input_text,
-                                    memvid_retriever=rag_retriever,
-                                    api_key=api_key
-                                )
-                            except Exception as memvid_error:
-                                logger.warning(f"Memvid RAG failed: {memvid_error}")
-                        elif rag_index is not None and rag_documents is not None and rag_pipeline is not None:
-                            logger.info("Enhancing response with FAISS RAG for casual conversation")
-                            try:
-                                rag_response = rag_pipeline(
-                                    query_text=user_input_text,
-                                    index=rag_index,
-                                    documents=rag_documents,
-                                    api_key=api_key
-                                )
-                            except Exception as faiss_error:
-                                logger.warning(f"FAISS RAG failed: {faiss_error}")
-                        else:
-                            logger.debug("No RAG system available or imports failed")
-                        
-                        if rag_response and len(rag_response) > 0:
-                            # Log original response for comparison
-                            logger.info(f"Original response: {agent_response_text}")
-                            logger.info(f"RAG-enhanced response: {rag_response}")
-                            # Use the RAG-enhanced response
-                            agent_response_text = rag_response
-                    except Exception as rag_error:
-                        # If RAG fails, just use the original response
-                        logger.warning(f"RAG enhancement failed: {rag_error}. Using original response.")
-                
+                    # Early validation of RAG components before any heavy processing/try
+                    rag_available = False
+                    if rag_retriever is not None and memvid_rag_pipeline is not None:
+                        rag_available = True
+                    elif rag_index is not None and rag_documents is not None and rag_pipeline is not None:
+                        # Ensure rag_documents is a non-empty sized collection
+                        try:
+                            if isinstance(rag_documents, (list, tuple)) or hasattr(rag_documents, "__len__"):
+                                rag_available = len(rag_documents) > 0
+                        except Exception:
+                            rag_available = False
+                    if not rag_available:
+                        logger.debug("Skipping RAG enhancement: required components not initialized/available")
+                    else:
+                        try:
+                            # Try Memvid first, then FAISS with improved error handling
+                            rag_response = None
+                            if rag_retriever is not None and memvid_rag_pipeline is not None:
+                                logger.info("Enhancing response with Memvid RAG for casual conversation")
+                                try:
+                                    rag_response = memvid_rag_pipeline(
+                                        query_text=user_input_text,
+                                        memvid_retriever=rag_retriever,
+                                        api_key=api_key
+                                    )
+                                except Exception as memvid_error:
+                                    logger.warning(f"Memvid RAG failed: {memvid_error}")
+                            elif rag_index is not None and rag_documents is not None and rag_pipeline is not None:
+                                logger.info("Enhancing response with FAISS RAG for casual conversation")
+                                try:
+                                    rag_response = rag_pipeline(
+                                        query_text=user_input_text,
+                                        index=rag_index,
+                                        documents=rag_documents,
+                                        api_key=api_key
+                                    )
+                                except Exception as faiss_error:
+                                    logger.warning(f"FAISS RAG failed: {faiss_error}")
+                            else:
+                                logger.debug("No RAG system available or imports failed")
+
+                            # Safely use rag_response only if it's a sized, non-empty value
+                            has_content = False
+                            if rag_response is not None:
+                                try:
+                                    if isinstance(rag_response, (str, list, tuple, dict)) or hasattr(rag_response, "__len__"):
+                                        has_content = len(rag_response) > 0
+                                except Exception:
+                                    has_content = False
+                            if has_content:
+                                # Log original response for comparison
+                                logger.info(f"Original response: {agent_response_text}")
+                                logger.info(f"RAG-enhanced response: {rag_response}")
+                                # Use the RAG-enhanced response
+                                agent_response_text = rag_response
+                        except Exception as rag_error:
+                            # If RAG fails, just use the original response
+                            logger.warning(f"RAG enhancement failed: {rag_error}. Using original response.")
+
                 break 
                 
             # --- Tool Call Execution ---
-            logger.info(f"LLM requested tool calls: {ai_response.tool_calls}")
+            logger.info(f"LLM requested tool calls: {tool_calls}")
             tool_messages = []
             
             # Get available tools
             tools = get_all_tools()
             tool_map = {tool.name: tool for tool in tools}
             
-            for tool_call in ai_response.tool_calls:
+            for tool_call in tool_calls:
                 tool_name = tool_call.get("name")
                 tool_args = tool_call.get("args", {})
                 tool_id = tool_call.get("id") 
@@ -282,19 +314,26 @@ def process_order(
                 selected_tool = tool_map.get(tool_name)
 
                 if selected_tool:
-                    try:
-                        # Execute the tool function with its arguments
-                        tool_output = selected_tool.invoke(tool_args)
-                        logger.info(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
-                    except Exception as e:
-                        logger.error(f"Error executing tool '{tool_name}': {e}")
-                        tool_output = f"Error executing tool {tool_name}: {e}"
+                    if not isinstance(tool_args, dict):
+                        logger.warning(f"Malformed arguments for tool '{tool_name}': {type(tool_args)}")
+                        tool_output = f"Error: Malformed arguments for tool {tool_name}."
+                    else:
+                        try:
+                            # Execute the tool function with its arguments
+                            tool_output = selected_tool.invoke(tool_args)
+                            logger.info(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
+                        except TypeError as te:
+                            logger.warning(f"Invalid parameters for tool '{tool_name}': {te}")
+                            tool_output = f"Error: Invalid parameters for tool {tool_name}."
+                        except Exception as e:
+                            logger.error(f"Error executing tool '{tool_name}': {e}")
+                            tool_output = f"Error executing tool {tool_name}: {e}"
 
                     # Append the result as a ToolMessage
                     tool_messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_id))
                 else:
                     logger.error(f"Tool '{tool_name}' requested by LLM not found.")
-                    tool_messages.append(ToolMessage(content=f"Error: Tool '{tool_name}' not found.", tool_id=tool_id))
+                    tool_messages.append(ToolMessage(content=f"Error: Tool '{tool_name}' not found.", tool_call_id=tool_id))
 
             # Add the tool results to the message history
             messages.extend(tool_messages)

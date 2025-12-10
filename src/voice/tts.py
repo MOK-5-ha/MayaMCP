@@ -29,6 +29,49 @@ def clean_text_for_tts(text: str) -> str:
     # Replace "MOK 5-ha" with "Moksha" for proper pronunciation
     cleaned_text = re.sub(r'MOK 5-ha', 'Moksha', text, flags=re.IGNORECASE)
     
+    # Convert monetary amounts to speech-friendly format
+    def format_money_for_speech(match):
+        amount = match.group(1)
+        try:
+            if '.' in amount:
+                dollars_str, frac_str = amount.split('.', 1)
+                dollars = int(dollars_str)
+                # Round fractional part to nearest cent
+                # Validate that frac_str contains only digits before conversion
+                if frac_str.isdigit():
+                    cents = int(round(float(f"0.{frac_str}") * 100))
+                else:
+                    cents = 0
+                if cents >= 100:
+                    dollars += 1
+                    cents = 0
+            else:
+                dollars = int(amount)
+                cents = 0
+
+            if dollars == 0:
+                if cents == 0:
+                    return "zero dollars"
+                elif cents == 1:
+                    return "1 cent"
+                else:
+                    return f"{cents} cents"
+            elif cents == 0:
+                if dollars == 1:
+                    return "1 dollar"
+                else:
+                    return f"{dollars} dollars"
+            else:
+                dollar_str = "1 dollar" if dollars == 1 else f"{dollars} dollars"
+                cent_str = "1 cent" if cents == 1 else f"{cents} cents"
+                return f"{dollar_str} and {cent_str}"
+        except ValueError:
+            # If parsing fails, just remove the dollar sign
+            return amount
+    
+    # Pattern to match valid $XX.XX format and convert to speech-friendly text
+    cleaned_text = re.sub(r'\$(\d+(?:\.\d{1,2})?)(?!\d)', format_money_for_speech, cleaned_text)
+    
     # Remove problematic punctuation that TTS might pronounce
     # Keep periods, commas, question marks, exclamation marks for natural pauses
     # Remove: asterisks, hashtags, underscores, brackets, etc.

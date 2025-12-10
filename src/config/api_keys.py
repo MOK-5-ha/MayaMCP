@@ -14,9 +14,12 @@ def get_api_keys() -> Dict[str, Optional[str]]:
     Returns:
         Dictionary containing API keys or None if not found.
     """
+    google_key = os.getenv("GEMINI_API_KEY")
+    cartesia_key = os.getenv("CARTESIA_API_KEY")
+    
     return {
-        "google_api_key": os.getenv("GEMINI_API_KEY"),
-        "cartesia_api_key": os.getenv("CARTESIA_API_KEY")
+        "google_api_key": google_key.strip() if google_key is not None else None,
+        "cartesia_api_key": cartesia_key.strip() if cartesia_key is not None else None
     }
 
 def validate_api_keys(required_keys: Optional[list] = None) -> bool:

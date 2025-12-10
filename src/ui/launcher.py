@@ -10,23 +10,26 @@ logger = get_logger(__name__)
 def launch_bartender_interface(
     handle_input_fn: Callable,
     clear_state_fn: Callable,
-    avatar_path: Optional[str] = None,
-    share: bool = True,
-    debug: bool = True
-) -> None:
+    avatar_path: Optional[str] = None
+) -> gr.Blocks:
     """
-    Launch the Gradio interface for Maya the bartender.
-    
+    Create the Gradio interface for Maya the bartender and return it.
+
     Args:
         handle_input_fn: Function to handle user input
         clear_state_fn: Function to clear chat state
         avatar_path: Path to avatar image (will setup default if None)
-        share: Whether to create a public share link
-        debug: Whether to run in debug mode
+
+    Returns:
+        gr.Blocks: The interface object (not launched), suitable for external serving
     """
     # Setup avatar if not provided
     if avatar_path is None:
-        avatar_path = setup_avatar()
+        try:
+            avatar_path = setup_avatar()
+        except Exception as e:
+            logger.exception(f"Failed to setup avatar: {e}")
+            avatar_path = None
     
     # Create the interface
     ui_theme = gr.themes.Ocean()
@@ -86,8 +89,8 @@ def launch_bartender_interface(
         submit_btn.click(handle_input_fn, submit_inputs, submit_outputs)
 
         clear_outputs = [chatbot_display, history_state, order_state, agent_audio_output]
-        clear_btn.click(clear_state_fn, None, clear_outputs)
+        clear_btn.click(clear_state_fn, [], clear_outputs)
 
-    # Launch the interface
-    logger.info(f"Launching Gradio interface (share={share}, debug={debug})")
-    demo.launch(debug=debug, share=share)
+    # Return the interface for external serving
+    logger.info("Gradio interface object ready")
+    return demo
