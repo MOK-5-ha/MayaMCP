@@ -103,7 +103,7 @@ def main():
                 clear_state_fn=clear_chat_state
             )
         except Exception as ui_err:
-            logger.error(f"Failed to launch Gradio interface: {ui_err}")
+            logger.exception("Failed to launch Gradio interface")
             raise
         
     except KeyboardInterrupt:

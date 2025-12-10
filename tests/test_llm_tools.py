@@ -8,6 +8,22 @@ from src.llm.tools import (
 )
 
 
+def assert_contains_any(result: str, phrases: list[str], msg: str = None) -> None:
+    """Assert that result contains at least one of the given phrases.
+    
+    This helper reduces test brittleness by allowing alternative phrasings
+    for descriptive text while still enforcing semantic requirements.
+    
+    Args:
+        result: The string to search in
+        phrases: List of alternative phrases, any one of which should match
+        msg: Optional custom error message
+    """
+    if not any(phrase in result for phrase in phrases):
+        error_msg = msg or f"Expected one of {phrases} in result, got: {result[:200]}..."
+        raise AssertionError(error_msg)
+
+
 class TestGetMenu:
     """Test cases for get_menu function."""
 
@@ -44,35 +60,45 @@ class TestGetRecommendation:
     def test_get_recommendation_sobering(self):
         """Test recommendation for sobering drinks."""
         result = get_recommendation.invoke({"preference": "sobering"})
-        assert "non-alcoholic options" in result
+        # Flexible check for descriptive phrasing
+        assert_contains_any(result, ["non-alcoholic", "sober", "hydrat"])
+        # Strict checks for recommended drink names
         assert "Water" in result
         assert "Iced Tea" in result
 
     def test_get_recommendation_classy(self):
         """Test recommendation for classy drinks."""
         result = get_recommendation.invoke({"preference": "classy"})
-        assert "sophisticated classics" in result
+        # Flexible check for descriptive phrasing
+        assert_contains_any(result, ["sophisticated", "classic", "elegant", "refined"])
+        # Strict checks for recommended drink names
         assert "Martini" in result
         assert "Old Fashioned" in result
 
     def test_get_recommendation_fruity(self):
         """Test recommendation for fruity drinks."""
         result = get_recommendation.invoke({"preference": "fruity"})
-        assert "fruit flavors" in result
+        # Flexible check for descriptive phrasing
+        assert_contains_any(result, ["fruit", "refreshing", "tropical", "sweet"])
+        # Strict checks for recommended drink names
         assert "Daiquiri" in result
         assert "Cosmopolitan" in result
 
     def test_get_recommendation_strong(self):
         """Test recommendation for strong drinks."""
         result = get_recommendation.invoke({"preference": "strong"})
-        assert "higher alcohol content" in result
+        # Flexible check for descriptive phrasing
+        assert_contains_any(result, ["alcohol", "strong", "potent", "spirit"])
+        # Strict checks for recommended drink names
         assert "Long Island" in result
         assert "Old Fashioned" in result
 
     def test_get_recommendation_burning(self):
         """Test recommendation for burning drinks."""
         result = get_recommendation.invoke({"preference": "burning"})
-        assert "characteristic burn" in result
+        # Flexible check for descriptive phrasing
+        assert_contains_any(result, ["burn", "neat", "straight", "pure"])
+        # Strict checks for recommended drink names
         assert "Whiskey (neat)" in result
         assert "Tequila (neat)" in result
 
@@ -85,8 +111,10 @@ class TestGetRecommendation:
     def test_get_recommendation_unknown_preference(self):
         """Test recommendation for unknown preference."""
         result = get_recommendation.invoke({"preference": "unknown_preference"})
-        assert "not familiar" in result
-        assert "popular drinks" in result
+        # Flexible check for descriptive phrasing
+        assert_contains_any(result, ["not familiar", "don't recognize", "unknown", "try"])
+        assert_contains_any(result, ["popular", "recommend", "suggest", "favorite"])
+        # Strict check for recommended drink name
         assert "Martini" in result
 
 

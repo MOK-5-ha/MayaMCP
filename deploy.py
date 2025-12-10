@@ -40,7 +40,7 @@ if MAX_CONTAINERS <= 0:
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("maya-secrets")],
-    volumes={"/assets": storage},
+    volumes={"/root/assets": storage},
     scaledown_window=300,
     timeout=600,
     memory=MEMORY_MB,

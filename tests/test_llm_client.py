@@ -24,8 +24,11 @@ class TestLLMClient:
     """Test cases for LLM client functions."""
 
     @patch('src.llm.client.genai.configure')
-    def test_configure_genai(self, mock_configure):
+    def test_configure_genai(self, mock_configure, monkeypatch):
         """Test configure_genai calls genai.configure with API key."""
+        # Reset global flag before test
+        monkeypatch.setattr('src.llm.client._GENAI_CONFIGURED', False)
+        
         api_key = "test_api_key"
         
         configure_genai(api_key)

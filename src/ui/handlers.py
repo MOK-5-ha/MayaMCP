@@ -70,7 +70,7 @@ def handle_gradio_input(
 
     # Return updates including audio data (which might be None)
     # First return value is empty string to clear the input field
-    return "", updated_history, updated_history, get_current_order_state(), audio_data
+    return "", updated_history, updated_history_for_gradio, updated_order, audio_data
 
 def clear_chat_state() -> Tuple[List, List, List, None]:
     """
@@ -88,3 +88,6 @@ def clear_chat_state() -> Tuple[List, List, List, None]:
         logger.exception("Failed to reset session state")
         # Return empty state to ensure clean UI even if backend reset failed
         return [], [], [], None
+
+    # Return cleared state tuple
+    return [], [], [], None

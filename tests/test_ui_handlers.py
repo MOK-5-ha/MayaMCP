@@ -49,8 +49,8 @@ class TestHandleGradioInput:
         # Verify TTS was called
         mock_get_voice_audio.assert_called_once_with("Here's your drink!", mock_cartesia_client)
 
-        # Verify get_current_order_state was called
-        mock_get_current_order_state.assert_called_once()
+        # Note: get_current_order_state is NOT called in the happy path anymore,
+        # since the implementation now uses updated_order from process_order() directly
 
         # Verify return value structure
         expected_result = (

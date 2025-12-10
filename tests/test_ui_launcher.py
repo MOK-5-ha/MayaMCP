@@ -376,9 +376,9 @@ class TestLaunchBartenderInterface:
         # Verify setup_avatar was called despite exception
         mock_setup_avatar.assert_called_once()
         
-        # Verify error was logged
-        mock_logger.error.assert_called_once()
-        assert "Failed to setup avatar" in mock_logger.error.call_args[0][0]
+        # Verify exception was logged
+        mock_logger.exception.assert_called_once()
+        assert "Failed to setup avatar" in mock_logger.exception.call_args[0][0]
 
         # Verify fallback behavior (image created with None path)
         mock_image.assert_called_once()

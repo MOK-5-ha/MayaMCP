@@ -152,7 +152,7 @@ def test_maya_memvid_full():
     print("\n🗣️  Testing casual follow-up (should use Memvid again)")
     print("-" * 55)
     
-    response3, updated_history3, analysis_result3, rag_context3, tool_calls3 = process_order(
+    response3, updated_history3, _analysis_result3, _rag_context3, _tool_calls3 = process_order(
         user_input_text="You seem wise for a bartender",
         current_session_history=history_after_whiskey,  # Use history from drink order
         llm=llm,
