@@ -3,6 +3,16 @@
 from unittest.mock import Mock, patch, MagicMock
 import pytest
 from src.rag.embeddings import get_embedding, get_embeddings_batch
+import src.rag.embeddings
+
+
+@pytest.fixture(autouse=True)
+def reset_api_key_cache():
+    """Reset the module-level API key cache before each test."""
+    src.rag.embeddings._configured_api_key = None
+    yield
+    # Clean up after test
+    src.rag.embeddings._configured_api_key = None
 
 
 class TestGetEmbedding:
@@ -325,13 +335,19 @@ class TestGetEmbeddingsBatch:
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')
-    def test_get_embeddings_batch_empty_input(self, mock_configure, mock_get_api_key):
+    @patch('src.rag.embeddings.genai.batch_embed_contents')
+    def test_get_embeddings_batch_empty_input(self, mock_batch_embed, mock_configure, mock_get_api_key):
         """Test batch embedding with empty input list."""
         # Execute function with empty list
         result = get_embeddings_batch([])
 
         # Verify empty list is returned
         assert result == []
+
+        # Verify no API calls were made for empty input
+        mock_get_api_key.assert_not_called()
+        mock_configure.assert_not_called()
+        mock_batch_embed.assert_not_called()
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')
@@ -356,6 +372,10 @@ class TestGetEmbeddingsBatch:
         assert len(call_args[1]['requests']) == 1
         assert call_args[1]['requests'][0]['content'] == "text1"
         assert call_args[1]['requests'][0]['task_type'] == "CLASSIFICATION"
+
+        # Verify return value matches mocked embeddings
+        assert len(result) == 1
+        assert result == [[0.1, 0.2]]
 
     @patch('src.rag.embeddings.get_google_api_key')
     @patch('src.rag.embeddings.genai.configure')

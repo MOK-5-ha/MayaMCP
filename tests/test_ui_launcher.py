@@ -3,6 +3,58 @@
 from unittest.mock import Mock, patch, MagicMock
 import gradio as gr
 from src.ui.launcher import launch_bartender_interface
+import pytest
+
+
+@pytest.fixture
+def ui_mocks():
+    """Fixture providing preconfigured Gradio component mocks for UI tests.
+    
+    Returns:
+        dict: Dictionary containing all mocked Gradio components and their instances.
+    """
+    # Create mock instances
+    theme_instance = Mock()
+    blocks_instance = Mock()
+    markdown_instance = Mock()
+    state_instance = Mock()
+    row_instance = Mock()
+    column_instance = Mock()
+    image_instance = Mock()
+    chatbot_instance = Mock()
+    audio_instance = Mock()
+    textbox_instance = Mock()
+    button_instance = Mock()
+    
+    # Setup context managers
+    blocks_context = Mock()
+    blocks_context.__enter__ = Mock(return_value=blocks_instance)
+    blocks_context.__exit__ = Mock(return_value=None)
+    
+    row_context = Mock()
+    row_context.__enter__ = Mock(return_value=row_instance)
+    row_context.__exit__ = Mock(return_value=None)
+    
+    column_context = Mock()
+    column_context.__enter__ = Mock(return_value=column_instance)
+    column_context.__exit__ = Mock(return_value=None)
+    
+    return {
+        'theme_instance': theme_instance,
+        'blocks_instance': blocks_instance,
+        'blocks_context': blocks_context,
+        'markdown_instance': markdown_instance,
+        'state_instance': state_instance,
+        'row_instance': row_instance,
+        'row_context': row_context,
+        'column_instance': column_instance,
+        'column_context': column_context,
+        'image_instance': image_instance,
+        'chatbot_instance': chatbot_instance,
+        'audio_instance': audio_instance,
+        'textbox_instance': textbox_instance,
+        'button_instance': button_instance,
+    }
 
 
 class TestLaunchBartenderInterface:
@@ -22,47 +74,23 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.gr.Button')
     def test_launch_bartender_interface_with_default_avatar(
         self, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
-        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
+        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar,
+        ui_mocks
     ):
         """Test interface creation with default avatar setup."""
-        # Setup mocks
+        # Setup mocks using fixture
         mock_setup_avatar.return_value = "assets/bartender_avatar.jpg"
-        
-        mock_theme_instance = Mock()
-        mock_ocean_theme.return_value = mock_theme_instance
-        
-        mock_blocks_instance = Mock()
-        mock_blocks.return_value.__enter__.return_value = mock_blocks_instance
-        mock_blocks.return_value.__exit__.return_value = None
-        
-        mock_markdown_instance = Mock()
-        mock_markdown.return_value = mock_markdown_instance
-        
-        mock_state_instance = Mock()
-        mock_state.return_value = mock_state_instance
-        
-        mock_row_instance = Mock()
-        mock_row.return_value.__enter__.return_value = mock_row_instance
-        mock_row.return_value.__exit__.return_value = None
-        
-        mock_column_instance = Mock()
-        mock_column.return_value.__enter__.return_value = mock_column_instance
-        mock_column.return_value.__exit__.return_value = None
-        
-        mock_image_instance = Mock()
-        mock_image.return_value = mock_image_instance
-        
-        mock_chatbot_instance = Mock()
-        mock_chatbot.return_value = mock_chatbot_instance
-        
-        mock_audio_instance = Mock()
-        mock_audio.return_value = mock_audio_instance
-        
-        mock_textbox_instance = Mock()
-        mock_textbox.return_value = mock_textbox_instance
-        
-        mock_button_instance = Mock()
-        mock_button.return_value = mock_button_instance
+        mock_ocean_theme.return_value = ui_mocks['theme_instance']
+        mock_blocks.return_value = ui_mocks['blocks_context']
+        mock_markdown.return_value = ui_mocks['markdown_instance']
+        mock_state.return_value = ui_mocks['state_instance']
+        mock_row.return_value = ui_mocks['row_context']
+        mock_column.return_value = ui_mocks['column_context']
+        mock_image.return_value = ui_mocks['image_instance']
+        mock_chatbot.return_value = ui_mocks['chatbot_instance']
+        mock_audio.return_value = ui_mocks['audio_instance']
+        mock_textbox.return_value = ui_mocks['textbox_instance']
+        mock_button.return_value = ui_mocks['button_instance']
 
         # Execute function
         result = launch_bartender_interface(
@@ -78,7 +106,7 @@ class TestLaunchBartenderInterface:
         mock_ocean_theme.assert_called_once()
 
         # Verify Blocks context manager was used
-        mock_blocks.assert_called_once_with(theme=mock_theme_instance)
+        mock_blocks.assert_called_once_with(theme=ui_mocks['theme_instance'])
 
         # Verify Markdown components were created
         assert mock_markdown.call_count == 2  # Two markdown elements
@@ -100,7 +128,7 @@ class TestLaunchBartenderInterface:
         assert mock_button.call_count == 2  # Clear and Submit buttons
 
         # Verify return value is the blocks instance
-        assert result == mock_blocks_instance
+        assert result == ui_mocks['blocks_instance']
 
     @patch('src.ui.launcher.setup_avatar')
     @patch('src.ui.launcher.gr.themes.Ocean')
@@ -116,47 +144,23 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.gr.Button')
     def test_launch_bartender_interface_with_custom_avatar(
         self, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
-        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
+        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar,
+        ui_mocks
     ):
         """Test interface creation with custom avatar path."""
-        # Setup mocks
+        # Setup mocks using fixture
         custom_avatar_path = "custom/avatar/path.jpg"
-        
-        mock_theme_instance = Mock()
-        mock_ocean_theme.return_value = mock_theme_instance
-        
-        mock_blocks_instance = Mock()
-        mock_blocks.return_value.__enter__.return_value = mock_blocks_instance
-        mock_blocks.return_value.__exit__.return_value = None
-        
-        mock_markdown_instance = Mock()
-        mock_markdown.return_value = mock_markdown_instance
-        
-        mock_state_instance = Mock()
-        mock_state.return_value = mock_state_instance
-        
-        mock_row_instance = Mock()
-        mock_row.return_value.__enter__.return_value = mock_row_instance
-        mock_row.return_value.__exit__.return_value = None
-        
-        mock_column_instance = Mock()
-        mock_column.return_value.__enter__.return_value = mock_column_instance
-        mock_column.return_value.__exit__.return_value = None
-        
-        mock_image_instance = Mock()
-        mock_image.return_value = mock_image_instance
-        
-        mock_chatbot_instance = Mock()
-        mock_chatbot.return_value = mock_chatbot_instance
-        
-        mock_audio_instance = Mock()
-        mock_audio.return_value = mock_audio_instance
-        
-        mock_textbox_instance = Mock()
-        mock_textbox.return_value = mock_textbox_instance
-        
-        mock_button_instance = Mock()
-        mock_button.return_value = mock_button_instance
+        mock_ocean_theme.return_value = ui_mocks['theme_instance']
+        mock_blocks.return_value = ui_mocks['blocks_context']
+        mock_markdown.return_value = ui_mocks['markdown_instance']
+        mock_state.return_value = ui_mocks['state_instance']
+        mock_row.return_value = ui_mocks['row_context']
+        mock_column.return_value = ui_mocks['column_context']
+        mock_image.return_value = ui_mocks['image_instance']
+        mock_chatbot.return_value = ui_mocks['chatbot_instance']
+        mock_audio.return_value = ui_mocks['audio_instance']
+        mock_textbox.return_value = ui_mocks['textbox_instance']
+        mock_button.return_value = ui_mocks['button_instance']
 
         # Execute function with custom avatar
         result = launch_bartender_interface(
@@ -178,6 +182,10 @@ class TestLaunchBartenderInterface:
             elem_classes=["avatar-image"]
         )
 
+        # Verify return value is the blocks instance
+        assert result == ui_mocks['blocks_instance']
+
+
     @patch('src.ui.launcher.setup_avatar')
     @patch('src.ui.launcher.gr.themes.Ocean')
     @patch('src.ui.launcher.gr.Blocks')
@@ -192,47 +200,23 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.gr.Button')
     def test_launch_bartender_interface_component_properties(
         self, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
-        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
+        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar,
+        ui_mocks
     ):
         """Test that UI components are created with correct properties."""
-        # Setup mocks
+        # Setup mocks using fixture
         mock_setup_avatar.return_value = "assets/bartender_avatar.jpg"
-        
-        mock_theme_instance = Mock()
-        mock_ocean_theme.return_value = mock_theme_instance
-        
-        mock_blocks_instance = Mock()
-        mock_blocks.return_value.__enter__.return_value = mock_blocks_instance
-        mock_blocks.return_value.__exit__.return_value = None
-        
-        mock_markdown_instance = Mock()
-        mock_markdown.return_value = mock_markdown_instance
-        
-        mock_state_instance = Mock()
-        mock_state.return_value = mock_state_instance
-        
-        mock_row_instance = Mock()
-        mock_row.return_value.__enter__.return_value = mock_row_instance
-        mock_row.return_value.__exit__.return_value = None
-        
-        mock_column_instance = Mock()
-        mock_column.return_value.__enter__.return_value = mock_column_instance
-        mock_column.return_value.__exit__.return_value = None
-        
-        mock_image_instance = Mock()
-        mock_image.return_value = mock_image_instance
-        
-        mock_chatbot_instance = Mock()
-        mock_chatbot.return_value = mock_chatbot_instance
-        
-        mock_audio_instance = Mock()
-        mock_audio.return_value = mock_audio_instance
-        
-        mock_textbox_instance = Mock()
-        mock_textbox.return_value = mock_textbox_instance
-        
-        mock_button_instance = Mock()
-        mock_button.return_value = mock_button_instance
+        mock_ocean_theme.return_value = ui_mocks['theme_instance']
+        mock_blocks.return_value = ui_mocks['blocks_context']
+        mock_markdown.return_value = ui_mocks['markdown_instance']
+        mock_state.return_value = ui_mocks['state_instance']
+        mock_row.return_value = ui_mocks['row_context']
+        mock_column.return_value = ui_mocks['column_context']
+        mock_image.return_value = ui_mocks['image_instance']
+        mock_chatbot.return_value = ui_mocks['chatbot_instance']
+        mock_audio.return_value = ui_mocks['audio_instance']
+        mock_textbox.return_value = ui_mocks['textbox_instance']
+        mock_button.return_value = ui_mocks['button_instance']
 
         # Execute function
         launch_bartender_interface(
@@ -300,47 +284,23 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.gr.Button')
     def test_launch_bartender_interface_event_handlers(
         self, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
-        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
+        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar,
+        ui_mocks
     ):
         """Test that event handlers are properly configured."""
-        # Setup mocks
+        # Setup mocks using fixture
         mock_setup_avatar.return_value = "assets/bartender_avatar.jpg"
-        
-        mock_theme_instance = Mock()
-        mock_ocean_theme.return_value = mock_theme_instance
-        
-        mock_blocks_instance = Mock()
-        mock_blocks.return_value.__enter__.return_value = mock_blocks_instance
-        mock_blocks.return_value.__exit__.return_value = None
-        
-        mock_markdown_instance = Mock()
-        mock_markdown.return_value = mock_markdown_instance
-        
-        mock_state_instance = Mock()
-        mock_state.return_value = mock_state_instance
-        
-        mock_row_instance = Mock()
-        mock_row.return_value.__enter__.return_value = mock_row_instance
-        mock_row.return_value.__exit__.return_value = None
-        
-        mock_column_instance = Mock()
-        mock_column.return_value.__enter__.return_value = mock_column_instance
-        mock_column.return_value.__exit__.return_value = None
-        
-        mock_image_instance = Mock()
-        mock_image.return_value = mock_image_instance
-        
-        mock_chatbot_instance = Mock()
-        mock_chatbot.return_value = mock_chatbot_instance
-        
-        mock_audio_instance = Mock()
-        mock_audio.return_value = mock_audio_instance
-        
-        mock_textbox_instance = Mock()
-        mock_textbox.return_value = mock_textbox_instance
-        
-        mock_button_instance = Mock()
-        mock_button.return_value = mock_button_instance
+        mock_ocean_theme.return_value = ui_mocks['theme_instance']
+        mock_blocks.return_value = ui_mocks['blocks_context']
+        mock_markdown.return_value = ui_mocks['markdown_instance']
+        mock_state.return_value = ui_mocks['state_instance']
+        mock_row.return_value = ui_mocks['row_context']
+        mock_column.return_value = ui_mocks['column_context']
+        mock_image.return_value = ui_mocks['image_instance']
+        mock_chatbot.return_value = ui_mocks['chatbot_instance']
+        mock_audio.return_value = ui_mocks['audio_instance']
+        mock_textbox.return_value = ui_mocks['textbox_instance']
+        mock_button.return_value = ui_mocks['button_instance']
 
         # Create mock handler functions
         mock_handle_input = Mock()
@@ -356,21 +316,21 @@ class TestLaunchBartenderInterface:
         # Verify event handlers were configured
         # The event handlers are set up in the context manager, so we verify
         # that the submit and click methods were called on the UI components
-        mock_textbox_instance.submit.assert_called()
-        mock_button_instance.click.assert_called()
+        ui_mocks['textbox_instance'].submit.assert_called()
+        ui_mocks['button_instance'].click.assert_called()
 
         # Verify the submit handler was configured with correct inputs/outputs
-        submit_call = mock_textbox_instance.submit.call_args
+        submit_call = ui_mocks['textbox_instance'].submit.call_args
         assert submit_call[0][0] == mock_handle_input  # handler function
         assert len(submit_call[0][1]) == 2  # submit_inputs count
         assert len(submit_call[0][2]) == 5  # submit_outputs count
 
         # Verify the click handler was configured for submit button
-        submit_button_click = mock_button_instance.click.call_args_list[0]
+        submit_button_click = ui_mocks['button_instance'].click.call_args_list[0]
         assert submit_button_click[0][0] == mock_handle_input
 
         # Verify the clear button click handler
-        clear_button_click = mock_button_instance.click.call_args_list[1]
+        clear_button_click = ui_mocks['button_instance'].click.call_args_list[1]
         assert clear_button_click[0][0] == mock_clear_state
 
     @patch('src.ui.launcher.setup_avatar')
@@ -388,47 +348,23 @@ class TestLaunchBartenderInterface:
     @patch('src.ui.launcher.logger')
     def test_launch_bartender_interface_setup_avatar_exception(
         self, mock_logger, mock_button, mock_textbox, mock_audio, mock_chatbot, mock_image,
-        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar
+        mock_column, mock_row, mock_state, mock_markdown, mock_blocks, mock_ocean_theme, mock_setup_avatar,
+        ui_mocks
     ):
         """Test interface creation when setup_avatar raises exception."""
-        # Setup mocks
+        # Setup mocks using fixture
         mock_setup_avatar.side_effect = Exception("Avatar setup failed")
-        
-        mock_theme_instance = Mock()
-        mock_ocean_theme.return_value = mock_theme_instance
-        
-        mock_blocks_instance = Mock()
-        mock_blocks.return_value.__enter__.return_value = mock_blocks_instance
-        mock_blocks.return_value.__exit__.return_value = None
-        
-        mock_markdown_instance = Mock()
-        mock_markdown.return_value = mock_markdown_instance
-        
-        mock_state_instance = Mock()
-        mock_state.return_value = mock_state_instance
-        
-        mock_row_instance = Mock()
-        mock_row.return_value.__enter__.return_value = mock_row_instance
-        mock_row.return_value.__exit__.return_value = None
-        
-        mock_column_instance = Mock()
-        mock_column.return_value.__enter__.return_value = mock_column_instance
-        mock_column.return_value.__exit__.return_value = None
-        
-        mock_image_instance = Mock()
-        mock_image.return_value = mock_image_instance
-        
-        mock_chatbot_instance = Mock()
-        mock_chatbot.return_value = mock_chatbot_instance
-        
-        mock_audio_instance = Mock()
-        mock_audio.return_value = mock_audio_instance
-        
-        mock_textbox_instance = Mock()
-        mock_textbox.return_value = mock_textbox_instance
-        
-        mock_button_instance = Mock()
-        mock_button.return_value = mock_button_instance
+        mock_ocean_theme.return_value = ui_mocks['theme_instance']
+        mock_blocks.return_value = ui_mocks['blocks_context']
+        mock_markdown.return_value = ui_mocks['markdown_instance']
+        mock_state.return_value = ui_mocks['state_instance']
+        mock_row.return_value = ui_mocks['row_context']
+        mock_column.return_value = ui_mocks['column_context']
+        mock_image.return_value = ui_mocks['image_instance']
+        mock_chatbot.return_value = ui_mocks['chatbot_instance']
+        mock_audio.return_value = ui_mocks['audio_instance']
+        mock_textbox.return_value = ui_mocks['textbox_instance']
+        mock_button.return_value = ui_mocks['button_instance']
 
         # Execute function - should still work even if avatar setup fails
         result = launch_bartender_interface(
@@ -449,4 +385,4 @@ class TestLaunchBartenderInterface:
         assert mock_image.call_args[1]['value'] is None
 
         # Verify interface was still created successfully
-        assert result == mock_blocks_instance
+        assert result == ui_mocks['blocks_instance']

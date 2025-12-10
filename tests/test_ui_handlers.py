@@ -246,6 +246,16 @@ class TestHandleGradioInput:
         assert call_args[1]['rag_documents'] == ["doc1", "doc2"]
         assert call_args[1]['rag_retriever'] is not None
 
+        # Verify return value structure
+        expected_result = (
+            "",  # empty_input
+            [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],  # updated_history
+            [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],  # updated_history_for_gradio
+            [{'name': 'Martini', 'price': 13.0}],  # updated_order
+            b'audio_data'  # audio_data
+        )
+        assert result == expected_result
+
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
@@ -289,14 +299,14 @@ class TestClearChatState:
     @patch('src.ui.handlers.reset_session_state')
     def test_clear_chat_state_success(self, mock_reset_session_state):
         """Test successful chat state clearing."""
-        # Execute function
-        result = clear_chat_state()
+        # Execute function with some history
+        result = clear_chat_state([{'role': 'user', 'content': 'prev'}])
 
         # Verify reset_session_state was called
         mock_reset_session_state.assert_called_once()
 
-        # Verify return value structure
-        expected_result = ([], [], [], None)  # empty lists for chatbot, history, order, and None for audio
+        # Verify return value structure (should still be cleared)
+        expected_result = ([], [], [], None)
         assert result == expected_result
 
     @patch('src.ui.handlers.get_current_order_state')
@@ -309,8 +319,11 @@ class TestClearChatState:
         # Setup mock for get_current_order_state
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
-        # Execute function
-        result = clear_chat_state()
+        # Create some prior history
+        prior_history = [{'role': 'user', 'content': 'message'}]
+
+        # Execute function passing the history
+        result = clear_chat_state(prior_history)
 
         # Verify reset_session_state was still called
         mock_reset_session_state.assert_called_once()
@@ -318,6 +331,6 @@ class TestClearChatState:
         # Verify get_current_order_state was called
         mock_get_current_order_state.assert_called_once()
 
-        # Verify return value contains the current order state instead of empty list
-        expected_result = ([], [], [{'name': 'Martini', 'price': 13.0}], None)
+        # Verify return value contains the PRIOR history and current order, preserving state
+        expected_result = (prior_history, prior_history, [{'name': 'Martini', 'price': 13.0}], None)
         assert result == expected_result

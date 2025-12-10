@@ -72,12 +72,9 @@ class MemvidTestQueries:
         ),
     }
 
-    # Combined dictionary built once at class definition time (immutable)
-    ALL_QUERIES: ClassVar[Dict[QueryText, Tuple[QueryCategory, QueryDescription]]] = {
-        **{query: (CATEGORY_BASIC, description) for query, description in BASIC_QUERIES.items()},
-        **{query: (CATEGORY_EDGE_CASE, description) for query, description in EDGE_CASE_QUERIES.items()},
-        **{query: (CATEGORY_STRESS_TEST, description) for query, description in STRESS_TEST_QUERIES.items()}
-    }
+    # ALL_QUERIES is constructed at module level after class definition
+    # to avoid comprehension scope issues with class-level names
+    ALL_QUERIES: ClassVar[Dict[QueryText, Tuple[QueryCategory, QueryDescription]]] = {}
 
     def get_queries_by_category(
         self, category: QueryCategory
@@ -127,6 +124,13 @@ class MemvidTestQueries:
         """
         return self.get_all_queries()
 
+
+# Construct ALL_QUERIES at module level where class names are resolvable
+MemvidTestQueries.ALL_QUERIES = {
+    **{query: (MemvidTestQueries.CATEGORY_BASIC, description) for query, description in MemvidTestQueries.BASIC_QUERIES.items()},
+    **{query: (MemvidTestQueries.CATEGORY_EDGE_CASE, description) for query, description in MemvidTestQueries.EDGE_CASE_QUERIES.items()},
+    **{query: (MemvidTestQueries.CATEGORY_STRESS_TEST, description) for query, description in MemvidTestQueries.STRESS_TEST_QUERIES.items()}
+}
 
 # Module-level instance for easy access
 memvid_queries = MemvidTestQueries()

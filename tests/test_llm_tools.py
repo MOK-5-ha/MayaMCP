@@ -78,7 +78,7 @@ class TestGetRecommendation:
 
     def test_get_recommendation_case_insensitive(self):
         """Test that preference matching is case insensitive."""
-        result1 = get_recommendation.invoke({"preference": "SOBER"})
+        result1 = get_recommendation.invoke({"preference": "SOBERING"})
         result2 = get_recommendation.invoke({"preference": "sobering"})
         assert result1 == result2
 
@@ -332,7 +332,7 @@ class TestPlaceOrder:
         mock_randint.return_value = 5
 
         # Execute function
-        result = place_order()
+        result = place_order.invoke({})
 
         # Verify random preparation time was generated
         mock_randint.assert_called_once_with(2, 8)
@@ -344,7 +344,7 @@ class TestPlaceOrder:
         assert "Order placed successfully" in result
         assert "Martini" in result
         assert "Beer" in result
-        assert "Total: $18.00" in result
+        assert "totalling $18.00" in result
         assert "5 minutes" in result
 
     @patch('src.llm.tools.get_current_order_state')
@@ -354,7 +354,7 @@ class TestPlaceOrder:
         mock_get_current_order_state.return_value = []
 
         # Execute function
-        result = place_order()
+        result = place_order.invoke({})
 
         # Verify error message
         assert "Cannot place an empty order" in result

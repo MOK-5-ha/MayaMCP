@@ -89,7 +89,7 @@ def launch_bartender_interface(
         submit_btn.click(handle_input_fn, submit_inputs, submit_outputs)
 
         clear_outputs = [chatbot_display, history_state, order_state, agent_audio_output]
-        clear_btn.click(clear_state_fn, None, clear_outputs)
+        clear_btn.click(clear_state_fn, [history_state], clear_outputs)
 
     # Return the interface for external serving
     logger.info("Gradio interface object ready")

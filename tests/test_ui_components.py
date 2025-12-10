@@ -1,6 +1,6 @@
 """Unit tests for UI components."""
 
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, patch
 import io
 import requests
 from src.ui.components import setup_avatar
@@ -12,9 +12,8 @@ class TestSetupAvatar:
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_successful_download(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get
+        self, mock_image_new, mock_image_open, mock_requests_get
     ):
         """Test successful avatar download and save."""
         # Setup mocks
@@ -43,19 +42,17 @@ class TestSetupAvatar:
         assert hasattr(call_args[0], 'getvalue')  # It's a BytesIO-like object
         assert call_args[0].getvalue() == b'fake_image_data'
 
-        # Verify image was saved
-        mock_file.assert_called_once_with("assets/bartender_avatar.jpg", 'wb')
+        # Verify image was saved with correct path
         mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
 
-        # Verify return value
+        # Verify return value matches saved path
         assert result == "assets/bartender_avatar.jpg"
 
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_custom_url(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get
+        self, mock_image_new, mock_image_open, mock_requests_get
     ):
         """Test avatar download with custom URL."""
         # Setup mocks
@@ -77,17 +74,15 @@ class TestSetupAvatar:
         mock_requests_get.assert_called_once_with(custom_url)
 
         # Verify image was saved to custom path
-        mock_file.assert_called_once_with(custom_save_path, 'wb')
         mock_image.save.assert_called_once_with(custom_save_path)
 
-        # Verify return value
+        # Verify return value matches saved path
         assert result == custom_save_path
 
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_http_error_fallback(
-        self, mock_file, mock_image_new, mock_requests_get
+        self, mock_image_new, mock_requests_get
     ):
         """Test fallback behavior when HTTP request fails."""
         # Setup mocks for failed HTTP request
@@ -107,18 +102,16 @@ class TestSetupAvatar:
         # Verify fallback image was created
         mock_image_new.assert_called_once_with('RGB', (300, 300), color=(73, 109, 137))
 
-        # Verify fallback image was saved
-        mock_file.assert_called_once_with("assets/bartender_avatar.jpg", 'wb')
+        # Verify fallback image was saved with correct path
         mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
 
-        # Verify return value
+        # Verify return value matches saved path
         assert result == "assets/bartender_avatar.jpg"
 
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_request_exception_fallback(
-        self, mock_file, mock_image_new, mock_requests_get
+        self, mock_image_new, mock_requests_get
     ):
         """Test fallback behavior when request raises exception."""
         # Setup mock to raise exception
@@ -136,19 +129,17 @@ class TestSetupAvatar:
         # Verify fallback image was created
         mock_image_new.assert_called_once_with('RGB', (300, 300), color=(73, 109, 137))
 
-        # Verify fallback image was saved
-        mock_file.assert_called_once_with("assets/bartender_avatar.jpg", 'wb')
+        # Verify fallback image was saved with correct path
         mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
 
-        # Verify return value
+        # Verify return value matches saved path
         assert result == "assets/bartender_avatar.jpg"
 
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_save_exception_fallback(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get
+        self, mock_image_new, mock_image_open, mock_requests_get
     ):
         """Test fallback behavior when image save fails."""
         # Setup mocks for successful download
@@ -186,9 +177,8 @@ class TestSetupAvatar:
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_image_processing_error(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get
+        self, mock_image_new, mock_image_open, mock_requests_get
     ):
         """Test behavior when image processing fails."""
         # Setup mocks for successful download but failed image processing
@@ -212,19 +202,17 @@ class TestSetupAvatar:
         # Verify fallback image was created due to processing error
         mock_image_new.assert_called_once_with('RGB', (300, 300), color=(73, 109, 137))
 
-        # Verify fallback image was saved
-        mock_file.assert_called_once_with("assets/bartender_avatar.jpg", 'wb')
+        # Verify fallback image was saved with correct path
         mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
 
-        # Verify return value
+        # Verify return value matches saved path
         assert result == "assets/bartender_avatar.jpg"
 
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_empty_response_content(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get
+        self, mock_image_new, mock_image_open, mock_requests_get
     ):
         """Test behavior when response has empty content."""
         # Setup mocks for successful response but empty content
@@ -248,19 +236,17 @@ class TestSetupAvatar:
         # Verify fallback image was created due to empty content
         mock_image_new.assert_called_once_with('RGB', (300, 300), color=(73, 109, 137))
 
-        # Verify fallback image was saved
-        mock_file.assert_called_once_with("assets/bartender_avatar.jpg", 'wb')
+        # Verify fallback image was saved with correct path
         mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
 
-        # Verify return value
+        # Verify return value matches saved path
         assert result == "assets/bartender_avatar.jpg"
 
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_multiple_calls_same_path(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get
+        self, mock_image_new, mock_image_open, mock_requests_get
     ):
         """Test multiple calls to setup_avatar with same path."""
         # Setup mocks
@@ -280,10 +266,9 @@ class TestSetupAvatar:
         assert mock_requests_get.call_count == 2
 
         # Verify images were saved both times
-        assert mock_file.call_count == 2
         assert mock_image.save.call_count == 2
 
-        # Verify return values
+        # Verify return values match saved path
         assert result1 == "assets/bartender_avatar.jpg"
         assert result2 == "assets/bartender_avatar.jpg"
 
@@ -291,9 +276,8 @@ class TestSetupAvatar:
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.open')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_logging_behavior(
-        self, mock_file, mock_image_new, mock_image_open, mock_requests_get, mock_logger
+        self, mock_image_new, mock_image_open, mock_requests_get, mock_logger
     ):
         """Test that appropriate logging occurs during avatar setup."""
         # Setup mocks for successful case
@@ -306,7 +290,13 @@ class TestSetupAvatar:
         mock_image_open.return_value = mock_image
 
         # Execute function
-        setup_avatar()
+        result = setup_avatar()
+
+        # Verify image was saved with correct path
+        mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
+
+        # Verify return value matches saved path
+        assert result == "assets/bartender_avatar.jpg"
 
         # Verify logging calls were made
         mock_logger.info.assert_any_call("Successfully downloaded avatar image")
@@ -315,9 +305,8 @@ class TestSetupAvatar:
     @patch('src.ui.components.logger')
     @patch('src.ui.components.requests.get')
     @patch('src.ui.components.Image.new')
-    @patch('builtins.open', new_callable=mock_open)
     def test_setup_avatar_error_logging(
-        self, mock_file, mock_image_new, mock_requests_get, mock_logger
+        self, mock_image_new, mock_requests_get, mock_logger
     ):
         """Test that error logging occurs when avatar setup fails."""
         # Setup mocks for failed HTTP request
@@ -327,9 +316,17 @@ class TestSetupAvatar:
 
         mock_image = Mock()
         mock_image_new.return_value = mock_image
+        # Setup save to raise exception to exercise the save-failure branch
+        mock_image.save.side_effect = Exception("Save failed")
 
         # Execute function
-        setup_avatar()
+        result = setup_avatar()
+
+        # Verify fallback image was saved (attempted)
+        mock_image.save.assert_called_once_with("assets/bartender_avatar.jpg")
+
+        # Verify return value is fallback path
+        assert result == "assets/bartender_avatar.jpg"
 
         # Verify error logging calls were made
         mock_logger.warning.assert_any_call("Failed to download avatar. Status code: 500")

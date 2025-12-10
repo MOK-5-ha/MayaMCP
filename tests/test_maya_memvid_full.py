@@ -120,7 +120,7 @@ def test_maya_memvid_full():
     print("\n🗣️  Testing drink order (should use tools, not RAG)")
     print("-" * 50)
     
-    response_whiskey, history_after_whiskey, analysis_whiskey, rag_context_whiskey, tool_calls_whiskey = process_order(
+    response_whiskey, history_after_whiskey, _analysis_whiskey, _rag_context_whiskey, _tool_calls_whiskey = process_order(
         user_input_text="I'd like a whiskey on the rocks please",
         current_session_history=updated_history,
         llm=llm,

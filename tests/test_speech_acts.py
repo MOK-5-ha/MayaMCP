@@ -145,6 +145,8 @@ class TestSpeechActDetection:
         """Test that assertive speech acts map to order_confirmation"""
         result = detect_speech_acts(
             "Here is your drink",
+            []
+        )
         # Should detect assertive pattern and map to order_confirmation
         assert result['speech_act'] == 'assertive', "Should detect assertive speech act for 'Here is your drink'"
         assert result['intent'] == 'order_confirmation', "Assertive speech acts should map to order_confirmation"

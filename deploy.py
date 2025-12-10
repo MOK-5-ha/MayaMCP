@@ -233,6 +233,31 @@ def serve_maya():
         lines.append('# HELP maya_process_uptime_seconds Process uptime in seconds')
         lines.append('# TYPE maya_process_uptime_seconds gauge')
         lines.append(f'maya_process_uptime_seconds {uptime}')
+        
+        # RAG availability and document count
+        rag_type = "none"
+        rag_doc_count = 0
+        if rag_retriever is not None:
+            rag_type = "memvid"
+        elif rag_index is not None:
+            rag_type = "faiss"
+        
+        if rag_documents:
+            rag_doc_count = len(rag_documents)
+        
+        lines.append('# HELP maya_rag_available RAG system availability (1=available, 0=unavailable)')
+        lines.append('# TYPE maya_rag_available gauge')
+        lines.append(f'maya_rag_available {1 if rag_type != "none" and rag_doc_count > 0 else 0}')
+        
+        lines.append('# HELP maya_rag_document_count Number of documents in RAG system')
+        lines.append('# TYPE maya_rag_document_count gauge')
+        lines.append(f'maya_rag_document_count {rag_doc_count}')
+        
+        lines.append('# HELP maya_rag_type RAG implementation type (memvid=1, faiss=2, none=0)')
+        lines.append('# TYPE maya_rag_type gauge')
+        rag_type_value = {"none": 0, "memvid": 1, "faiss": 2}.get(rag_type, 0)
+        lines.append(f'maya_rag_type {rag_type_value}')
+        
         return "\n".join(lines) + "\n"
 
     @web_app.get("/metrics")
@@ -245,6 +270,16 @@ def serve_maya():
         checks = []
         if llm is None:
             checks.append("LLM not initialized")
+        
+        # Check RAG availability (either Memvid or FAISS)
+        rag_available = False
+        if rag_retriever is not None or rag_index is not None:
+            # Check that we have documents
+            if rag_documents and len(rag_documents) > 0:
+                rag_available = True
+        
+        if not rag_available:
+            checks.append("RAG not initialized or no documents available")
 
         if checks:
             return PlainTextResponse(
