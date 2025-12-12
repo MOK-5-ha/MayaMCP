@@ -28,15 +28,21 @@ class TestHandleGradioInput:
 
         # Execute function
         mock_cartesia_client = Mock()
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+        test_state = {}
+        
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=mock_cartesia_client,
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
-            api_key="test_key"
+            api_key="test_key",
+            app_state=test_state
         )
 
         # Verify process_order was called with correct parameters
@@ -45,6 +51,8 @@ class TestHandleGradioInput:
         assert call_args[1]['user_input_text'] == "I'd like a Martini"
         assert call_args[1]['current_session_history'] == [{'role': 'user', 'content': 'Hi'}]
         assert call_args[1]['api_key'] == "test_key"
+        assert call_args[1]['session_id'] == "test_session"
+        assert call_args[1]['app_state'] is test_state
 
         # Verify TTS was called
         mock_get_voice_audio.assert_called_once_with("Here's your drink!", mock_cartesia_client)
@@ -81,15 +89,20 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function without TTS client
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+        
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=None,  # No TTS client
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
-            api_key="test_key"
+            api_key="test_key",
+            app_state={}
         )
 
         # Verify TTS was not called
@@ -117,15 +130,20 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
-            api_key="test_key"
+            api_key="test_key",
+            app_state={}
         )
 
         # Verify TTS was not called due to empty response
@@ -154,15 +172,20 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+        
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
-            api_key="test_key"
+            api_key="test_key",
+            app_state={}
         )
 
         # Verify TTS was called but failed
@@ -183,15 +206,20 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
-            api_key="test_key"
+            api_key="test_key",
+            app_state={}
         )
 
         # Verify process_order was called
@@ -228,15 +256,20 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function with RAG components
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
             rag_index=Mock(),
             rag_documents=["doc1", "doc2"],
             rag_retriever=Mock(),
-            api_key="test_key"
+            api_key="test_key",
+            app_state={}
         )
 
         # Verify process_order was called with RAG parameters
@@ -275,15 +308,20 @@ class TestHandleGradioInput:
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
 
         # Execute function
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
             rag_index=None,
             rag_documents=None,
             rag_retriever=None,
-            api_key="test_key"
+            api_key="test_key",
+            app_state={}
         )
 
         # Verify TTS was not called due to whitespace-only response
@@ -300,7 +338,9 @@ class TestClearChatState:
     def test_clear_chat_state_success(self, mock_reset_session_state):
         """Test successful chat state clearing."""
         # Execute function (no arguments needed)
-        result = clear_chat_state()
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+        result = clear_chat_state(request=mock_request, app_state={})
 
         # Verify reset_session_state was called
         mock_reset_session_state.assert_called_once()
@@ -316,7 +356,9 @@ class TestClearChatState:
         mock_reset_session_state.side_effect = Exception("Reset failed")
 
         # Execute function (no arguments needed)
-        result = clear_chat_state()
+        mock_request = Mock()
+        mock_request.session_hash = "test_session"
+        result = clear_chat_state(request=mock_request, app_state={})
 
         # Verify reset_session_state was still called
         mock_reset_session_state.assert_called_once()

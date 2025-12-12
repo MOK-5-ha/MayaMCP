@@ -1,6 +1,7 @@
 """Gradio event handlers."""
 
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional, MutableMapping
+import gradio as gr
 from ..config.logging_config import get_logger
 from ..conversation.processor import process_order
 from ..voice.tts import get_voice_audio
@@ -11,12 +12,14 @@ logger = get_logger(__name__)
 def handle_gradio_input(
     user_input: str,
     session_history_state: List[Dict[str, str]],
+    request: gr.Request, 
     llm,
     cartesia_client=None,
     rag_index=None,
     rag_documents: List[str] = None,
     rag_retriever=None,
-    api_key: str = None
+    api_key: str = None,
+    app_state: MutableMapping = None
 ) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
     """
     Gradio callback: Takes input/state, calls logic & TTS, returns updates.
@@ -24,16 +27,31 @@ def handle_gradio_input(
     Args:
         user_input: User's text input
         session_history_state: Current session history
+        request: Gradio request object containing session info
         llm: Initialized LLM instance
         cartesia_client: Cartesia client for TTS (optional)
         rag_index: FAISS index for RAG (optional)
         rag_documents: Documents for RAG (optional)
         api_key: API key for various services
+        app_state: Distributed state store (modal.Dict or dict)
         
     Returns:
         Tuple of (empty_input, updated_history, updated_history_for_gradio, updated_order, audio_data)
     """
-    logger.info(f"Gradio input: '{user_input}'")
+    if app_state is None:
+        # Fallback for local testing if not injected
+        logger.warning("app_state not provided, using a temporary local dict (state will be lost on restart)")
+        app_state = {}
+
+    # Extract session ID from request
+    session_id = "default"
+    if request:
+        session_id = request.session_hash
+        logger.debug(f"Handling request for session: {session_id}")
+    else:
+        logger.warning("No request object provided, using default session ID")
+
+    logger.info(f"Gradio input from {session_id}: '{user_input}'")
     logger.debug(f"Received session history state (len {len(session_history_state)}): {session_history_state}")
 
     # Call text processing logic first
@@ -45,7 +63,9 @@ def handle_gradio_input(
             rag_index=rag_index,
             rag_documents=rag_documents,
             rag_retriever=rag_retriever,
-            api_key=api_key
+            api_key=api_key,
+            session_id=session_id,
+            app_state=app_state
         )
     except Exception as e:
         logger.exception(f"Error during process_order: {e}")
@@ -53,7 +73,7 @@ def handle_gradio_input(
         safe_history = session_history_state[:]
         safe_history.append({'role': 'user', 'content': user_input})
         safe_history.append({'role': 'assistant', 'content': friendly})
-        return "", safe_history, safe_history, get_current_order_state(), None
+        return "", safe_history, safe_history, get_current_order_state(session_id, app_state), None
 
     # --- Get Voice Audio ---
     audio_data = None
@@ -72,18 +92,26 @@ def handle_gradio_input(
     # First return value is empty string to clear the input field
     return "", updated_history, updated_history_for_gradio, updated_order, audio_data
 
-def clear_chat_state() -> Tuple[List, List, List, None]:
+def clear_chat_state(request: gr.Request, app_state: MutableMapping = None) -> Tuple[List, List, List, None]:
     """
     Clear UI/session state including audio.
     
     Returns:
         Tuple of (empty_chatbot, empty_history, empty_order, no_audio)
     """
-    logger.info("Clear button clicked - Resetting session state.")
+    session_id = "default"
+    if request:
+        session_id = request.session_hash
     
+    logger.info(f"Clear button clicked for session {session_id} - Resetting session state.")
+    
+    if app_state is None:
+         logger.warning("app_state not provided for clear_chat_state, using ephemeral dict")
+         app_state = {}
+
     # Reset the backend state
     try:
-        reset_session_state()
+        reset_session_state(session_id, app_state)
     except Exception:
         logger.exception("Failed to reset session state")
         # Return empty state to ensure clean UI even if backend reset failed

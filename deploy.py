@@ -13,6 +13,9 @@ app = modal.App("maya-mcp")
 # Define persistent storage for Memvid files
 storage = modal.Volume.from_name("maya-storage", create_if_missing=True)
 
+# Define distributed state for user sessions
+app_state = modal.Dict.from_name("maya-app-state", create_if_missing=True)
+
 # Define the container image with all dependencies and install the package
 image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -52,6 +55,12 @@ def serve_maya():
     import os
     import sys
     from functools import partial
+    
+    # Access the distributed app state
+    # Note: modal.Dict objects are available as global variables in the function scope if defined in the app
+    # but strictly speaking we access the one attached to the app or defined globally.
+    # In Modal, globals defined in the module are accessible.
+    state_store = app_state
 
     # Add paths for imports
 
@@ -188,17 +197,23 @@ def serve_maya():
         rag_index=rag_index,
         rag_documents=rag_documents,
         rag_retriever=rag_retriever,
-        api_key=google_api_key
+        api_key=google_api_key,
+        app_state=state_store
     )
 
     # Import clear state function
     from ui.handlers import clear_chat_state
+    
+    # Pre-bind app_state to clear function as well if needed, though clear_state often implies
+    # clearing the specific session. The generic clear_chat_state might need refactoring too.
+    # checking ui/handlers.py signature in next steps, but binding it here for consistency if needed.
+    clear_state_with_deps = partial(clear_chat_state, app_state=state_store)
 
     # Create Gradio interface
     logger.info("Creating Maya's Gradio interface...")
     interface = launch_bartender_interface(
         handle_input_fn=handle_input_with_deps,
-        clear_state_fn=clear_chat_state
+        clear_state_fn=clear_state_with_deps
     )
 
     # Mount Gradio app with FastAPI for Modal

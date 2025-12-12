@@ -82,17 +82,25 @@ def main():
             logger.warning(f"Cartesia initialization failed: {e}. Continuing without TTS.")
             cartesia_client = None
         
-        # Create partially applied handler functions with dependencies
-        rag_retriever_param = rag_retriever
+        # Initialize app state for local run (ephemeral, in-memory)
+        # In deployment, this is replaced by modal.Dict
+        app_state = {}
         
+        # Create partially applied handler functions with dependencies
         handle_input_with_deps = partial(
             handle_gradio_input,
             llm=llm,
             cartesia_client=cartesia_client,
             rag_index=rag_index,
             rag_documents=rag_documents,
-            rag_retriever=rag_retriever_param,
-            api_key=api_keys["google_api_key"]
+            rag_retriever=rag_retriever,
+            api_key=api_keys["google_api_key"],
+            app_state=app_state
+        )
+
+        clear_state_with_deps = partial(
+            clear_chat_state,
+            app_state=app_state
         )
         
         # Launch the Gradio interface

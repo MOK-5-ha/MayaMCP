@@ -70,7 +70,9 @@ def process_order(
     rag_index=None,
     rag_documents: List[str] = None,
     rag_retriever=None,
-    api_key: str = None
+    api_key: str = None,
+    session_id: str = "default",
+    app_state: Any = None
 ) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
     """
     Process user input using LLM with tool calling, updates state.
@@ -89,16 +91,16 @@ def process_order(
     """
     if not user_input_text:
         logger.warning("Received empty user input.")
-        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(), None
+        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
 
     # Initialize phase manager
-    phase_manager = ConversationPhaseManager()
+    phase_manager = ConversationPhaseManager(session_id, app_state)
     
     # Detect if this is the first interaction (empty history)
     is_first_interaction = len(current_session_history) == 0
     if is_first_interaction:
         from ..utils.state_manager import initialize_state
-        initialize_state()
+        initialize_state(session_id, app_state)
 
     # Extract conversation context for speech act analysis
     conversation_context = [entry.get('content', '') for entry in current_session_history[-5:]]  # Last 5 messages
@@ -148,7 +150,7 @@ def process_order(
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
             
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(), None
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
     
     # Fallback to traditional intent detection
     elif intent_match['intent'] and intent_match['confidence'] >= 0.5:
@@ -175,7 +177,7 @@ def process_order(
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
             
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(), None
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
 
     # Prepare message history for LangChain model
     messages = []
@@ -349,7 +351,7 @@ def process_order(
         phase_manager.increment_turn()
         
         # Check if an order was placed
-        order_placed = is_order_finished()
+        order_placed = is_order_finished(session_id, app_state)
         if order_placed:
             phase_manager.handle_order_placed()
         
@@ -365,7 +367,7 @@ def process_order(
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
 
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(), None
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
 
     except Exception as e:
         logger.exception(f"Critical error in process_order: {str(e)}")
@@ -374,4 +376,4 @@ def process_order(
         safe_history = current_session_history[:]
         safe_history.append({'role': 'user', 'content': user_input_text})
         safe_history.append({'role': 'assistant', 'content': error_message})
-        return error_message, safe_history, safe_history, get_current_order_state(), None
+        return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None
