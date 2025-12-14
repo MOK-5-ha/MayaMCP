@@ -36,6 +36,10 @@ class MemvidRetriever:
         self.index_data = self._load_index()
         self._frame_cache = {}
         
+        # Verify index has data
+        if not self.index_data.get("chunks"):
+            raise ValueError(f"Memvid index invalid or empty: {self.index_file}")
+            
         # Verify video
         self._verify_video()
         
@@ -43,12 +47,8 @@ class MemvidRetriever:
     
     def _load_index(self) -> Dict[str, Any]:
         """Load index file"""
-        try:
-            with open(self.index_file, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load index: {e}")
-            return {"chunks": [], "total_frames": 0}
+        with open(self.index_file, 'r') as f:
+            return json.load(f)
     
     def _verify_video(self):
         """Verify video file exists and is accessible"""

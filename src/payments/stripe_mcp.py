@@ -299,7 +299,7 @@ class StripeMCPClient:
         # This will be replaced with actual MCP integration
         
         # Convert amount to cents for Stripe
-        amount_cents = int(amount * 100)
+        amount_cents = int(round(amount * 100))
         
         # Simulate Stripe payment link response
         mock_payment_id = f"plink_test_{idempotency_key[-8:]}"

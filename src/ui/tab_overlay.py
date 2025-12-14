@@ -1,0 +1,385 @@
+"""Tab overlay component for displaying tab and balance on Maya's avatar.
+
+This module provides the visual overlay that shows the user's running tab
+and remaining balance, with animated count-up effects when values change.
+"""
+
+from typing import Optional
+from ..config.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+# Color constants for balance display
+COLOR_NORMAL = "#FFFFFF"      # White for balance >= $50
+COLOR_LOW_FUNDS = "#FFA500"   # Orange for 0 < balance < $50
+COLOR_DEPLETED = "#FF4444"    # Red for balance <= $0
+
+
+def get_balance_color(balance: float) -> str:
+    """Return the appropriate color based on balance level.
+    
+    Args:
+        balance: Current user balance in dollars
+        
+    Returns:
+        Hex color string:
+        - '#FFFFFF' for balance >= $50 (normal)
+        - '#FFA500' for 0 < balance < $50 (low funds warning)
+        - '#FF4444' for balance <= $0 (depleted/negative)
+        
+    Requirements: 6.3, 6.4
+    """
+    if balance >= 50.0:
+        return COLOR_NORMAL
+    elif balance > 0:
+        return COLOR_LOW_FUNDS
+    else:
+        return COLOR_DEPLETED
+
+
+def create_tab_overlay_html(
+    tab_amount: float,
+    balance: float,
+    prev_tab: float = 0.0,
+    prev_balance: float = 1000.0,
+    avatar_path: Optional[str] = None
+) -> str:
+    """Generate HTML/CSS/JS for tab overlay with animation.
+    
+    Creates an overlay positioned at the bottom-left of Maya's avatar
+    showing the current tab and balance with count-up animations.
+    
+    Args:
+        tab_amount: Current tab total
+        balance: Current user balance
+        prev_tab: Previous tab amount (for animation start value)
+        prev_balance: Previous balance (for animation start value)
+        avatar_path: Path to avatar image (optional)
+        
+    Returns:
+        HTML string with embedded CSS and JavaScript for animations
+        
+    Requirements: 2.1, 2.3, 2.4, 5.1, 5.2, 5.3, 5.4, 6.1
+    """
+    balance_color = get_balance_color(balance)
+    avatar_src = avatar_path or "assets/bartender_avatar.jpg"
+    
+    html = f'''
+<div class="avatar-overlay-container" style="position: relative; display: inline-block; width: 100%; max-width: 600px;">
+    <img src="file/{avatar_src}" alt="Maya the Bartender" style="width: 100%; height: auto; display: block; border-radius: 8px;">
+    
+    <div class="tab-overlay" style="
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 12px 16px;
+        border-radius: 8px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        z-index: 10;
+    ">
+        <span class="tab-display" id="tab-display" style="
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 600;
+        " data-value="{tab_amount}" data-prev="{prev_tab}">Tab: ${tab_amount:.2f}</span>
+        
+        <span class="balance-display" id="balance-display" style="
+            color: {balance_color};
+            font-size: 16px;
+            font-weight: 600;
+        " data-value="{balance}" data-prev="{prev_balance}">Balance: ${balance:.2f}</span>
+    </div>
+</div>
+
+<script>
+(function() {{
+    // Animation Queue Manager
+    const AnimationQueue = {{
+        queue: [],
+        isRunning: false,
+        maxDepth: 5,
+        collapseWindowMs: 100,
+        lastEnqueueTime: 0,
+        callbacks: {{
+            onAnimationStart: null,
+            onAnimationComplete: null,
+            onAnimationCancel: null
+        }},
+        
+        enqueue: function(update) {{
+            const now = Date.now();
+            
+            // Collapse strategy: if within 100ms of last update, merge
+            if (this.queue.length > 0 && (now - this.lastEnqueueTime) < this.collapseWindowMs) {{
+                // Update the last queued item's end values
+                const lastItem = this.queue[this.queue.length - 1];
+                lastItem.endTab = update.endTab;
+                lastItem.endBalance = update.endBalance;
+            }} else {{
+                // Add new item to queue
+                if (this.queue.length >= this.maxDepth) {{
+                    // Drop oldest if at max depth
+                    this.queue.shift();
+                }}
+                this.queue.push(update);
+            }}
+            
+            this.lastEnqueueTime = now;
+            
+            if (!this.isRunning) {{
+                this.processNext();
+            }}
+        }},
+        
+        processNext: function() {{
+            if (this.queue.length === 0) {{
+                this.isRunning = false;
+                return;
+            }}
+            
+            this.isRunning = true;
+            const update = this.queue.shift();
+            this.animate(update);
+        }},
+        
+        animate: function(update) {{
+            const duration = 500;
+            const startTime = performance.now();
+            
+            const tabEl = document.getElementById('tab-display');
+            const balanceEl = document.getElementById('balance-display');
+            
+            if (!tabEl || !balanceEl) {{
+                this.processNext();
+                return;
+            }}
+            
+            // Trigger start callback
+            if (this.callbacks.onAnimationStart) {{
+                this.callbacks.onAnimationStart(update);
+            }}
+            
+            // Apply pulse effect
+            tabEl.style.transition = 'transform 250ms ease-out';
+            balanceEl.style.transition = 'transform 250ms ease-out';
+            tabEl.style.transform = 'scale(1.1)';
+            balanceEl.style.transform = 'scale(1.1)';
+            
+            const self = this;
+            
+            function step(currentTime) {{
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Linear interpolation
+                const currentTab = update.startTab + (update.endTab - update.startTab) * progress;
+                const currentBalance = update.startBalance + (update.endBalance - update.startBalance) * progress;
+                
+                tabEl.textContent = 'Tab: $' + currentTab.toFixed(2);
+                balanceEl.textContent = 'Balance: $' + currentBalance.toFixed(2);
+                
+                // Update balance color based on current animated value
+                balanceEl.style.color = getBalanceColor(currentBalance);
+                
+                // Scale back down at halfway point
+                if (progress >= 0.5) {{
+                    tabEl.style.transform = 'scale(1.0)';
+                    balanceEl.style.transform = 'scale(1.0)';
+                }}
+                
+                if (progress < 1) {{
+                    requestAnimationFrame(step);
+                }} else {{
+                    // Animation complete
+                    tabEl.dataset.value = update.endTab;
+                    balanceEl.dataset.value = update.endBalance;
+                    
+                    if (self.callbacks.onAnimationComplete) {{
+                        self.callbacks.onAnimationComplete(update);
+                    }}
+                    
+                    self.processNext();
+                }}
+            }}
+            
+            requestAnimationFrame(step);
+        }},
+        
+        cancelAll: function(finalTab, finalBalance) {{
+            // Cancel running animation and render final values
+            if (this.callbacks.onAnimationCancel) {{
+                this.callbacks.onAnimationCancel();
+            }}
+            
+            this.queue = [];
+            this.isRunning = false;
+            
+            const tabEl = document.getElementById('tab-display');
+            const balanceEl = document.getElementById('balance-display');
+            
+            if (tabEl && balanceEl) {{
+                tabEl.textContent = 'Tab: $' + finalTab.toFixed(2);
+                balanceEl.textContent = 'Balance: $' + finalBalance.toFixed(2);
+                balanceEl.style.color = getBalanceColor(finalBalance);
+                tabEl.style.transform = 'scale(1.0)';
+                balanceEl.style.transform = 'scale(1.0)';
+                tabEl.dataset.value = finalTab;
+                balanceEl.dataset.value = finalBalance;
+            }}
+        }},
+        
+        getQueueLength: function() {{
+            return this.queue.length;
+        }}
+    }};
+    
+    function getBalanceColor(balance) {{
+        if (balance >= 50.0) {{
+            return '{COLOR_NORMAL}';
+        }} else if (balance > 0) {{
+            return '{COLOR_LOW_FUNDS}';
+        }} else {{
+            return '{COLOR_DEPLETED}';
+        }}
+    }}
+    
+    // Initialize animation if values changed
+    const tabEl = document.getElementById('tab-display');
+    const balanceEl = document.getElementById('balance-display');
+    
+    if (tabEl && balanceEl) {{
+        const prevTab = parseFloat(tabEl.dataset.prev) || 0;
+        const currentTab = parseFloat(tabEl.dataset.value) || 0;
+        const prevBalance = parseFloat(balanceEl.dataset.prev) || 1000;
+        const currentBalance = parseFloat(balanceEl.dataset.value) || 1000;
+        
+        // Only animate if values actually changed
+        if (prevTab !== currentTab || prevBalance !== currentBalance) {{
+            AnimationQueue.enqueue({{
+                startTab: prevTab,
+                endTab: currentTab,
+                startBalance: prevBalance,
+                endBalance: currentBalance
+            }});
+        }}
+    }}
+    
+    // Expose for external access
+    window.TabOverlayAnimationQueue = AnimationQueue;
+}})();
+</script>
+'''
+    return html
+
+
+# =============================================================================
+# Python Animation Queue (for testing purposes)
+# =============================================================================
+# This mirrors the JavaScript AnimationQueue behavior for property-based testing
+
+from dataclasses import dataclass, field
+from typing import List, Callable, Optional
+import time
+
+
+@dataclass
+class TabUpdate:
+    """Represents a tab/balance update for animation."""
+    start_tab: float
+    end_tab: float
+    start_balance: float
+    end_balance: float
+    timestamp: float = field(default_factory=time.time)
+
+
+class AnimationQueue:
+    """Python implementation of the animation queue for testing.
+    
+    This class mirrors the JavaScript AnimationQueue behavior to enable
+    property-based testing of the queue logic.
+    
+    Requirements: 5.3
+    """
+    
+    MAX_DEPTH = 5
+    COLLAPSE_WINDOW_MS = 100
+    
+    def __init__(self):
+        self._queue: List[TabUpdate] = []
+        self._is_running: bool = False
+        self._last_enqueue_time: float = 0
+        
+        # Callbacks
+        self.on_animation_start: Optional[Callable[[TabUpdate], None]] = None
+        self.on_animation_complete: Optional[Callable[[TabUpdate], None]] = None
+        self.on_animation_cancel: Optional[Callable[[], None]] = None
+    
+    def enqueue(self, update: TabUpdate) -> None:
+        """Add an update to the animation queue.
+        
+        Implements collapse strategy: updates within 100ms are merged.
+        Queue max depth is 5 (oldest dropped if exceeded).
+        """
+        now = time.time() * 1000  # Convert to milliseconds
+        
+        # Collapse strategy: if within 100ms of last update, merge
+        time_since_last = now - self._last_enqueue_time
+        if self._queue and time_since_last < self.COLLAPSE_WINDOW_MS:
+            # Update the last queued item's end values
+            last_item = self._queue[-1]
+            # Create new update with merged values
+            merged = TabUpdate(
+                start_tab=last_item.start_tab,
+                end_tab=update.end_tab,
+                start_balance=last_item.start_balance,
+                end_balance=update.end_balance,
+                timestamp=last_item.timestamp
+            )
+            self._queue[-1] = merged
+        else:
+            # Add new item to queue
+            if len(self._queue) >= self.MAX_DEPTH:
+                # Drop oldest if at max depth
+                self._queue.pop(0)
+            self._queue.append(update)
+        
+        self._last_enqueue_time = now
+    
+    def process_next(self) -> Optional[TabUpdate]:
+        """Process and return the next update from the queue.
+        
+        Returns None if queue is empty.
+        """
+        if not self._queue:
+            self._is_running = False
+            return None
+        
+        self._is_running = True
+        return self._queue.pop(0)
+    
+    def cancel_all(self) -> None:
+        """Cancel all pending animations and clear the queue."""
+        if self.on_animation_cancel:
+            self.on_animation_cancel()
+        
+        self._queue.clear()
+        self._is_running = False
+    
+    def get_queue_length(self) -> int:
+        """Return the current queue length."""
+        return len(self._queue)
+    
+    @property
+    def is_running(self) -> bool:
+        """Return whether an animation is currently running."""
+        return self._is_running
+    
+    def reset(self) -> None:
+        """Reset the queue to initial state (for testing)."""
+        self._queue.clear()
+        self._is_running = False
+        self._last_enqueue_time = 0

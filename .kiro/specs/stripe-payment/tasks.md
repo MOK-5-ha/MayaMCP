@@ -195,17 +195,17 @@
 - [x] 8. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Create tab overlay UI component
-  - [ ] 9.1 Create src/ui/tab_overlay.py module
+- [x] 9. Create tab overlay UI component
+  - [x] 9.1 Create src/ui/tab_overlay.py module
     - Create new module for tab overlay component
     - _Requirements: 2.1_
-  - [ ] 9.2 Implement get_balance_color function
+  - [x] 9.2 Implement get_balance_color function
     - Return #FFFFFF for balance >= $50 (normal)
     - Return #FFA500 for 0 < balance < $50 (low funds warning)
     - Return #FF4444 for balance <= $0 (depleted/negative)
     - Every numeric balance maps to exactly one color
     - _Requirements: 6.3, 6.4_
-  - [ ] 9.3 Write property test for balance color selection
+  - [x] 9.3 Write property test for balance color selection
     - **Property 7: Balance Color Selection**
     - **Validates: Requirements 6.3, 6.4**
     - Preconditions: None (pure function)
@@ -213,12 +213,12 @@
     - Invariant: balance >= 50 → #FFFFFF, 0 < balance < 50 → #FFA500, balance <= 0 → #FF4444
     - Edge cases: exactly $50, exactly $0, negative values, boundary values ($49.99, $50.01)
     - Assertion: `assert get_balance_color(balance) == expected_color`
-  - [ ] 9.4 Implement create_tab_overlay_html function
+  - [x] 9.4 Implement create_tab_overlay_html function
     - Generate HTML with semi-transparent dark background (rgba 0,0,0,0.7)
     - Position at bottom-left with 16px padding
     - Display "Tab: $X.XX" on left, "Balance: $X.XX" on right with 12px gap
     - _Requirements: 2.1, 2.4, 6.1_
-  - [ ] 9.5 Implement count-up animation JavaScript
+  - [x] 9.5 Implement count-up animation JavaScript
     - Trigger: animation starts whenever displayed value changes (from tool result or state update)
     - Animation lifecycle:
       1. Start from current displayed value
@@ -227,7 +227,7 @@
       4. Settle to final state
     - Events/hooks: onAnimationStart, onAnimationComplete, onAnimationCancel
     - _Requirements: 2.3, 5.1, 5.2, 5.4_
-  - [ ] 9.6 Implement animation queue for rapid updates
+  - [x] 9.6 Implement animation queue for rapid updates
     - Serialize updates: new update enqueues and starts only after current 500ms animation completes
     - Collapse strategy (by time window):
       - Updates arriving within 100ms of each other collapse into single animation
@@ -238,7 +238,7 @@
     - Cancellation: if forced immediate update requested, cancel running animation and render final value instantly
     - Queue behavior: FIFO with time-window collapse optimization
     - _Requirements: 5.3_
-  - [ ] 9.7 Write property test for animation queue length
+  - [x] 9.7 Write property test for animation queue length
     - **Property 6: Animation Queue Length Consistency**
     - **Validates: Requirements 5.3**
     - Preconditions: Animation queue initialized, no animations running
@@ -247,26 +247,26 @@
     - Edge cases: single update, rapid consecutive updates, updates with same amount
     - Assertion: `assert len(animation_queue) == num_updates_added`
 
-- [ ] 10. Integrate tab overlay into Gradio UI
-  - [ ] 10.1 Modify launcher.py to include tab overlay
+- [x] 10. Integrate tab overlay into Gradio UI
+  - [x] 10.1 Modify launcher.py to include tab overlay
     - Replace static avatar Image with HTML component
     - Create create_avatar_with_overlay function
     - _Requirements: 2.1_
-  - [ ] 10.2 Add tab and balance state to Gradio interface
+  - [x] 10.2 Add tab and balance state to Gradio interface
     - Add tab_state and balance_state gr.State components
     - Pass to handler functions
     - _Requirements: 2.2, 6.2_
-  - [ ] 10.3 Update handlers to return tab overlay updates
+  - [x] 10.3 Update handlers to return tab overlay updates
     - Modify handle_gradio_input to return updated overlay HTML
     - Include previous values for animation
     - _Requirements: 2.2, 2.3_
-  - [ ] 10.4 Wire up clear button to reset tab overlay
+  - [x] 10.4 Wire up clear button to reset tab overlay
     - Reset all payment state fields to DEFAULT_PAYMENT_STATE values defined in Task 1.1
     - DEFAULT_PAYMENT_STATE: balance=$1000.00, tab_total=$0.00, payment_status="pending", version=0
     - This is a global default applied to all new sessions
     - _Requirements: 1.1_
 
-- [ ] 11. Checkpoint - Ensure all tests pass
+- [x] 11. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 12. Add payment tools to LLM tool list

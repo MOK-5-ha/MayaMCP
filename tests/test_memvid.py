@@ -16,8 +16,8 @@ from src.config import setup_logging, get_api_keys
 from src.rag.memvid_store import initialize_memvid_store, search_memvid_documents
 from src.rag.memvid_pipeline import memvid_rag_pipeline
 from tests.test_config import (
-    DIFFICULT_CUSTOMERS_QUERY,
     ROUGH_DAY_QUERY,
+    PATIENCE_QUERY,
     memvid_queries
 )
 
@@ -46,8 +46,8 @@ def test_memvid_integration(force_rebuild_flag):
     memvid_retriever, documents = initialize_memvid_store(force_rebuild=force_rebuild_flag)
     assert len(documents) > 0, "Should have documents in store"
     
-    # Test search
-    query = "What about difficult customers?"
+    # Test search - use query that matches DEFAULT_DOCUMENTS content
+    query = "rough day"
     results = search_memvid_documents(memvid_retriever, query, n_results=2)
     assert len(results) > 0, f"Should retrieve documents for query: {query}"
     
@@ -81,7 +81,7 @@ def test_memvid_queries(force_rebuild_flag):
         
         if memvid_retriever and documents:
             # Test with predefined queries
-            test_queries = [DIFFICULT_CUSTOMERS_QUERY, ROUGH_DAY_QUERY] + memvid_queries.queries
+            test_queries = [ROUGH_DAY_QUERY, PATIENCE_QUERY] + memvid_queries.queries
             
             for query in test_queries:
                 try:

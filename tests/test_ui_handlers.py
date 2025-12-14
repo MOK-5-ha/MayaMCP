@@ -7,11 +7,14 @@ from src.ui.handlers import handle_gradio_input, clear_chat_state
 class TestHandleGradioInput:
     """Test cases for handle_gradio_input function."""
 
+    @patch('src.ui.handlers.create_tab_overlay_html')
+    @patch('src.ui.handlers.get_payment_state')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_successful_processing(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_get_payment_state, mock_create_overlay
     ):
         """Test successful input processing with TTS."""
         # Setup mocks
@@ -25,6 +28,8 @@ class TestHandleGradioInput:
         
         mock_get_voice_audio.return_value = b'audio_data'
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
         mock_cartesia_client = Mock()
@@ -35,6 +40,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=mock_cartesia_client,
@@ -57,24 +64,22 @@ class TestHandleGradioInput:
         # Verify TTS was called
         mock_get_voice_audio.assert_called_once_with("Here's your drink!", mock_cartesia_client)
 
-        # Note: get_current_order_state is NOT called in the happy path anymore,
-        # since the implementation now uses updated_order from process_order() directly
+        # Verify return value structure (now includes overlay and payment state)
+        assert result[0] == ""  # empty_input
+        assert result[1] == [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}]
+        assert result[4] == b'audio_data'
+        assert result[5] == '<div>overlay</div>'  # overlay HTML
+        assert result[6] == 13.0  # new_tab
+        assert result[7] == 987.0  # new_balance
 
-        # Verify return value structure
-        expected_result = (
-            "",  # empty_input
-            [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],  # updated_history
-            [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],  # updated_history_for_gradio
-            [{'name': 'Martini', 'price': 13.0}],  # updated_order
-            b'audio_data'  # audio_data
-        )
-        assert result == expected_result
-
+    @patch('src.ui.handlers.create_tab_overlay_html')
+    @patch('src.ui.handlers.get_payment_state')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_no_tts_client(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_get_payment_state, mock_create_overlay
     ):
         """Test input processing when TTS client is not available."""
         # Setup mocks
@@ -87,6 +92,8 @@ class TestHandleGradioInput:
         )
         
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function without TTS client
         mock_request = Mock()
@@ -95,6 +102,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=None,  # No TTS client
@@ -111,11 +120,14 @@ class TestHandleGradioInput:
         # Verify return value has None for audio
         assert result[4] is None  # audio_data should be None
 
+    @patch('src.ui.handlers.create_tab_overlay_html')
+    @patch('src.ui.handlers.get_payment_state')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_empty_response_text(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_get_payment_state, mock_create_overlay
     ):
         """Test input processing when response text is empty."""
         # Setup mocks
@@ -128,6 +140,8 @@ class TestHandleGradioInput:
         )
         
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
         mock_request = Mock()
@@ -136,6 +150,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -152,11 +168,14 @@ class TestHandleGradioInput:
         # Verify return value has None for audio
         assert result[4] is None
 
+    @patch('src.ui.handlers.create_tab_overlay_html')
+    @patch('src.ui.handlers.get_payment_state')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_tts_failure(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_get_payment_state, mock_create_overlay
     ):
         """Test input processing when TTS generation fails."""
         # Setup mocks
@@ -170,6 +189,8 @@ class TestHandleGradioInput:
         
         mock_get_voice_audio.side_effect = Exception("TTS failed")
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
         mock_request = Mock()
@@ -178,6 +199,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -194,16 +217,19 @@ class TestHandleGradioInput:
         # Verify return value has None for audio due to failure
         assert result[4] is None
 
+    @patch('src.ui.handlers.create_tab_overlay_html')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_process_order_exception(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_create_overlay
     ):
         """Test input processing when process_order raises exception."""
         # Setup mocks
         mock_process_order.side_effect = Exception("Processing failed")
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
         mock_request = Mock()
@@ -212,6 +238,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -235,12 +263,17 @@ class TestHandleGradioInput:
         assert result[2] == result[1]  # same history for gradio
         assert result[3] == [{'name': 'Martini', 'price': 13.0}]  # current order state
         assert result[4] is None  # no audio
+        # Verify overlay is returned with unchanged values on error
+        assert result[5] == '<div>overlay</div>'
 
+    @patch('src.ui.handlers.create_tab_overlay_html')
+    @patch('src.ui.handlers.get_payment_state')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_with_rag_components(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_get_payment_state, mock_create_overlay
     ):
         """Test input processing with RAG components provided."""
         # Setup mocks
@@ -254,6 +287,8 @@ class TestHandleGradioInput:
         
         mock_get_voice_audio.return_value = b'audio_data'
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function with RAG components
         mock_request = Mock()
@@ -262,6 +297,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -279,21 +316,19 @@ class TestHandleGradioInput:
         assert call_args[1]['rag_documents'] == ["doc1", "doc2"]
         assert call_args[1]['rag_retriever'] is not None
 
-        # Verify return value structure
-        expected_result = (
-            "",  # empty_input
-            [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],  # updated_history
-            [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],  # updated_history_for_gradio
-            [{'name': 'Martini', 'price': 13.0}],  # updated_order
-            b'audio_data'  # audio_data
-        )
-        assert result == expected_result
+        # Verify return value structure (now includes overlay and payment state)
+        assert result[0] == ""  # empty_input
+        assert result[4] == b'audio_data'
+        assert result[5] == '<div>overlay</div>'  # overlay HTML
 
+    @patch('src.ui.handlers.create_tab_overlay_html')
+    @patch('src.ui.handlers.get_payment_state')
     @patch('src.ui.handlers.get_current_order_state')
     @patch('src.ui.handlers.get_voice_audio')
     @patch('src.ui.handlers.process_order')
     def test_handle_gradio_input_whitespace_only_response(
-        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state
+        self, mock_process_order, mock_get_voice_audio, mock_get_current_order_state,
+        mock_get_payment_state, mock_create_overlay
     ):
         """Test input processing when response text is only whitespace."""
         # Setup mocks
@@ -306,6 +341,8 @@ class TestHandleGradioInput:
         )
         
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
+        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
         mock_request = Mock()
@@ -314,6 +351,8 @@ class TestHandleGradioInput:
         result = handle_gradio_input(
             user_input="I'd like a Martini",
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
+            current_tab=0.0,
+            current_balance=1000.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),

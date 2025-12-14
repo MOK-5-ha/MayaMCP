@@ -603,3 +603,268 @@ class TestPaymentCompletionStateReset:
         payment = get_payment_state(session_id, store)
         assert payment['needs_reconciliation'] is False
         assert payment['payment_status'] == "completed"
+
+
+# Import for balance color tests
+from src.ui.tab_overlay import get_balance_color, COLOR_NORMAL, COLOR_LOW_FUNDS, COLOR_DEPLETED
+
+
+class TestBalanceColorSelection:
+    """
+    **Feature: stripe-payment, Property 7: Balance Color Selection**
+
+    *For any* balance value B:
+    - If B >= 50.00, color SHALL be white (#FFFFFF)
+    - If 0 < B < 50.00, color SHALL be orange (#FFA500)
+    - If B <= 0, color SHALL be red (#FF4444)
+
+    Every numeric balance maps to exactly one color with no gaps or overlaps.
+
+    **Validates: Requirements 6.3, 6.4**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        balance=st.floats(min_value=-100.00, max_value=2000.00, allow_nan=False)
+    )
+    def test_balance_color_selection(self, balance):
+        """
+        Property 7: Balance Color Selection
+
+        Preconditions: None (pure function)
+        Generators: balance in [-100.00, 2000.00] covering all ranges
+        Invariant: balance >= 50 → #FFFFFF, 0 < balance < 50 → #FFA500, balance <= 0 → #FF4444
+        """
+        color = get_balance_color(balance)
+
+        # Determine expected color based on balance
+        if balance >= 50.0:
+            expected_color = COLOR_NORMAL  # #FFFFFF
+        elif balance > 0:
+            expected_color = COLOR_LOW_FUNDS  # #FFA500
+        else:
+            expected_color = COLOR_DEPLETED  # #FF4444
+
+        assert color == expected_color, (
+            f"Balance {balance} should map to {expected_color}, got {color}"
+        )
+
+    def test_exactly_50_dollars(self):
+        """Edge case: exactly $50"""
+        color = get_balance_color(50.0)
+        assert color == COLOR_NORMAL, "Balance of exactly $50 should be white"
+
+    def test_exactly_0_dollars(self):
+        """Edge case: exactly $0"""
+        color = get_balance_color(0.0)
+        assert color == COLOR_DEPLETED, "Balance of exactly $0 should be red"
+
+    def test_negative_balance(self):
+        """Edge case: negative values"""
+        color = get_balance_color(-50.0)
+        assert color == COLOR_DEPLETED, "Negative balance should be red"
+
+    def test_boundary_49_99(self):
+        """Edge case: boundary value $49.99"""
+        color = get_balance_color(49.99)
+        assert color == COLOR_LOW_FUNDS, "Balance of $49.99 should be orange"
+
+    def test_boundary_50_01(self):
+        """Edge case: boundary value $50.01"""
+        color = get_balance_color(50.01)
+        assert color == COLOR_NORMAL, "Balance of $50.01 should be white"
+
+    def test_boundary_0_01(self):
+        """Edge case: boundary value $0.01"""
+        color = get_balance_color(0.01)
+        assert color == COLOR_LOW_FUNDS, "Balance of $0.01 should be orange"
+
+    def test_boundary_negative_0_01(self):
+        """Edge case: boundary value -$0.01"""
+        color = get_balance_color(-0.01)
+        assert color == COLOR_DEPLETED, "Balance of -$0.01 should be red"
+
+
+
+# Import for animation queue tests
+from src.ui.tab_overlay import AnimationQueue, TabUpdate
+import time
+
+
+class TestAnimationQueueLengthConsistency:
+    """
+    **Feature: stripe-payment, Property 6: Animation Queue Length Consistency**
+
+    *For any* sequence of N item additions to the tab, the animation queue
+    SHALL contain exactly N pending animations before any are executed.
+
+    Note: This property tests the deterministic queue length invariant.
+    Animation timing verification is handled via integration tests.
+
+    **Validates: Requirements 5.3**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        updates=st.lists(
+            st.floats(min_value=0.01, max_value=100.00, allow_nan=False),
+            min_size=1,
+            max_size=50
+        )
+    )
+    def test_animation_queue_length_consistency(self, updates):
+        """
+        Property 6: Animation Queue Length Consistency
+
+        Preconditions: Animation queue initialized, no animations running
+        Generators: sequence of 1-50 tab updates with random amounts
+        Invariant: queue length == number of updates added (before execution)
+        
+        Note: This test adds updates with sufficient delay (>100ms simulated)
+        to prevent collapse behavior, testing the basic queue length property.
+        """
+        queue = AnimationQueue()
+        
+        # Add updates with simulated time gaps > 100ms to prevent collapse
+        running_tab = 0.0
+        for i, amount in enumerate(updates):
+            prev_tab = running_tab
+            running_tab += amount
+            
+            update = TabUpdate(
+                start_tab=prev_tab,
+                end_tab=running_tab,
+                start_balance=1000.0 - prev_tab,
+                end_balance=1000.0 - running_tab
+            )
+            
+            # Simulate time passing to prevent collapse (>100ms between updates)
+            queue._last_enqueue_time = 0  # Reset to ensure no collapse
+            queue.enqueue(update)
+        
+        # Assert: queue length equals number of updates (capped at MAX_DEPTH)
+        expected_length = min(len(updates), AnimationQueue.MAX_DEPTH)
+        assert queue.get_queue_length() == expected_length, (
+            f"Queue length should be {expected_length}, got {queue.get_queue_length()}"
+        )
+
+    def test_single_update_queue_length(self):
+        """Edge case: single update"""
+        queue = AnimationQueue()
+        
+        update = TabUpdate(
+            start_tab=0.0,
+            end_tab=10.0,
+            start_balance=1000.0,
+            end_balance=990.0
+        )
+        queue.enqueue(update)
+        
+        assert queue.get_queue_length() == 1
+
+    def test_rapid_consecutive_updates_collapse(self):
+        """Edge case: rapid consecutive updates should collapse"""
+        queue = AnimationQueue()
+        
+        # Simulate rapid updates within 100ms window
+        # These should collapse into a single animation
+        base_time = time.time() * 1000
+        
+        # First update
+        queue._last_enqueue_time = base_time
+        queue.enqueue(TabUpdate(
+            start_tab=0.0,
+            end_tab=10.0,
+            start_balance=1000.0,
+            end_balance=990.0
+        ))
+        
+        # Second update within 100ms - should collapse
+        queue._last_enqueue_time = base_time + 50  # 50ms later
+        queue.enqueue(TabUpdate(
+            start_tab=10.0,
+            end_tab=25.0,
+            start_balance=990.0,
+            end_balance=975.0
+        ))
+        
+        # Should have collapsed to 1 item
+        assert queue.get_queue_length() == 1
+        
+        # The collapsed item should have start from first, end from last
+        item = queue._queue[0]
+        assert item.start_tab == 0.0
+        assert item.end_tab == 25.0
+
+    def test_updates_with_same_amount(self):
+        """Edge case: updates with same amount"""
+        queue = AnimationQueue()
+        
+        for i in range(5):
+            queue._last_enqueue_time = 0  # Reset to prevent collapse
+            queue.enqueue(TabUpdate(
+                start_tab=i * 10.0,
+                end_tab=(i + 1) * 10.0,
+                start_balance=1000.0 - i * 10.0,
+                end_balance=1000.0 - (i + 1) * 10.0
+            ))
+        
+        assert queue.get_queue_length() == 5
+
+    def test_queue_max_depth_enforcement(self):
+        """Test that queue respects MAX_DEPTH limit"""
+        queue = AnimationQueue()
+        
+        # Add more than MAX_DEPTH updates
+        for i in range(10):
+            queue._last_enqueue_time = 0  # Reset to prevent collapse
+            queue.enqueue(TabUpdate(
+                start_tab=i * 10.0,
+                end_tab=(i + 1) * 10.0,
+                start_balance=1000.0,
+                end_balance=990.0
+            ))
+        
+        # Queue should be capped at MAX_DEPTH
+        assert queue.get_queue_length() == AnimationQueue.MAX_DEPTH
+
+    def test_process_next_reduces_queue_length(self):
+        """Test that processing reduces queue length"""
+        queue = AnimationQueue()
+        
+        for i in range(3):
+            queue._last_enqueue_time = 0
+            queue.enqueue(TabUpdate(
+                start_tab=i * 10.0,
+                end_tab=(i + 1) * 10.0,
+                start_balance=1000.0,
+                end_balance=990.0
+            ))
+        
+        assert queue.get_queue_length() == 3
+        
+        # Process one
+        queue.process_next()
+        assert queue.get_queue_length() == 2
+        
+        # Process another
+        queue.process_next()
+        assert queue.get_queue_length() == 1
+
+    def test_cancel_all_clears_queue(self):
+        """Test that cancel_all clears the queue"""
+        queue = AnimationQueue()
+        
+        for i in range(3):
+            queue._last_enqueue_time = 0
+            queue.enqueue(TabUpdate(
+                start_tab=i * 10.0,
+                end_tab=(i + 1) * 10.0,
+                start_balance=1000.0,
+                end_balance=990.0
+            ))
+        
+        assert queue.get_queue_length() == 3
+        
+        queue.cancel_all()
+        assert queue.get_queue_length() == 0

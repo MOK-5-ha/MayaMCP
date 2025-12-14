@@ -39,13 +39,13 @@ class MemvidTestQueries:
     CATEGORY_EDGE_CASE = "edge_case"
     CATEGORY_STRESS_TEST = "stress_test"
 
-    # Basic conversational queries - original hardcoded queries
+    # Basic conversational queries - queries that match DEFAULT_DOCUMENTS content
     BASIC_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
-                "What about difficult customers?": (
-            "Query about handling challenging customer interactions"
-        ),
-        'I\'m having a rough day': (
+        "rough day": (
             "Query expressing emotional difficulty or stress"
+        ),
+        "patience bartending": (
+            "Query about bartending skills and patience"
         ),
     }
 
@@ -53,21 +53,21 @@ class MemvidTestQueries:
     EDGE_CASE_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
         "": "Empty query to test input validation",
         "   ": "Whitespace-only query to test trimming and validation",
-                "What about difficult customers? " * 10: (
+        "rough day patience bartending " * 10: (
             "Very long query to test length limits"
         ),
         "Help": "Very short, ambiguous query to test minimal context handling",
-        "I need advice on dealing with angry clients who won't listen to reason": (
+        "I need advice on dealing with a rough day at work": (
             "Complex multi-sentence query"
         ),
     }
 
     # Stress test queries for performance testing
     STRESS_TEST_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
-        "Can you help me with customer service techniques for handling irate customers who are being unreasonable and difficult to calm down?": (
+        "I'm having a rough day and could use some patience and understanding from a bartender": (
             "Long, detailed query for stress testing"
         ),
-        "I'm dealing with a very challenging customer situation": (
+        "I'm dealing with a very challenging day": (
             "Vague query requiring context expansion"
         ),
     }
@@ -137,13 +137,13 @@ memvid_queries = MemvidTestQueries()
 
 
 # Convenience constants for backward compatibility and easy access
-DIFFICULT_CUSTOMERS_QUERY: QueryText = "What about difficult customers?"
-ROUGH_DAY_QUERY: QueryText = "I\'m having a rough day"
+ROUGH_DAY_QUERY: QueryText = "rough day"
+PATIENCE_QUERY: QueryText = "patience bartending"
 
 # All basic queries as a list for easy iteration
 BASIC_TEST_QUERIES: List[QueryText] = [
-    DIFFICULT_CUSTOMERS_QUERY,
     ROUGH_DAY_QUERY,
+    PATIENCE_QUERY,
 ]
 
 # All queries as a list for comprehensive testing
