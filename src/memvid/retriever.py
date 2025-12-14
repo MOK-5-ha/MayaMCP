@@ -36,6 +36,10 @@ class MemvidRetriever:
         self.index_data = self._load_index()
         self._frame_cache = {}
         
+        # Verify index is a dict
+        if not isinstance(self.index_data, dict):
+            raise ValueError(f"Memvid index must be a JSON object: {self.index_file}")
+        
         # Verify index has data
         if not self.index_data.get("chunks"):
             raise ValueError(f"Memvid index invalid or empty: {self.index_file}")

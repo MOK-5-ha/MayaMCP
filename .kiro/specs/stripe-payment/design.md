@@ -49,7 +49,19 @@ graph TB
 5. If insufficient: return error (no state changes), Maya responds with friendly message
 6. Release session lock
 7. When user pays: create Stripe payment link via MCP server with idempotency key
-8. On payment success: atomically reset tab and mark as paid
+8. On payment success: atomically reset tab, tip, and mark as paid
+
+### Tipping Data Flow
+
+1. User clicks tip button (10%, 15%, or 20%) in Tab Overlay
+2. UI generates prompt: "I'm tipping you X% for your great service!"
+3. Prompt sent to Maya via chat interface (same as user typing)
+4. LLM processes prompt and invokes `set_tip` tool
+5. Tool calculates tip_amount = tab_total * (percentage / 100)
+6. Payment state updated with tip_percentage and tip_amount
+7. Tab Overlay re-renders showing tip amount and new total
+8. Maya responds conversationally acknowledging the tip
+9. If same button clicked again (toggle): tip removed, prompt "I've removed the tip." sent
 
 ### Concurrency and Idempotency
 
@@ -130,6 +142,8 @@ def cleanup_expired_session_locks(max_age_seconds: int = 3600) -> int:
 DEFAULT_PAYMENT_STATE = {
     'balance': 1000.00,          # Starting balance
     'tab_total': 0.00,           # Current tab amount
+    'tip_percentage': None,      # Optional[Literal[10, 15, 20]] - None when no tip
+    'tip_amount': 0.00,          # Calculated tip amount (>= 0)
     'stripe_payment_id': None,   # Stripe payment link ID if created
     'payment_status': 'pending', # pending, processing, completed
     'idempotency_key': None,     # For Stripe request deduplication
@@ -152,6 +166,31 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
 def check_sufficient_funds(session_id: str, store: MutableMapping, 
                            amount: float) -> Tuple[bool, float]:
     """Check if user has sufficient balance. Returns (has_funds, current_balance)."""
+
+def set_tip(session_id: str, store: MutableMapping, 
+            percentage: Optional[int]) -> Tuple[float, float]:
+    """Set tip percentage and calculate tip amount.
+    
+    Args:
+        percentage: 10, 15, 20, or None to remove tip
+        
+    Returns:
+        (tip_amount, total) where total = tab_total + tip_amount
+    """
+
+def calculate_tip(tab_total: float, percentage: int) -> float:
+    """Calculate tip amount from tab total and percentage.
+    
+    Args:
+        tab_total: Current tab amount (drinks only, no previous tip)
+        percentage: 10, 15, or 20
+        
+    Returns:
+        Tip amount rounded to 2 decimal places
+    """
+
+def get_payment_total(session_id: str, store: MutableMapping) -> float:
+    """Get total payment amount including tab and tip."""
 ```
 
 ### 2. Payment Tools (`src/llm/tools.py`)
@@ -216,6 +255,26 @@ def check_payment_status() -> ToolResponse:
         Success: {"status": "ok", "result": {"payment_status": str}}  # pending, succeeded, failed, timeout
         Error: {"status": "error", "error": "PAYMENT_FAILED", "message": "..."}
     """
+
+@tool
+def set_tip(percentage: Optional[int]) -> ToolResponse:
+    """Set tip percentage for current tab.
+    
+    Args:
+        percentage: 10, 15, 20 to set tip, or None to remove tip
+        
+    Returns:
+        Success: {"status": "ok", "result": {"tip_percentage": int|None, "tip_amount": float, "total": float}}
+        Error: {"status": "error", "error": "INVALID_TIP_PERCENTAGE", "message": "..."}
+    """
+
+@tool
+def get_tip() -> ToolResponse:
+    """Get current tip information.
+    
+    Returns:
+        {"status": "ok", "result": {"tip_percentage": int|None, "tip_amount": float, "tab": float, "total": float}}
+    """
 ```
 
 ### 3. Stripe MCP Integration (`src/payments/stripe_mcp.py`)
@@ -253,17 +312,23 @@ New component for the animated tab display overlay.
 ```python
 def create_tab_overlay_html(tab_amount: float, balance: float, 
                             prev_tab: float = 0.0, 
-                            prev_balance: float = 1000.0) -> str:
-    """Generate HTML/CSS for tab overlay with animation.
+                            prev_balance: float = 1000.0,
+                            tip_percentage: Optional[int] = None,
+                            tip_amount: float = 0.0,
+                            on_tip_click_callback: str = "") -> str:
+    """Generate HTML/CSS for tab overlay with animation and tip buttons.
     
     Args:
-        tab_amount: Current tab total
+        tab_amount: Current tab total (drinks only)
         balance: Current user balance
         prev_tab: Previous tab amount (for animation)
         prev_balance: Previous balance (for animation)
+        tip_percentage: Currently selected tip (10, 15, 20) or None
+        tip_amount: Calculated tip amount
+        on_tip_click_callback: JavaScript callback name for tip button clicks
     
     Returns:
-        HTML string with embedded CSS and JavaScript for animations
+        HTML string with embedded CSS and JavaScript for animations and tip buttons
     """
     
 def get_balance_color(balance: float) -> str:
@@ -273,6 +338,40 @@ def get_balance_color(balance: float) -> str:
         '#FFFFFF' for balance >= $50 (normal)
         '#FFA500' for 0 < balance < $50 (low funds)
         '#FF4444' for balance <= $0 (depleted/negative)
+    """
+
+def create_tip_buttons_html(tab_amount: float, selected_percentage: Optional[int] = None) -> str:
+    """Generate HTML for tip selection buttons.
+    
+    Args:
+        tab_amount: Current tab total (to determine if buttons should be enabled)
+        selected_percentage: Currently selected tip percentage or None
+        
+    Returns:
+        HTML string with three tip buttons (10%, 15%, 20%)
+        - Buttons disabled/hidden if tab_amount == 0
+        - Selected button highlighted with #4CAF50 background color
+        - Unselected buttons use default styling
+        - Visual state updates immediately on select/replace/toggle
+    """
+
+def generate_tip_notification(percentage: int, tip_amount: float, tab_total: float) -> str:
+    """Generate notification message sent to Maya when user selects a tip.
+    
+    Args:
+        percentage: Selected tip percentage (10, 15, or 20)
+        tip_amount: Calculated tip amount
+        tab_total: Current tab total
+        
+    Returns:
+        Message conveying tip selection intent (phrasing may vary)
+    """
+
+def generate_tip_removal_notification() -> str:
+    """Generate notification message sent to Maya when user removes tip.
+    
+    Returns:
+        Message conveying tip removal intent (phrasing may vary)
     """
 ```
 
@@ -307,6 +406,24 @@ class TabUpdate:
     item_added: Optional[str] = None
 ```
 
+### Tip State Schema
+
+```python
+@dataclass
+class TipState:
+    tip_percentage: Optional[Literal[10, 15, 20]] = None  # None when no tip selected
+    tip_amount: float = 0.00  # >= 0, calculated from tab_total * percentage / 100
+    
+@dataclass
+class TipUpdate:
+    previous_percentage: Optional[int]
+    new_percentage: Optional[int]
+    previous_tip: float
+    new_tip: float
+    tab_total: float
+    total_with_tip: float
+```
+
 ### Error Codes
 
 ```python
@@ -314,6 +431,7 @@ class PaymentError(Enum):
     INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS"
     STRIPE_UNAVAILABLE = "STRIPE_UNAVAILABLE"
     PAYMENT_FAILED = "PAYMENT_FAILED"
+    INVALID_TIP_PERCENTAGE = "INVALID_TIP_PERCENTAGE"  # Tip percentage not 10, 15, or 20
 ```
 
 
@@ -374,6 +492,48 @@ Based on the acceptance criteria analysis, the following correctness properties 
 Every numeric balance maps to exactly one color with no gaps or overlaps.
 
 **Validates: Requirements 6.3, 6.4**
+
+### Property 8: Tip Calculation Accuracy
+
+*For any* tab total T > 0 and tip percentage P in {10, 15, 20}, the calculated tip amount SHALL equal T * (P / 100) rounded to 2 decimal places.
+
+**Validates: Requirements 7.2**
+
+### Property 9: Tip Toggle Behavior
+
+*For any* selected tip percentage P, clicking the same percentage button again SHALL result in tip_percentage = None and tip_amount = 0.00.
+
+**Validates: Requirements 7.6**
+
+### Property 10: Total Calculation with Tip
+
+*For any* tab total T and tip amount A, the displayed total SHALL equal T + A exactly.
+
+**Validates: Requirements 7.4, 7.8**
+
+### Property 11: Tip Replacement on New Selection
+
+*For any* existing tip with percentage P1 and new selection P2 where P1 != P2, the tip SHALL be recalculated as tab_total * (P2 / 100), completely replacing the previous tip.
+
+**Validates: Requirements 7.5**
+
+### Property 12: Tip Reset on Payment Completion
+
+*For any* successful payment completion with a non-zero tip, both tip_percentage SHALL be None and tip_amount SHALL be 0.00 after completion.
+
+**Validates: Requirements 7.9**
+
+### Property 13: Tip Notification Content
+
+*For any* tip selection with percentage P in {10, 15, 20} and calculated amount A, the generated notification SHALL contain both the percentage value P and the tip amount A.
+
+**Validates: Requirements 7.11**
+
+### Property 14: Tip Button Visual State
+
+*For any* tip selection state with selected_percentage P (where P is 10, 15, 20, or None), exactly one button SHALL have the highlighted style (#4CAF50 background) when P is not None, and zero buttons SHALL have the highlighted style when P is None.
+
+**Validates: Requirements 7.8**
 
 ## Error Handling
 
@@ -502,5 +662,6 @@ tests/
 ├── test_payment_tools.py      # LLM tool tests  
 ├── test_stripe_mcp.py         # Stripe integration tests
 ├── test_tab_overlay.py        # UI component tests
-└── test_payment_properties.py # Property-based tests
+├── test_tipping.py            # Tipping functionality tests
+└── test_payment_properties.py # Property-based tests (including tip properties)
 ```

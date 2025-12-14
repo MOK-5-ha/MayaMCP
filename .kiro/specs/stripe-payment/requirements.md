@@ -17,6 +17,10 @@ This document specifies the requirements for integrating Stripe payment function
 - **Pulse Effect**: Brief scale increase (1.0 to 1.1 to 1.0) applied to the counter during updates to draw attention
 - **Tab Overlay**: Semi-transparent container positioned at the bottom-left of Maya's avatar containing the tab counter and balance display
 - **Overlay Layout**: Tab counter on the left, balance display on the right, vertically center-aligned with 12px horizontal gap between them
+- **Tip**: Optional gratuity amount added to the tab before payment
+- **Tip Percentage**: Pre-defined tip options (10%, 15%, 20%) calculated from the current tab total
+- **Tip Buttons**: Interactive UI elements in the Tab_Overlay allowing users to select a tip percentage
+- **Selected Tip**: The currently chosen tip amount, displayed alongside the tab total
 
 ## Requirements
 
@@ -38,7 +42,7 @@ This document specifies the requirements for integrating Stripe payment function
 
 #### Acceptance Criteria
 
-1. WHEN the Gradio UI loads THEN the Tab_Overlay SHALL appear at the bottom-left of Maya's avatar with 16px padding from edges, displaying "Tab: $0.00" on the left and "Balance: $1000.00" on the right with 12px horizontal gap
+1. WHEN the Gradio UI loads THEN the Tab_Overlay SHALL appear at the bottom-left of Maya's avatar with 16px padding from edges, displaying from top to bottom: (1) "Tab: $0.00" on the left and "Balance: $1000.00" on the right with 12px horizontal gap, (2) tip buttons row (hidden when tab is $0), (3) tip and total row (hidden when no tip selected)
 2. WHEN a drink is added to the order THEN the Tab_Counter SHALL update to show the new total tab amount
 3. WHEN the tab amount changes THEN the Tab_Counter SHALL animate using a count-up animation from the previous value to the new value with a pulse effect
 4. WHILE the session is active THEN the Tab_Overlay SHALL remain visible with a semi-transparent dark background (rgba 0,0,0,0.7) for readability
@@ -85,3 +89,22 @@ This document specifies the requirements for integrating Stripe payment function
 2. WHEN the balance changes THEN the Balance_Display SHALL update with the same count-up animation and pulse effect as the tab counter
 3. WHEN the balance falls below $50 THEN the Balance_Display SHALL change text color from white to orange (#FFA500) to indicate low funds
 4. WHEN the balance reaches $0 THEN the Balance_Display SHALL change text color to red (#FF4444) to indicate depleted funds
+
+### Requirement 7
+
+**User Story:** As a user, I want to add a tip for Maya's service, so that I can show appreciation for a great bartending experience.
+
+#### Acceptance Criteria
+
+1. WHEN the Tab_Overlay displays a non-zero tab THEN the Tip_Buttons SHALL appear below the tab and balance display showing three options: 10%, 15%, and 20%
+2. WHEN a user clicks a Tip_Button THEN the Payment_System SHALL calculate the tip amount as the selected percentage of the current tab total, replacing any previously selected tip
+3. WHEN a tip is selected THEN the Tab_Overlay SHALL display both "Tip: $X.XX" and "Total: $X.XX" simultaneously below the tip buttons, with the tip amount on the left and total on the right, both updating immediately when the tip selection changes
+4. WHEN a tip is selected THEN the Total display SHALL show the sum of tab amount plus tip amount in the format "Total: $X.XX"
+5. WHEN a user clicks a different Tip_Button THEN the Payment_System SHALL replace the previous tip with the newly calculated tip amount
+6. WHEN a user clicks the currently selected Tip_Button THEN the Payment_System SHALL remove the tip (toggle behavior)
+7. WHEN the tab total is $0.00 THEN the Tip_Buttons SHALL be hidden or disabled
+8. WHEN a tip option is selected THEN the corresponding Tip_Button SHALL be visually distinguished from unselected buttons using a highlighted background color (#4CAF50) and the visual state SHALL update immediately on select, replace, and toggle actions to reflect the active or none state
+9. WHEN a payment is processed THEN the Payment_System SHALL include the tip amount in the total charged
+10. WHEN a payment is completed successfully THEN the Payment_System SHALL reset the tip amount to $0.00 along with the tab
+11. WHEN a user clicks a Tip_Button THEN the UI SHALL notify Maya of the tip selection including the percentage and calculated amount, and Maya SHALL respond conversationally acknowledging the tip with gratitude
+12. WHEN a user removes a tip by clicking the selected Tip_Button THEN the UI SHALL notify Maya of the tip removal, and Maya SHALL respond conversationally acknowledging the change without disappointment or offense
