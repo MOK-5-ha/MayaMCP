@@ -868,3 +868,440 @@ class TestAnimationQueueLengthConsistency:
         
         queue.cancel_all()
         assert queue.get_queue_length() == 0
+
+
+# =============================================================================
+# Tip-Related Property Tests
+# =============================================================================
+
+from src.utils.state_manager import (
+    calculate_tip,
+    set_tip,
+    get_payment_total,
+    VALID_TIP_PERCENTAGES,
+)
+
+
+class TestTipCalculationAccuracy:
+    """
+    **Feature: stripe-payment, Property 8: Tip Calculation Accuracy**
+
+    *For any* tab total T > 0 and tip percentage P in {10, 15, 20},
+    the calculated tip amount SHALL equal T * (P / 100) rounded to 2 decimal places.
+
+    **Validates: Requirements 7.2**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False),
+        percentage=st.sampled_from([10, 15, 20])
+    )
+    def test_tip_calculation_accuracy(self, tab_total, percentage):
+        """
+        Property 8: Tip Calculation Accuracy
+
+        Generators: tab_total in [0.01, 1000.00], percentage in {10, 15, 20}
+        Invariant: tip == round(tab * percentage / 100, 2)
+        """
+        # Act
+        tip = calculate_tip(tab_total, percentage)
+
+        # Assert: tip equals expected calculation
+        expected_tip = round(tab_total * (percentage / 100), 2)
+        assert abs(tip - expected_tip) < 0.001, (
+            f"Tip calculation incorrect: "
+            f"tab={tab_total}, percentage={percentage}, "
+            f"expected={expected_tip}, got={tip}"
+        )
+
+    def test_tip_10_percent(self):
+        """Test 10% tip calculation"""
+        assert calculate_tip(100.00, 10) == 10.00
+        assert calculate_tip(50.00, 10) == 5.00
+        assert calculate_tip(33.33, 10) == 3.33
+
+    def test_tip_15_percent(self):
+        """Test 15% tip calculation"""
+        assert calculate_tip(100.00, 15) == 15.00
+        assert calculate_tip(50.00, 15) == 7.50
+        assert calculate_tip(33.33, 15) == 5.00  # 4.9995 rounds to 5.00
+
+    def test_tip_20_percent(self):
+        """Test 20% tip calculation"""
+        assert calculate_tip(100.00, 20) == 20.00
+        assert calculate_tip(50.00, 20) == 10.00
+        assert calculate_tip(33.33, 20) == 6.67
+
+    def test_invalid_percentage_raises_error(self):
+        """Test that invalid percentages raise ValueError"""
+        with pytest.raises(ValueError):
+            calculate_tip(100.00, 5)
+        with pytest.raises(ValueError):
+            calculate_tip(100.00, 25)
+        with pytest.raises(ValueError):
+            calculate_tip(100.00, 0)
+
+
+class TestTipToggleBehavior:
+    """
+    **Feature: stripe-payment, Property 9: Tip Toggle Behavior**
+
+    *For any* selected tip percentage P, clicking the same percentage button again
+    SHALL result in tip_percentage = None and tip_amount = 0.00.
+
+    **Validates: Requirements 7.6**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False),
+        percentage=st.sampled_from([10, 15, 20]),
+        test_id=st.integers(min_value=0, max_value=2**31)
+    )
+    def test_tip_toggle_behavior(self, tab_total, percentage, test_id):
+        """
+        Property 9: Tip Toggle Behavior
+
+        Preconditions: Tip already selected with percentage P
+        Invariant: clicking same percentage results in tip_percentage=None, tip_amount=0
+        """
+        # Precondition: tip must be non-zero after rounding
+        # Very small tabs (e.g., $0.03 at 10%) round to $0.00 tip
+        expected_tip = round(tab_total * (percentage / 100), 2)
+        assume(expected_tip > 0)
+
+        # Setup
+        store = {}
+        session_id = f"test_tip_toggle_{test_id}"
+        initialize_state(session_id, store)
+
+        # Set up tab total
+        store[session_id]['payment']['tab_total'] = tab_total
+
+        # First: Set tip with percentage P
+        tip_amount, total = set_tip(session_id, store, percentage)
+        
+        # Verify tip was set
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] == percentage
+        assert payment['tip_amount'] > 0
+
+        # Act: Toggle by setting same percentage again
+        tip_amount_after, total_after = set_tip(session_id, store, percentage)
+
+        # Assert: Tip should be removed (toggle behavior)
+        payment_after = get_payment_state(session_id, store)
+        assert payment_after['tip_percentage'] is None, (
+            f"tip_percentage should be None after toggle, got {payment_after['tip_percentage']}"
+        )
+        assert payment_after['tip_amount'] == 0.0, (
+            f"tip_amount should be 0 after toggle, got {payment_after['tip_amount']}"
+        )
+        assert tip_amount_after == 0.0
+        assert total_after == tab_total  # Total should equal just the tab
+
+    def test_toggle_10_percent(self):
+        """Test toggle behavior for 10%"""
+        store = {}
+        session_id = "test_toggle_10"
+        initialize_state(session_id, store)
+        store[session_id]['payment']['tab_total'] = 100.00
+
+        # Set 10%
+        set_tip(session_id, store, 10)
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] == 10
+        assert payment['tip_amount'] == 10.00
+
+        # Toggle off
+        set_tip(session_id, store, 10)
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] is None
+        assert payment['tip_amount'] == 0.0
+
+    def test_toggle_15_percent(self):
+        """Test toggle behavior for 15%"""
+        store = {}
+        session_id = "test_toggle_15"
+        initialize_state(session_id, store)
+        store[session_id]['payment']['tab_total'] = 100.00
+
+        set_tip(session_id, store, 15)
+        set_tip(session_id, store, 15)
+        
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] is None
+        assert payment['tip_amount'] == 0.0
+
+    def test_toggle_20_percent(self):
+        """Test toggle behavior for 20%"""
+        store = {}
+        session_id = "test_toggle_20"
+        initialize_state(session_id, store)
+        store[session_id]['payment']['tab_total'] = 100.00
+
+        set_tip(session_id, store, 20)
+        set_tip(session_id, store, 20)
+        
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] is None
+        assert payment['tip_amount'] == 0.0
+
+
+class TestTotalCalculationWithTip:
+    """
+    **Feature: stripe-payment, Property 10: Total Calculation with Tip**
+
+    *For any* tab total T and tip amount A, the displayed total SHALL equal T + A exactly.
+
+    **Validates: Requirements 7.4, 7.9**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False),
+        tip_amount=st.floats(min_value=0.0, max_value=200.00, allow_nan=False),
+        test_id=st.integers(min_value=0, max_value=2**31)
+    )
+    def test_total_calculation_with_tip(self, tab_total, tip_amount, test_id):
+        """
+        Property 10: Total Calculation with Tip
+
+        Generators: tab in [0.01, 1000.00], tip in [0, 200.00]
+        Invariant: total == tab + tip exactly
+        """
+        # Setup
+        store = {}
+        session_id = f"test_total_calc_{test_id}"
+        initialize_state(session_id, store)
+
+        # Set up tab and tip directly
+        store[session_id]['payment']['tab_total'] = tab_total
+        store[session_id]['payment']['tip_amount'] = tip_amount
+
+        # Act
+        total = get_payment_total(session_id, store)
+
+        # Assert: total == tab + tip
+        expected_total = tab_total + tip_amount
+        assert abs(total - expected_total) < 0.001, (
+            f"Total calculation incorrect: "
+            f"tab={tab_total}, tip={tip_amount}, "
+            f"expected={expected_total}, got={total}"
+        )
+
+    def test_total_with_zero_tip(self):
+        """Test total when tip is zero"""
+        store = {}
+        session_id = "test_total_zero_tip"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 100.00
+        store[session_id]['payment']['tip_amount'] = 0.00
+
+        total = get_payment_total(session_id, store)
+        assert total == 100.00
+
+    def test_total_with_tip_via_set_tip(self):
+        """Test total calculation using set_tip function"""
+        store = {}
+        session_id = "test_total_via_set_tip"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 100.00
+        
+        tip_amount, total = set_tip(session_id, store, 15)
+        
+        assert tip_amount == 15.00
+        assert total == 115.00
+        assert get_payment_total(session_id, store) == 115.00
+
+
+class TestTipReplacementOnNewSelection:
+    """
+    **Feature: stripe-payment, Property 11: Tip Replacement on New Selection**
+
+    *For any* existing tip with percentage P1 and new selection P2 where P1 != P2,
+    the tip SHALL be recalculated as tab_total * (P2 / 100), completely replacing
+    the previous tip.
+
+    **Validates: Requirements 7.5**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False),
+        p1=st.sampled_from([10, 15, 20]),
+        p2=st.sampled_from([10, 15, 20]),
+        test_id=st.integers(min_value=0, max_value=2**31)
+    )
+    def test_tip_replacement_on_new_selection(self, tab_total, p1, p2, test_id):
+        """
+        Property 11: Tip Replacement on New Selection
+
+        Preconditions: Existing tip with P1, new selection P2 where P1 != P2
+        Invariant: new tip = tab * P2 / 100, completely replaces old
+        """
+        # Skip if same percentage (that's toggle behavior, tested separately)
+        assume(p1 != p2)
+
+        # Setup
+        store = {}
+        session_id = f"test_tip_replace_{test_id}"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = tab_total
+
+        # Set initial tip with P1
+        set_tip(session_id, store, p1)
+        payment_after_p1 = get_payment_state(session_id, store)
+        assert payment_after_p1['tip_percentage'] == p1
+
+        # Act: Replace with P2
+        tip_amount, total = set_tip(session_id, store, p2)
+
+        # Assert: Tip is completely replaced with P2 calculation
+        expected_tip = round(tab_total * (p2 / 100), 2)
+        payment_after_p2 = get_payment_state(session_id, store)
+        
+        assert payment_after_p2['tip_percentage'] == p2, (
+            f"tip_percentage should be {p2}, got {payment_after_p2['tip_percentage']}"
+        )
+        assert abs(payment_after_p2['tip_amount'] - expected_tip) < 0.001, (
+            f"tip_amount should be {expected_tip}, got {payment_after_p2['tip_amount']}"
+        )
+        assert abs(tip_amount - expected_tip) < 0.001
+
+    def test_replace_10_with_15(self):
+        """Test replacing 10% with 15%"""
+        store = {}
+        session_id = "test_replace_10_15"
+        initialize_state(session_id, store)
+        store[session_id]['payment']['tab_total'] = 100.00
+
+        set_tip(session_id, store, 10)
+        assert get_payment_state(session_id, store)['tip_amount'] == 10.00
+
+        set_tip(session_id, store, 15)
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] == 15
+        assert payment['tip_amount'] == 15.00
+
+    def test_replace_20_with_10(self):
+        """Test replacing 20% with 10%"""
+        store = {}
+        session_id = "test_replace_20_10"
+        initialize_state(session_id, store)
+        store[session_id]['payment']['tab_total'] = 100.00
+
+        set_tip(session_id, store, 20)
+        assert get_payment_state(session_id, store)['tip_amount'] == 20.00
+
+        set_tip(session_id, store, 10)
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] == 10
+        assert payment['tip_amount'] == 10.00
+
+
+class TestTipResetOnPaymentCompletion:
+    """
+    **Feature: stripe-payment, Property 12: Tip Reset on Payment Completion**
+
+    *For any* successful payment completion with a non-zero tip,
+    both tip_percentage SHALL be None and tip_amount SHALL be 0.00 after completion.
+
+    **Validates: Requirements 7.10**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False),
+        percentage=st.sampled_from([10, 15, 20]),
+        test_id=st.integers(min_value=0, max_value=2**31)
+    )
+    def test_tip_reset_on_payment_completion(self, tab_total, percentage, test_id):
+        """
+        Property 12: Tip Reset on Payment Completion
+
+        Preconditions: Non-zero tip before payment
+        Invariant: tip_percentage=None, tip_amount=0 after completion
+        """
+        # Precondition: tip must be non-zero after rounding
+        # Very small tabs (e.g., $0.03 at 10%) round to $0.00 tip
+        expected_tip = round(tab_total * (percentage / 100), 2)
+        assume(expected_tip > 0)
+
+        # Setup
+        store = {}
+        session_id = f"test_tip_reset_{test_id}"
+        initialize_state(session_id, store)
+
+        # Set up tab and tip
+        store[session_id]['payment']['tab_total'] = tab_total
+        set_tip(session_id, store, percentage)
+
+        # Verify tip is set
+        payment_before = get_payment_state(session_id, store)
+        assert payment_before['tip_percentage'] == percentage
+        assert payment_before['tip_amount'] > 0
+
+        # Act: Complete payment
+        success = atomic_payment_complete(session_id, store)
+
+        # Assert: Payment succeeded and tip is reset
+        assert success, "Payment completion should succeed"
+        
+        payment_after = get_payment_state(session_id, store)
+        assert payment_after['tip_percentage'] is None, (
+            f"tip_percentage should be None after payment, got {payment_after['tip_percentage']}"
+        )
+        assert payment_after['tip_amount'] == 0.0, (
+            f"tip_amount should be 0 after payment, got {payment_after['tip_amount']}"
+        )
+
+    def test_tip_reset_with_10_percent(self):
+        """Test tip reset with 10% tip"""
+        store = {}
+        session_id = "test_tip_reset_10"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 100.00
+        set_tip(session_id, store, 10)
+
+        atomic_payment_complete(session_id, store)
+
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] is None
+        assert payment['tip_amount'] == 0.0
+        assert payment['tab_total'] == 0.0
+
+    def test_tip_reset_with_15_percent(self):
+        """Test tip reset with 15% tip"""
+        store = {}
+        session_id = "test_tip_reset_15"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 50.00
+        set_tip(session_id, store, 15)
+
+        atomic_payment_complete(session_id, store)
+
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] is None
+        assert payment['tip_amount'] == 0.0
+
+    def test_tip_reset_with_20_percent(self):
+        """Test tip reset with 20% tip"""
+        store = {}
+        session_id = "test_tip_reset_20"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 200.00
+        set_tip(session_id, store, 20)
+
+        atomic_payment_complete(session_id, store)
+
+        payment = get_payment_state(session_id, store)
+        assert payment['tip_percentage'] is None
+        assert payment['tip_amount'] == 0.0

@@ -18,8 +18,11 @@ from ..utils.state_manager import (
     atomic_order_update,
     atomic_payment_complete,
     update_payment_state,
+    set_tip as state_set_tip,
+    get_payment_total,
     INSUFFICIENT_FUNDS as STATE_INSUFFICIENT_FUNDS,
     CONCURRENT_MODIFICATION as STATE_CONCURRENT_MODIFICATION,
+    VALID_TIP_PERCENTAGES,
 )
 from ..payments.stripe_mcp import StripeMCPClient
 
@@ -80,6 +83,9 @@ class PaymentError(Enum):
     # PAYMENT_TIMEOUT: payment status polling exceeded deadline
     PAYMENT_TIMEOUT = "PAYMENT_TIMEOUT"
 
+    # INVALID_TIP_PERCENTAGE: tip percentage not in {10, 15, 20}
+    INVALID_TIP_PERCENTAGE = "INVALID_TIP_PERCENTAGE"
+
 
 # Human-readable message templates for each error code
 PAYMENT_ERROR_MESSAGES: Dict[PaymentError, str] = {
@@ -117,6 +123,10 @@ PAYMENT_ERROR_MESSAGES: Dict[PaymentError, str] = {
     PaymentError.PAYMENT_TIMEOUT: (
         "Payment status check timed out. "
         "Please check your payment status manually or try again."
+    ),
+    PaymentError.INVALID_TIP_PERCENTAGE: (
+        "Invalid tip percentage: {percentage}. "
+        "Please choose 10%, 15%, or 20%."
     ),
 }
 
@@ -534,6 +544,101 @@ def check_payment_status() -> ToolResponse:
 
 
 @tool
+def set_tip(percentage: Optional[int] = None) -> ToolResponse:
+    """Set tip percentage for current tab.
+
+    Implements toggle behavior: if the same percentage is already selected,
+    calling set_tip with that percentage will remove the tip.
+
+    Session context read implicitly from _current_session thread-local.
+
+    Args:
+        percentage: 10, 15, 20 to set tip, or None to remove tip
+
+    Returns:
+        Success: {"status": "ok", "result": {"tip_percentage": int|None, 
+                  "tip_amount": float, "total": float}}
+        Error: {"status": "error", "error": "INVALID_TIP_PERCENTAGE", "message": ...}
+               {"status": "error", "error": "INVALID_SESSION", "message": ...}
+
+    Requirements: 7.2, 7.5, 7.6
+    """
+    session_id = get_current_session()
+    if session_id is None:
+        logger.warning("set_tip called without session context")
+        return create_tool_error(
+            PaymentError.INVALID_SESSION,
+            "No active session. Please refresh and try again."
+        )
+
+    # Validate percentage
+    if percentage is not None and percentage not in VALID_TIP_PERCENTAGES:
+        logger.warning(f"Invalid tip percentage: {percentage}")
+        return create_tool_error(
+            PaymentError.INVALID_TIP_PERCENTAGE,
+            percentage=percentage
+        )
+
+    store = get_global_store()
+
+    try:
+        tip_amount, total = state_set_tip(session_id, store, percentage)
+        payment = get_payment_state(session_id, store)
+
+        logger.info(
+            f"Tip set for {session_id}: "
+            f"percentage={payment['tip_percentage']}, "
+            f"amount=${tip_amount:.2f}, total=${total:.2f}"
+        )
+
+        return create_tool_success({
+            "tip_percentage": payment['tip_percentage'],
+            "tip_amount": tip_amount,
+            "total": total
+        })
+
+    except ValueError as e:
+        logger.error(f"Failed to set tip: {e}")
+        return create_tool_error(
+            PaymentError.INVALID_TIP_PERCENTAGE,
+            str(e)
+        )
+
+
+@tool
+def get_tip() -> ToolResponse:
+    """Get current tip information.
+
+    Session context read implicitly from _current_session thread-local.
+
+    Returns:
+        Success: {"status": "ok", "result": {"tip_percentage": int|None, 
+                  "tip_amount": float, "tab": float, "total": float}}
+        Error: {"status": "error", "error": "INVALID_SESSION", "message": ...}
+
+    Requirements: 7.3, 7.4
+    """
+    session_id = get_current_session()
+    if session_id is None:
+        logger.warning("get_tip called without session context")
+        return create_tool_error(
+            PaymentError.INVALID_SESSION,
+            "No active session. Please refresh and try again."
+        )
+
+    store = get_global_store()
+    payment = get_payment_state(session_id, store)
+    total = get_payment_total(session_id, store)
+
+    return create_tool_success({
+        "tip_percentage": payment['tip_percentage'],
+        "tip_amount": payment['tip_amount'],
+        "tab": payment['tab_total'],
+        "total": total
+    })
+
+
+@tool
 def get_menu() -> str:
     """Provide the latest up-to-date menu."""
     return """
@@ -939,6 +1044,8 @@ def get_all_tools() -> List:
         get_balance,
         create_stripe_payment,
         check_payment_status,
+        set_tip,
+        get_tip,
         get_order,
         confirm_order,
         place_order,

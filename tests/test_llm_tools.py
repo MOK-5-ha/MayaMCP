@@ -665,7 +665,8 @@ class TestGetAllTools:
             'get_menu', 'get_recommendation', 'add_to_order',
             'add_to_order_with_balance', 'get_balance', 'get_order',
             'confirm_order', 'place_order', 'clear_order', 'get_bill',
-            'pay_bill', 'add_tip', 'create_stripe_payment', 'check_payment_status'
+            'pay_bill', 'add_tip', 'create_stripe_payment', 'check_payment_status',
+            'set_tip', 'get_tip'
         ]
 
         for expected_tool in expected_tools:

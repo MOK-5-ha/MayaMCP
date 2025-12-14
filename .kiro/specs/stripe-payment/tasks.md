@@ -269,76 +269,76 @@
 - [x] 11. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Add payment tools to LLM tool list
-  - [ ] 12.1 Register new payment tools in get_all_tools
+- [x] 12. Add payment tools to LLM tool list
+  - [x] 12.1 Register new payment tools in get_all_tools
     - Add add_to_order_with_balance, get_balance, create_stripe_payment, check_payment_status
     - _Requirements: 1.2, 1.4, 3.1, 3.3_
 
-- [ ] 13. Extend payment state with tipping fields
-  - [ ] 13.1 Add tip fields to PaymentState schema
+- [x] 13. Extend payment state with tipping fields
+  - [x] 13.1 Add tip fields to PaymentState schema
     - Add tip_percentage: Optional[Literal[10, 15, 20]] (None when no tip selected)
     - Add tip_amount: float (>= 0, default 0.00)
     - Update DEFAULT_PAYMENT_STATE: tip_percentage=None, tip_amount=0.00
     - Validation: tip_percentage must be None or one of {10, 15, 20}
     - _Requirements: 7.2, 7.3_
-  - [ ] 13.2 Implement calculate_tip function
+  - [x] 13.2 Implement calculate_tip function
     - Calculate tip as tab_total * (percentage / 100)
     - Round to 2 decimal places
     - _Requirements: 7.2_
-  - [ ] 13.3 Implement set_tip function in state_manager
+  - [x] 13.3 Implement set_tip function in state_manager
     - Accept percentage (10, 15, 20) or None to remove
     - Calculate and store tip_amount
     - Return (tip_amount, total)
     - _Requirements: 7.2, 7.5, 7.6_
-  - [ ] 13.4 Implement get_payment_total function
+  - [x] 13.4 Implement get_payment_total function
     - Return tab_total + tip_amount
     - _Requirements: 7.4, 7.9_
-  - [ ] 13.5 Update atomic_payment_complete to reset tip
+  - [x] 13.5 Update atomic_payment_complete to reset tip
     - Reset tip_percentage to None and tip_amount to 0.00
     - _Requirements: 7.10_
-  - [ ] 13.6 Write property test for tip calculation accuracy
+  - [x] 13.6 Write property test for tip calculation accuracy
     - **Property 8: Tip Calculation Accuracy**
     - **Validates: Requirements 7.2**
     - Generators: tab_total in [0.01, 1000.00], percentage in {10, 15, 20}
     - Invariant: tip == round(tab * percentage / 100, 2)
-  - [ ] 13.7 Write property test for tip toggle behavior
+  - [x] 13.7 Write property test for tip toggle behavior
     - **Property 9: Tip Toggle Behavior**
     - **Validates: Requirements 7.6**
     - Preconditions: Tip already selected with percentage P
     - Invariant: clicking same percentage results in tip_percentage=None, tip_amount=0
-  - [ ] 13.8 Write property test for total calculation with tip
+  - [x] 13.8 Write property test for total calculation with tip
     - **Property 10: Total Calculation with Tip**
     - **Validates: Requirements 7.4, 7.9**
     - Generators: tab in [0.01, 1000.00], tip in [0, 200.00]
     - Invariant: total == tab + tip exactly
-  - [ ] 13.9 Write property test for tip replacement
+  - [x] 13.9 Write property test for tip replacement
     - **Property 11: Tip Replacement on New Selection**
     - **Validates: Requirements 7.5**
     - Preconditions: Existing tip with P1, new selection P2 where P1 != P2
     - Invariant: new tip = tab * P2 / 100, completely replaces old
-  - [ ] 13.10 Write property test for tip reset on payment
+  - [x] 13.10 Write property test for tip reset on payment
     - **Property 12: Tip Reset on Payment Completion**
     - **Validates: Requirements 7.10**
     - Preconditions: Non-zero tip before payment
     - Invariant: tip_percentage=None, tip_amount=0 after completion
 
-- [ ] 14. Implement tipping tools
-  - [ ] 14.1 Implement set_tip LLM tool
+- [x] 14. Implement tipping tools
+  - [x] 14.1 Implement set_tip LLM tool
     - Validate percentage is 10, 15, 20, or None
     - Call state_manager.set_tip
     - Return ToolResponse with tip_percentage, tip_amount, total
     - _Requirements: 7.2, 7.5, 7.6_
-  - [ ] 14.2 Implement get_tip LLM tool
+  - [x] 14.2 Implement get_tip LLM tool
     - Return current tip_percentage, tip_amount, tab, total
     - _Requirements: 7.3, 7.4_
-  - [ ] 14.3 Add INVALID_TIP_PERCENTAGE to PaymentError enum
+  - [x] 14.3 Add INVALID_TIP_PERCENTAGE to PaymentError enum
     - Error for percentages not in {10, 15, 20}
     - _Requirements: 7.2_
-  - [ ] 14.4 Register tip tools in get_all_tools
+  - [x] 14.4 Register tip tools in get_all_tools
     - Add set_tip, get_tip to tool list
     - _Requirements: 7.2, 7.3_
 
-- [ ] 15. Checkpoint - Ensure all tests pass
+- [x] 15. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 16. Add tip buttons to tab overlay UI

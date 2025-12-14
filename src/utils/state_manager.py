@@ -18,11 +18,17 @@ class PaymentState(TypedDict):
     """Payment state schema with strict typing."""
     balance: float          # >= 0, default: 1000.00
     tab_total: float        # >= 0, default: 0.00
+    tip_percentage: Optional[Literal[10, 15, 20]]  # None when no tip selected
+    tip_amount: float       # >= 0, default: 0.00
     stripe_payment_id: Optional[str]  # None or Stripe ID pattern: ^(plink_|pi_)[a-zA-Z0-9]+$
     payment_status: Literal['pending', 'processing', 'completed']  # default: 'pending'
     idempotency_key: Optional[str]    # None or format: {session_id}_{unix_timestamp}
     version: int            # >= 0, default: 0
     needs_reconciliation: bool  # default: False
+
+
+# Valid tip percentages
+VALID_TIP_PERCENTAGES = {10, 15, 20}
 
 
 # Stripe ID pattern: plink_ or pi_ followed by alphanumeric characters
@@ -42,6 +48,8 @@ VALID_STATUS_TRANSITIONS = {
 DEFAULT_PAYMENT_STATE: PaymentState = {
     'balance': 1000.00,
     'tab_total': 0.00,
+    'tip_percentage': None,
+    'tip_amount': 0.00,
     'stripe_payment_id': None,
     'payment_status': 'pending',
     'idempotency_key': None,
@@ -71,9 +79,9 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
     """
     # Check required fields if not partial
     if not allow_partial:
-        required_fields = {'balance', 'tab_total', 'stripe_payment_id', 
-                          'payment_status', 'idempotency_key', 'version', 
-                          'needs_reconciliation'}
+        required_fields = {'balance', 'tab_total', 'tip_percentage', 'tip_amount',
+                          'stripe_payment_id', 'payment_status', 'idempotency_key', 
+                          'version', 'needs_reconciliation'}
         missing = required_fields - set(state.keys())
         if missing:
             raise PaymentStateValidationError(f"Missing required fields: {missing}")
@@ -133,6 +141,21 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
     if 'needs_reconciliation' in state:
         if not isinstance(state['needs_reconciliation'], bool):
             raise PaymentStateValidationError("needs_reconciliation must be a boolean")
+    
+    # Validate tip_percentage (None or one of {10, 15, 20})
+    if 'tip_percentage' in state:
+        tip_pct = state['tip_percentage']
+        if tip_pct is not None and tip_pct not in VALID_TIP_PERCENTAGES:
+            raise PaymentStateValidationError(
+                f"tip_percentage must be None or one of {VALID_TIP_PERCENTAGES}, got {tip_pct}"
+            )
+    
+    # Validate tip_amount >= 0
+    if 'tip_amount' in state:
+        if not isinstance(state['tip_amount'], (int, float)):
+            raise PaymentStateValidationError("tip_amount must be a number")
+        if state['tip_amount'] < 0:
+            raise PaymentStateValidationError(f"tip_amount must be >= 0, got {state['tip_amount']}")
     
     # Mutual constraint: needs_reconciliation == False when payment_status == 'completed'
     if 'payment_status' in state and 'needs_reconciliation' in state:
@@ -339,6 +362,21 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         session_data = store[session_id]
         session_data['payment'] = copy.deepcopy(DEFAULT_PAYMENT_STATE)
         store[session_id] = session_data
+    else:
+        # Handle migration for existing payment state missing tip fields
+        session_data = store[session_id]
+        payment = session_data.get('payment', {})
+        needs_update = False
+        if 'tip_percentage' not in payment:
+            payment['tip_percentage'] = None
+            needs_update = True
+        if 'tip_amount' not in payment:
+            payment['tip_amount'] = 0.00
+            needs_update = True
+        if needs_update:
+            logger.info(f"Adding tip fields to existing session {session_id}")
+            session_data['payment'] = payment
+            store[session_id] = session_data
     return store[session_id]
 
 def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, Any]) -> None:
@@ -493,6 +531,98 @@ def get_order_total(session_id: Optional[str] = None, store: Optional[MutableMap
 # =============================================================================
 # Payment State Functions
 # =============================================================================
+
+def calculate_tip(tab_total: float, percentage: int) -> float:
+    """
+    Calculate tip amount from tab total and percentage.
+    
+    Args:
+        tab_total: Current tab amount (drinks only, no previous tip)
+        percentage: 10, 15, or 20
+        
+    Returns:
+        Tip amount rounded to 2 decimal places
+        
+    Raises:
+        ValueError: If percentage is not in {10, 15, 20}
+    """
+    if percentage not in VALID_TIP_PERCENTAGES:
+        raise ValueError(f"percentage must be one of {VALID_TIP_PERCENTAGES}, got {percentage}")
+    
+    tip = tab_total * (percentage / 100)
+    return round(tip, 2)
+
+
+def set_tip(
+    session_id: str, 
+    store: MutableMapping, 
+    percentage: Optional[int]
+) -> Tuple[float, float]:
+    """
+    Set tip percentage and calculate tip amount.
+    
+    Implements toggle behavior: if the same percentage is already selected,
+    calling set_tip with that percentage will remove the tip.
+    
+    Args:
+        session_id: Unique identifier for the user session.
+        store: Mutable mapping to store state.
+        percentage: 10, 15, 20 to set tip, or None to remove tip
+        
+    Returns:
+        Tuple of (tip_amount, total) where total = tab_total + tip_amount
+        
+    Raises:
+        ValueError: If percentage is not None and not in {10, 15, 20}
+    """
+    # Validate percentage
+    if percentage is not None and percentage not in VALID_TIP_PERCENTAGES:
+        raise ValueError(f"percentage must be None or one of {VALID_TIP_PERCENTAGES}, got {percentage}")
+    
+    lock = get_session_lock(session_id)
+    
+    with lock:
+        data = _get_session_data(session_id, store)
+        payment = data['payment']
+        tab_total = payment['tab_total']
+        current_percentage = payment['tip_percentage']
+        
+        # Toggle behavior: if same percentage is selected, remove tip
+        if percentage is not None and percentage == current_percentage:
+            payment['tip_percentage'] = None
+            payment['tip_amount'] = 0.00
+            logger.info(f"Tip removed for {session_id} (toggle)")
+        elif percentage is None:
+            # Explicitly remove tip
+            payment['tip_percentage'] = None
+            payment['tip_amount'] = 0.00
+            logger.info(f"Tip removed for {session_id}")
+        else:
+            # Set new tip
+            tip_amount = calculate_tip(tab_total, percentage)
+            payment['tip_percentage'] = percentage
+            payment['tip_amount'] = tip_amount
+            logger.info(f"Tip set for {session_id}: {percentage}% = ${tip_amount:.2f}")
+        
+        _save_session_data(session_id, store, data)
+        
+        return (payment['tip_amount'], tab_total + payment['tip_amount'])
+
+
+def get_payment_total(session_id: str, store: MutableMapping) -> float:
+    """
+    Get total payment amount including tab and tip.
+    
+    Args:
+        session_id: Unique identifier for the user session.
+        store: Mutable mapping to store state.
+        
+    Returns:
+        Total amount (tab_total + tip_amount)
+    """
+    payment = get_payment_state(session_id, store)
+    return payment['tab_total'] + payment['tip_amount']
+
 
 def get_payment_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     """
@@ -649,7 +779,7 @@ def check_sufficient_funds(
 
 def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
     """
-    Atomically reset tab and mark as paid.
+    Atomically reset tab, tip, and mark as paid.
     
     Args:
         session_id: Unique identifier for the user session.
@@ -665,8 +795,10 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
             data = _get_session_data(session_id, store)
             payment = data['payment']
             
-            # Reset tab and mark as completed
+            # Reset tab, tip, and mark as completed
             payment['tab_total'] = 0.00
+            payment['tip_percentage'] = None
+            payment['tip_amount'] = 0.00
             payment['payment_status'] = 'completed'
             payment['needs_reconciliation'] = False
             payment['version'] += 1
