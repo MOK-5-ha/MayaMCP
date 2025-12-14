@@ -253,9 +253,9 @@ def handle_tip_button_click(
     
     # Update tip in state manager (handles toggle behavior internally)
     try:
-        new_tip_amount, total = set_tip(session_id, app_state, percentage)
+        new_tip_amount, _total = set_tip(session_id, app_state, percentage)
     except ValueError as e:
-        logger.error(f"Invalid tip percentage: {e}")
+        logger.exception("Invalid tip percentage")
         # Return unchanged state on error
         payment_state = get_payment_state(session_id, app_state)
         overlay_html = create_tab_overlay_html(
@@ -331,8 +331,6 @@ def handle_tip_button_click(
             audio_data = get_voice_audio(response_text, cartesia_client)
         except Exception as tts_err:
             logger.warning(f"TTS generation failed for tip response: {tts_err}")
-    
-    # Create updated overlay HTML
     overlay_html = create_tab_overlay_html(
         tab_amount=new_tab,
         balance=new_balance,

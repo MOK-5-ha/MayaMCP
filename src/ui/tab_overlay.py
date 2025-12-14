@@ -115,7 +115,7 @@ def create_tip_buttons_html(
     '''
 
 
-def generate_tip_notification(percentage: int, tip_amount: float, tab_total: float) -> str:
+def generate_tip_notification(percentage: int, tip_amount: float, _tab_total: float) -> str:
     """Generate notification message sent to Maya when user selects a tip.
     
     Creates a conversational message that conveys the user's tip selection
@@ -124,7 +124,7 @@ def generate_tip_notification(percentage: int, tip_amount: float, tab_total: flo
     Args:
         percentage: Selected tip percentage (10, 15, or 20)
         tip_amount: Calculated tip amount in dollars
-        tab_total: Current tab total in dollars
+        _tab_total: Current tab total in dollars
         
     Returns:
         Message conveying tip selection intent containing both percentage
@@ -133,7 +133,6 @@ def generate_tip_notification(percentage: int, tip_amount: float, tab_total: flo
     Requirements: 7.11
     """
     return f"I'd like to add a {percentage}% tip (${tip_amount:.2f}) for your great service!"
-
 
 def generate_tip_removal_notification() -> str:
     """Generate notification message sent to Maya when user removes tip.

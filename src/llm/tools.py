@@ -415,8 +415,7 @@ def create_stripe_payment() -> ToolResponse:
     if tip_amount > 0:
         description = f"Bar tab at MOK 5-ha (Tab: ${tab_total:.2f}, Tip: ${tip_amount:.2f})"
     else:
-        description = f"Bar tab at MOK 5-ha"
-
+        description = "Bar tab at MOK 5-ha"
     # Create payment link (async call wrapped for sync context)
     try:
         # Run async create_payment_link in event loop
