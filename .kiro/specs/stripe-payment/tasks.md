@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Extend state management with payment state
-  - [ ] 1.1 Add payment state schema to state_manager.py
+- [x] 1. Extend state management with payment state
+  - [x] 1.1 Add payment state schema to state_manager.py
     - Define PaymentState TypedDict with exact types, defaults, and validation:
       ```python
       class PaymentState(TypedDict):
@@ -26,7 +26,7 @@
     - Add DEFAULT_PAYMENT_STATE instance with all defaults
     - Add payment state to session initialization referencing DEFAULT_PAYMENT_STATE
     - _Requirements: 1.1_
-  - [ ] 1.2 Implement thread-safe session locking
+  - [x] 1.2 Implement thread-safe session locking
     - Add _session_locks Dict[str, Lock] (regular dict, NOT WeakValueDictionary)
     - Add _session_locks_mutex to protect dict access
     - Implement get_session_lock() function:
@@ -37,7 +37,7 @@
     - Memory management: locks cleaned up only via explicit cleanup_session_lock() calls
     - Add session expiry mechanism: cleanup locks for sessions inactive >1 hour (background task)
     - _Requirements: 1.2, 1.3_
-  - [ ] 1.3 Implement atomic order update function
+  - [x] 1.3 Implement atomic order update function
     - Create atomic_order_update() that acquires lock, checks balance, deducts, adds to tab atomically
     - Implement optimistic locking: read current version, perform update with expected version, fail if version mismatch
     - On version mismatch: return CONCURRENT_MODIFICATION immediately (no automatic retry)
@@ -45,7 +45,7 @@
     - Return (success, error_code, new_balance) tuple
     - Client behavior on CONCURRENT_MODIFICATION: Maya asks user to retry the order
     - _Requirements: 1.2, 1.3, 1.5_
-  - [ ] 1.4 Write property test for balance deduction consistency
+  - [x] 1.4 Write property test for balance deduction consistency
     - **Property 1: Balance Deduction Consistency**
     - **Validates: Requirements 1.2**
     - Preconditions: Session initialized, balance B >= 0, item price P > 0, B >= P
@@ -53,7 +53,7 @@
     - Invariant: new_balance == B - P exactly (floating point equality with tolerance 0.001)
     - Edge cases: exact balance (B == P), minimum price ($0.01), large amounts ($999.99)
     - Assertion: `assert abs(new_balance - (initial_balance - price)) < 0.001`
-  - [ ] 1.5 Write property test for insufficient funds rejection
+  - [x] 1.5 Write property test for insufficient funds rejection
     - **Property 3: Insufficient Funds Rejection**
     - **Validates: Requirements 1.3**
     - Preconditions: Session initialized, balance B >= 0, item price P > B
@@ -61,7 +61,7 @@
     - Invariant: order rejected with INSUFFICIENT_FUNDS, balance unchanged
     - Edge cases: zero balance, price exactly $0.01 over balance, very large price
     - Assertion: `assert result.error == "INSUFFICIENT_FUNDS" and new_balance == initial_balance`
-  - [ ] 1.6 Write property test for state preservation on rejection
+  - [x] 1.6 Write property test for state preservation on rejection
     - **Property 4: State Preservation on Rejection**
     - **Validates: Requirements 1.5**
     - Preconditions: Session with existing order items, insufficient balance for new item
@@ -70,7 +70,7 @@
     - Edge cases: empty order, single item order, order at max capacity
     - Assertion: `assert order_after == order_before`
 
-- [ ] 2. Checkpoint - Ensure all tests pass
+- [x] 2. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 3. Set up session context for tools

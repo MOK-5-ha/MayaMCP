@@ -133,8 +133,8 @@ class TestAddToOrder:
         Daiquiri - $10.00
         """
 
-        # Execute function
-        result = add_to_order("Martini", ["shaken"], 1)
+        # Execute function using invoke
+        result = add_to_order.invoke({"item_name": "Martini", "modifiers": ["shaken"], "quantity": 1})
 
         # Verify get_menu was called
         mock_get_menu.invoke.assert_called_once()
@@ -165,8 +165,8 @@ class TestAddToOrder:
         Old Fashioned - $12.00
         """
 
-        # Execute function
-        result = add_to_order("Old Fashioned", ["on the rocks", "with cherry"], 1)
+        # Execute function using invoke
+        result = add_to_order.invoke({"item_name": "Old Fashioned", "modifiers": ["on the rocks", "with cherry"], "quantity": 1})
 
         # Verify modifiers were combined
         mock_update_order_state.assert_called_once()
@@ -187,8 +187,8 @@ class TestAddToOrder:
         Beer - $5.00
         """
 
-        # Execute function
-        result = add_to_order("Beer", [], 3)
+        # Execute function using invoke
+        result = add_to_order.invoke({"item_name": "Beer", "modifiers": [], "quantity": 3})
 
         # Verify quantity and price calculation
         mock_update_order_state.assert_called_once()
@@ -210,8 +210,8 @@ class TestAddToOrder:
         Water - $1.00
         """
 
-        # Execute function
-        result = add_to_order("Water")
+        # Execute function using invoke
+        result = add_to_order.invoke({"item_name": "Water"})
 
         # Verify no modifiers
         mock_update_order_state.assert_called_once()
@@ -232,8 +232,8 @@ class TestAddToOrder:
         Martini - $13.00
         """
 
-        # Execute function
-        result = add_to_order("Unknown Drink")
+        # Execute function using invoke
+        result = add_to_order.invoke({"item_name": "Unknown Drink"})
 
         # Verify error message
         assert "Error:" in result
@@ -250,8 +250,8 @@ class TestAddToOrder:
         martini - $13.00
         """
 
-        # Execute function with different case
-        result = add_to_order("MARTINI", ["shaken"])
+        # Execute function with different case using invoke
+        result = add_to_order.invoke({"item_name": "MARTINI", "modifiers": ["shaken"]})
 
         # Verify it was found and added
         mock_update_order_state.assert_called_once()
@@ -267,8 +267,8 @@ class TestGetOrder:
         # Setup mocks
         mock_get_current_order_state.return_value = []
 
-        # Execute function
-        result = get_order()
+        # Execute function using invoke
+        result = get_order.invoke({})
 
         # Verify return message
         assert "currently empty" in result
@@ -282,8 +282,8 @@ class TestGetOrder:
             {"name": "Beer", "price": 10.0, "modifiers": "no modifiers", "quantity": 2}
         ]
 
-        # Execute function
-        result = get_order()
+        # Execute function using invoke
+        result = get_order.invoke({})
 
         # Verify order details
         assert "Current Order:" in result
@@ -302,8 +302,8 @@ class TestGetOrder:
             {"name": "Old Fashioned", "price": 12.0, "modifiers": "on the rocks", "quantity": 1}
         ]
 
-        # Execute function
-        result = get_order()
+        # Execute function using invoke
+        result = get_order.invoke({})
 
         # Verify modifiers are displayed
         assert "on the rocks" in result
@@ -319,8 +319,8 @@ class TestConfirmOrder:
         # Setup mocks
         mock_get_current_order_state.return_value = []
 
-        # Execute function
-        result = confirm_order()
+        # Execute function using invoke
+        result = confirm_order.invoke({})
 
         # Verify error message
         assert "nothing in the order" in result
@@ -335,8 +335,8 @@ class TestConfirmOrder:
             {"name": "Beer", "price": 5.0, "modifiers": "no modifiers", "quantity": 1}
         ]
 
-        # Execute function
-        result = confirm_order()
+        # Execute function using invoke
+        result = confirm_order.invoke({})
 
         # Verify confirmation message
         assert "Here is your current order:" in result
@@ -400,8 +400,8 @@ class TestClearOrder:
     @patch('src.llm.tools.update_order_state')
     def test_clear_order_success(self, mock_update_order_state):
         """Test successful order clearing."""
-        # Execute function
-        result = clear_order()
+        # Execute function using invoke
+        result = clear_order.invoke({})
 
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once_with("clear_order")
@@ -419,8 +419,8 @@ class TestGetBill:
         # Setup mocks
         mock_get_order_history.return_value = {"items": [], "total_cost": 0.0, "tip_amount": 0.0, "paid": False}
 
-        # Execute function
-        result = get_bill()
+        # Execute function using invoke
+        result = get_bill.invoke({})
 
         # Verify message
         assert "haven't ordered anything" in result
@@ -439,8 +439,8 @@ class TestGetBill:
             "paid": False
         }
 
-        # Execute function
-        result = get_bill()
+        # Execute function using invoke
+        result = get_bill.invoke({})
 
         # Verify bill details
         assert "Your bill:" in result
@@ -463,8 +463,8 @@ class TestGetBill:
             "paid": False
         }
 
-        # Execute function
-        result = get_bill()
+        # Execute function using invoke
+        result = get_bill.invoke({})
 
         # Verify tip details
         assert "Tip (15.0%)" in result
@@ -483,8 +483,8 @@ class TestGetBill:
             "paid": False
         }
 
-        # Execute function
-        result = get_bill()
+        # Execute function using invoke
+        result = get_bill.invoke({})
 
         # Verify tip details
         assert "Tip: $2.00" in result
@@ -506,8 +506,8 @@ class TestPayBill:
             "paid": False
         }
 
-        # Execute function
-        result = pay_bill()
+        # Execute function using invoke
+        result = pay_bill.invoke({})
 
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once_with("pay_bill")
@@ -523,8 +523,8 @@ class TestPayBill:
         # Setup mocks
         mock_get_order_history.return_value = {"items": [], "total_cost": 0.0, "paid": False}
 
-        # Execute function
-        result = pay_bill()
+        # Execute function using invoke
+        result = pay_bill.invoke({})
 
         # Verify error message
         assert "haven't ordered anything" in result
@@ -535,8 +535,8 @@ class TestPayBill:
         # Setup mocks
         mock_get_order_history.return_value = {"items": [{"name": "Martini", "price": 13.0}], "paid": True}
 
-        # Execute function
-        result = pay_bill()
+        # Execute function using invoke
+        result = pay_bill.invoke({})
 
         # Verify message
         assert "already been paid" in result
@@ -557,8 +557,8 @@ class TestAddTip:
             "paid": False
         }
 
-        # Execute function
-        result = add_tip(percentage=15.0)
+        # Execute function using invoke
+        result = add_tip.invoke({"percentage": 15.0})
 
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once()
@@ -585,8 +585,8 @@ class TestAddTip:
             "paid": False
         }
 
-        # Execute function
-        result = add_tip(amount=2.0)
+        # Execute function using invoke
+        result = add_tip.invoke({"amount": 2.0})
 
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once()
@@ -605,8 +605,8 @@ class TestAddTip:
         # Setup mocks
         mock_get_order_history.return_value = {"items": [], "total_cost": 0.0, "paid": False}
 
-        # Execute function
-        result = add_tip(percentage=15.0)
+        # Execute function using invoke
+        result = add_tip.invoke({"percentage": 15.0})
 
         # Verify error message
         assert "haven't ordered anything" in result
@@ -618,8 +618,8 @@ class TestAddTip:
         # Setup mocks
         mock_get_order_history.return_value = {"items": [{"name": "Martini", "price": 13.0}], "paid": True}
 
-        # Execute function
-        result = add_tip(percentage=15.0)
+        # Execute function using invoke
+        result = add_tip.invoke({"percentage": 15.0})
 
         # Verify error message
         assert "already been paid" in result
@@ -635,8 +635,8 @@ class TestAddTip:
             "paid": False
         }
 
-        # Execute function with both parameters
-        result = add_tip(percentage=15.0, amount=5.0)
+        # Execute function with both parameters using invoke
+        result = add_tip.invoke({"percentage": 15.0, "amount": 5.0})
 
         # Verify percentage was used (not amount)
         mock_update_order_state.assert_called_once()
@@ -659,8 +659,8 @@ class TestGetAllTools:
         # Verify it's a list
         assert isinstance(tools, list)
 
-        # Verify all expected tools are present
-        tool_names = [tool.__name__ for tool in tools]
+        # Verify all expected tools are present (use .name attribute for StructuredTool)
+        tool_names = [tool.name for tool in tools]
         expected_tools = [
             'get_menu', 'get_recommendation', 'add_to_order', 'get_order',
             'confirm_order', 'place_order', 'clear_order', 'get_bill',

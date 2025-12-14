@@ -6,12 +6,12 @@ Full test of Maya with Memvid integration
 import pytest
 import logging
 
-from mayamcp.config import get_api_keys, setup_logging
-from mayamcp.llm import initialize_llm, get_all_tools  
-from mayamcp.rag import initialize_memvid_store
+from src.config import get_api_keys, setup_logging
+from src.llm import initialize_llm, get_all_tools  
+from src.rag import initialize_memvid_store
 
-from mayamcp.conversation.processor import process_order
-from mayamcp.utils.state_manager import initialize_state, get_current_order_state, get_order_history, reset_session_state
+from src.conversation.processor import process_order
+from src.utils.state_manager import initialize_state, get_current_order_state, get_order_history, reset_session_state
 
 def test_maya_memvid_full():
     """Test Maya's full interaction workflow with Memvid"""
