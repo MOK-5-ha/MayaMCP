@@ -363,6 +363,8 @@ def create_stripe_payment() -> ToolResponse:
     a payment link, and handles fallback to mock payment if Stripe is
     unavailable.
 
+    The payment amount includes both the tab total and any tip amount.
+
     Session context read implicitly from _current_session thread-local.
 
     Returns:
@@ -371,7 +373,7 @@ def create_stripe_payment() -> ToolResponse:
         Error: {"status": "error", "error": "STRIPE_UNAVAILABLE", "message": ...}
                {"status": "error", "error": "INVALID_SESSION", "message": ...}
 
-    Requirements: 3.1, 3.2, 3.4, 4.3
+    Requirements: 3.1, 3.2, 3.4, 4.3, 7.9
     """
     session_id = get_current_session()
     if session_id is None:
@@ -384,6 +386,10 @@ def create_stripe_payment() -> ToolResponse:
     store = get_global_store()
     payment = get_payment_state(session_id, store)
     tab_total = payment['tab_total']
+    tip_amount = payment['tip_amount']
+    
+    # Payment amount = tab_total + tip_amount (Requirements 7.9)
+    payment_total = get_payment_total(session_id, store)
 
     if tab_total <= 0:
         return create_tool_error(
@@ -405,6 +411,12 @@ def create_stripe_payment() -> ToolResponse:
         logger.error(f"Failed to update payment state: {e}")
         # Continue anyway - we can still create the payment link
 
+    # Build payment description including tip if present
+    if tip_amount > 0:
+        description = f"Bar tab at MOK 5-ha (Tab: ${tab_total:.2f}, Tip: ${tip_amount:.2f})"
+    else:
+        description = f"Bar tab at MOK 5-ha"
+
     # Create payment link (async call wrapped for sync context)
     try:
         # Run async create_payment_link in event loop
@@ -412,8 +424,8 @@ def create_stripe_payment() -> ToolResponse:
         try:
             result = loop.run_until_complete(
                 client.create_payment_link(
-                    amount=tab_total,
-                    description=f"Bar tab at MOK 5-ha",
+                    amount=payment_total,
+                    description=description,
                     idempotency_key=idempotency_key
                 )
             )
@@ -598,12 +610,11 @@ def set_tip(percentage: Optional[int] = None) -> ToolResponse:
         })
 
     except ValueError as e:
-        logger.error(f"Failed to set tip: {e}")
+        logger.exception("Failed to set tip")
         return create_tool_error(
             PaymentError.INVALID_TIP_PERCENTAGE,
             str(e)
         )
-
 
 @tool
 def get_tip() -> ToolResponse:

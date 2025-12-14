@@ -1305,3 +1305,192 @@ class TestTipResetOnPaymentCompletion:
         payment = get_payment_state(session_id, store)
         assert payment['tip_percentage'] is None
         assert payment['tip_amount'] == 0.0
+
+
+# =============================================================================
+# Tip UI Property Tests (Properties 13 and 14)
+# =============================================================================
+
+from src.ui.tab_overlay import (
+    generate_tip_notification,
+    generate_tip_removal_notification,
+    create_tip_buttons_html,
+    TIP_BUTTON_HIGHLIGHT_COLOR,
+    TIP_BUTTON_DEFAULT_BG,
+    TIP_PERCENTAGES,
+)
+
+
+class TestTipNotificationContent:
+    """
+    **Feature: stripe-payment, Property 13: Tip Notification Content**
+
+    *For any* tip selection with percentage P in {10, 15, 20} and calculated amount A,
+    the generated notification SHALL contain both the percentage value P and the tip amount A.
+
+    **Validates: Requirements 7.11**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        percentage=st.sampled_from([10, 15, 20]),
+        tip_amount=st.floats(min_value=0.01, max_value=200.00, allow_nan=False),
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False)
+    )
+    def test_tip_notification_content(self, percentage, tip_amount, tab_total):
+        """
+        Property 13: Tip Notification Content
+
+        Generators: percentage in {10, 15, 20}, amount in [0.01, 200.00]
+        Invariant: notification contains both percentage and amount values
+        """
+        # Act
+        notification = generate_tip_notification(percentage, tip_amount, tab_total)
+
+        # Assert: notification contains percentage value
+        assert str(percentage) in notification, (
+            f"Notification should contain percentage {percentage}: {notification}"
+        )
+
+        # Assert: notification contains tip amount (formatted to 2 decimal places)
+        # The amount could be formatted as $X.XX or just X.XX
+        amount_str = f"{tip_amount:.2f}"
+        assert amount_str in notification, (
+            f"Notification should contain amount {amount_str}: {notification}"
+        )
+
+    def test_notification_10_percent(self):
+        """Test notification for 10% tip"""
+        notification = generate_tip_notification(10, 10.00, 100.00)
+        assert "10" in notification
+        assert "10.00" in notification
+
+    def test_notification_15_percent(self):
+        """Test notification for 15% tip"""
+        notification = generate_tip_notification(15, 15.00, 100.00)
+        assert "15" in notification
+        assert "15.00" in notification
+
+    def test_notification_20_percent(self):
+        """Test notification for 20% tip"""
+        notification = generate_tip_notification(20, 20.00, 100.00)
+        assert "20" in notification
+        assert "20.00" in notification
+
+    def test_notification_small_amount(self):
+        """Test notification with small tip amount"""
+        notification = generate_tip_notification(10, 0.50, 5.00)
+        assert "10" in notification
+        assert "0.50" in notification
+
+    def test_notification_large_amount(self):
+        """Test notification with large tip amount"""
+        notification = generate_tip_notification(20, 200.00, 1000.00)
+        assert "20" in notification
+        assert "200.00" in notification
+
+    def test_removal_notification_exists(self):
+        """Test that removal notification is generated"""
+        notification = generate_tip_removal_notification()
+        assert notification is not None
+        assert len(notification) > 0
+        assert isinstance(notification, str)
+
+
+class TestTipButtonVisualState:
+    """
+    **Feature: stripe-payment, Property 14: Tip Button Visual State**
+
+    *For any* tip selection state with selected_percentage P (where P is 10, 15, 20, or None),
+    exactly one button SHALL have the highlighted style (#4CAF50 background) when P is not None,
+    and zero buttons SHALL have the highlighted style when P is None.
+
+    **Validates: Requirements 7.8**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        selected_percentage=st.sampled_from([10, 15, 20, None]),
+        tab_amount=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False)
+    )
+    def test_tip_button_visual_state(self, selected_percentage, tab_amount):
+        """
+        Property 14: Tip Button Visual State
+
+        Generators: selected_percentage in {10, 15, 20, None}
+        Invariant: exactly one button highlighted when P != None, zero when P == None
+        """
+        # Act
+        html = create_tip_buttons_html(tab_amount, selected_percentage)
+
+        # Count highlighted buttons (those with the highlight color)
+        highlight_count = html.count(TIP_BUTTON_HIGHLIGHT_COLOR)
+
+        if selected_percentage is not None:
+            # Exactly one button should be highlighted
+            # The highlight color appears in both background and border for selected button
+            # So we expect 2 occurrences (background + border) for the selected button
+            assert highlight_count == 2, (
+                f"Expected exactly one button highlighted (2 color occurrences) "
+                f"when percentage={selected_percentage}, got {highlight_count} occurrences"
+            )
+        else:
+            # No buttons should be highlighted
+            assert highlight_count == 0, (
+                f"Expected no buttons highlighted when percentage=None, "
+                f"got {highlight_count} occurrences"
+            )
+
+    def test_10_percent_selected(self):
+        """Test visual state when 10% is selected"""
+        html = create_tip_buttons_html(100.00, 10)
+        
+        # 10% button should have highlight color
+        assert TIP_BUTTON_HIGHLIGHT_COLOR in html
+        
+        # Count occurrences - should be 2 (background + border for one button)
+        assert html.count(TIP_BUTTON_HIGHLIGHT_COLOR) == 2
+
+    def test_15_percent_selected(self):
+        """Test visual state when 15% is selected"""
+        html = create_tip_buttons_html(100.00, 15)
+        
+        assert TIP_BUTTON_HIGHLIGHT_COLOR in html
+        assert html.count(TIP_BUTTON_HIGHLIGHT_COLOR) == 2
+
+    def test_20_percent_selected(self):
+        """Test visual state when 20% is selected"""
+        html = create_tip_buttons_html(100.00, 20)
+        
+        assert TIP_BUTTON_HIGHLIGHT_COLOR in html
+        assert html.count(TIP_BUTTON_HIGHLIGHT_COLOR) == 2
+
+    def test_no_selection(self):
+        """Test visual state when no tip is selected"""
+        html = create_tip_buttons_html(100.00, None)
+        
+        # No buttons should have highlight color
+        assert TIP_BUTTON_HIGHLIGHT_COLOR not in html
+
+    def test_buttons_disabled_when_tab_zero(self):
+        """Test that buttons are disabled when tab is $0"""
+        html = create_tip_buttons_html(0.00, None)
+        
+        # Buttons should be hidden (display: none)
+        assert 'display: none' in html
+
+    def test_buttons_enabled_when_tab_nonzero(self):
+        """Test that buttons are enabled when tab is non-zero"""
+        html = create_tip_buttons_html(50.00, None)
+        
+        # Buttons should be visible (display: flex)
+        assert 'display: flex' in html
+
+    def test_all_three_buttons_present(self):
+        """Test that all three tip buttons are present"""
+        html = create_tip_buttons_html(100.00, None)
+        
+        for percentage in TIP_PERCENTAGES:
+            assert f'{percentage}%' in html, (
+                f"Button for {percentage}% should be present"
+            )

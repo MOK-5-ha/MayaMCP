@@ -341,62 +341,62 @@
 - [x] 15. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 16. Add tip buttons to tab overlay UI
-  - [ ] 16.1 Implement create_tip_buttons_html function
+- [x] 16. Add tip buttons to tab overlay UI
+  - [x] 16.1 Implement create_tip_buttons_html function
     - Generate three buttons: 10%, 15%, 20%
     - Disable/hide when tab_amount == 0
     - Highlight selected button with #4CAF50 background
     - _Requirements: 7.1, 7.7, 7.8_
-  - [ ] 16.2 Update create_tab_overlay_html for tip display
+  - [x] 16.2 Update create_tab_overlay_html for tip display
     - Add tip_percentage, tip_amount parameters
     - Display tip buttons row below tab/balance
     - Display "Tip: $X.XX" and "Total: $X.XX" row when tip selected
     - _Requirements: 7.1, 7.3, 7.4_
-  - [ ] 16.3 Implement generate_tip_notification function
+  - [x] 16.3 Implement generate_tip_notification function
     - Generate message with percentage and amount for Maya
     - _Requirements: 7.11_
-  - [ ] 16.4 Implement generate_tip_removal_notification function
+  - [x] 16.4 Implement generate_tip_removal_notification function
     - Generate message for tip removal
     - _Requirements: 7.12_
-  - [ ] 16.5 Write property test for tip notification content
+  - [x] 16.5 Write property test for tip notification content
     - **Property 13: Tip Notification Content**
     - **Validates: Requirements 7.11**
     - Generators: percentage in {10, 15, 20}, amount in [0.01, 200.00]
     - Invariant: notification contains both percentage and amount values
-  - [ ] 16.6 Write property test for tip button visual state
+  - [x] 16.6 Write property test for tip button visual state
     - **Property 14: Tip Button Visual State**
     - **Validates: Requirements 7.8**
     - Generators: selected_percentage in {10, 15, 20, None}
     - Invariant: exactly one button highlighted when P != None, zero when P == None
 
-- [ ] 17. Integrate tip buttons with Gradio handlers
-  - [ ] 17.1 Add tip_percentage and tip_amount to Gradio state
+- [x] 17. Integrate tip buttons with Gradio handlers
+  - [x] 17.1 Add tip_percentage and tip_amount to Gradio state
     - Add gr.State components for tip tracking
     - _Requirements: 7.2, 7.3_
-  - [ ] 17.2 Create tip button click handler
+  - [x] 17.2 Create tip button click handler
     - On click: calculate tip, update state, send notification to Maya
     - Handle toggle behavior (same button removes tip)
     - _Requirements: 7.2, 7.5, 7.6, 7.11, 7.12_
-  - [ ] 17.3 Update handle_gradio_input to include tip in overlay
+  - [x] 17.3 Update handle_gradio_input to include tip in overlay
     - Pass tip state to create_tab_overlay_html
     - _Requirements: 7.3, 7.4_
-  - [ ] 17.4 Wire tip buttons to JavaScript callbacks
+  - [x] 17.4 Wire tip buttons to JavaScript callbacks
     - Connect button clicks to Gradio event handlers
     - _Requirements: 7.1, 7.11_
-  - [ ] 17.5 Update clear button to reset tip state
+  - [x] 17.5 Update clear button to reset tip state
     - Use DEFAULT_PAYMENT_STATE (defined in task 13.1) as single source of truth
     - Call shared reset function that applies DEFAULT_PAYMENT_STATE values
     - Includes tip_percentage=None, tip_amount=0.00 along with other payment fields
     - _Requirements: 7.10_
 
-- [ ] 18. Update Stripe payment to include tip
-  - [ ] 18.1 Modify create_stripe_payment to use total with tip
+- [x] 18. Update Stripe payment to include tip
+  - [x] 18.1 Modify create_stripe_payment to use total with tip
     - Payment amount = tab_total + tip_amount
     - Include tip in payment description
     - _Requirements: 7.9_
-  - [ ] 18.2 Update payment completion to reset tip
+  - [x] 18.2 Update payment completion to reset tip
     - Ensure atomic_payment_complete resets tip fields
     - _Requirements: 7.10_
 
-- [ ] 19. Final Checkpoint - Ensure all tests pass
+- [x] 19. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.

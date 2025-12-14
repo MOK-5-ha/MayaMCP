@@ -119,18 +119,18 @@ class TestLaunchBartenderInterface:
         # Verify Markdown components were created
         assert mock_markdown.call_count == 2  # Two markdown elements
 
-        # Verify State components were created (now 6: history, order, tab, balance, prev_tab, prev_balance)
-        assert mock_state.call_count == 6
+        # Verify State components were created (now 8: history, order, tab, balance, prev_tab, prev_balance, tip_pct, tip_amt)
+        assert mock_state.call_count == 8
 
         # Verify Row and Column structure was created
         assert mock_row.call_count == 2
         assert mock_column.call_count == 2  # Two columns (avatar and chat)
 
-        # Verify HTML component was created for avatar overlay (instead of Image)
-        mock_html.assert_called_once()
+        # Verify HTML components were created (avatar overlay + JavaScript)
+        assert mock_html.call_count == 2  # Avatar overlay + JS script
         mock_chatbot.assert_called_once()
         mock_audio.assert_called_once()
-        mock_textbox.assert_called_once()
+        assert mock_textbox.call_count == 2  # msg_input + hidden tip_click_input
         assert mock_button.call_count == 2  # Clear and Submit buttons
 
         # Verify return value is the blocks instance
@@ -184,8 +184,8 @@ class TestLaunchBartenderInterface:
         # Verify setup_avatar was NOT called (custom path provided)
         mock_setup_avatar.assert_not_called()
 
-        # Verify HTML component was created (instead of Image)
-        mock_html.assert_called_once()
+        # Verify HTML components were created (avatar overlay + JavaScript)
+        assert mock_html.call_count == 2
 
         # Verify create_tab_overlay_html was called with custom avatar path
         mock_create_overlay.assert_called()
@@ -267,11 +267,11 @@ class TestLaunchBartenderInterface:
             interactive=False
         )
 
-        # Verify textbox properties
-        mock_textbox.assert_called_once_with(
-            label="Your Order / Message",
-            placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')"
-        )
+        # Verify textbox properties (now 2 textboxes: msg_input + hidden tip_click_input)
+        assert mock_textbox.call_count == 2
+        # First call is the message input
+        msg_textbox_call = mock_textbox.call_args_list[0]
+        assert msg_textbox_call[1]['label'] == "Your Order / Message"
 
         # Verify button properties
         clear_button_call = mock_button.call_args_list[0]
@@ -341,10 +341,10 @@ class TestLaunchBartenderInterface:
         # Verify the submit handler was configured with correct inputs/outputs
         submit_call = ui_mocks['textbox_instance'].submit.call_args
         assert submit_call[0][0] == mock_handle_input  # handler function
-        # Now 4 inputs: msg_input, history_state, tab_state, balance_state
-        assert len(submit_call[0][1]) == 4
-        # Now 10 outputs: msg_input, chatbot, history, order, audio, overlay, tab, balance, prev_tab, prev_balance
-        assert len(submit_call[0][2]) == 10
+        # Now 6 inputs: msg_input, history_state, tab_state, balance_state, tip_pct, tip_amt
+        assert len(submit_call[0][1]) == 6
+        # Now 12 outputs: msg_input, chatbot, history, order, audio, overlay, tab, balance, prev_tab, prev_balance, tip_pct, tip_amt
+        assert len(submit_call[0][2]) == 12
 
         # Verify the submit button click handler independently
         submit_click = ui_mocks['submit_button_instance'].click
@@ -409,8 +409,8 @@ class TestLaunchBartenderInterface:
         mock_logger.exception.assert_called_once()
         assert "Failed to setup avatar" in mock_logger.exception.call_args[0][0]
 
-        # Verify HTML component was created (fallback uses default path)
-        mock_html.assert_called_once()
+        # Verify HTML components were created (fallback uses default path)
+        assert mock_html.call_count == 2  # Avatar overlay + JS script
 
         # Verify interface was still created successfully
         assert result == ui_mocks['blocks_instance']

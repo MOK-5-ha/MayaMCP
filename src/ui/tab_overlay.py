@@ -2,12 +2,18 @@
 
 This module provides the visual overlay that shows the user's running tab
 and remaining balance, with animated count-up effects when values change.
+It also includes tip button functionality for adding gratuity.
 """
 
-from typing import Optional
+from typing import Optional, Literal
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# Tip button constants
+TIP_PERCENTAGES = (10, 15, 20)
+TIP_BUTTON_HIGHLIGHT_COLOR = "#4CAF50"  # Green for selected button
+TIP_BUTTON_DEFAULT_BG = "#333333"       # Dark gray for unselected buttons
 
 # Color constants for balance display
 COLOR_NORMAL = "#FFFFFF"      # White for balance >= $50
@@ -37,32 +43,158 @@ def get_balance_color(balance: float) -> str:
         return COLOR_DEPLETED
 
 
+def create_tip_buttons_html(
+    tab_amount: float,
+    selected_percentage: Optional[int] = None,
+    on_tip_click_callback: str = "handleTipClick"
+) -> str:
+    """Generate HTML for tip selection buttons.
+    
+    Creates three tip buttons (10%, 15%, 20%) that allow users to add
+    gratuity to their tab. Buttons are disabled when tab is $0.
+    
+    Args:
+        tab_amount: Current tab total (to determine if buttons should be enabled)
+        selected_percentage: Currently selected tip percentage (10, 15, 20) or None
+        on_tip_click_callback: JavaScript callback name for tip button clicks
+        
+    Returns:
+        HTML string with three tip buttons:
+        - Buttons disabled/hidden if tab_amount == 0
+        - Selected button highlighted with #4CAF50 background color
+        - Unselected buttons use default styling (#333333)
+        - Visual state updates immediately on select/replace/toggle
+        
+    Requirements: 7.1, 7.7, 7.8
+    """
+    is_disabled = tab_amount <= 0
+    display_style = "none" if is_disabled else "flex"
+    
+    buttons_html = []
+    for percentage in TIP_PERCENTAGES:
+        is_selected = selected_percentage == percentage
+        bg_color = TIP_BUTTON_HIGHLIGHT_COLOR if is_selected else TIP_BUTTON_DEFAULT_BG
+        border_color = TIP_BUTTON_HIGHLIGHT_COLOR if is_selected else "#555555"
+        
+        disabled_attr = 'disabled="disabled"' if is_disabled else ""
+        cursor_style = "not-allowed" if is_disabled else "pointer"
+        opacity = "0.5" if is_disabled else "1"
+        
+        button_html = f'''
+        <button 
+            class="tip-button" 
+            data-percentage="{percentage}"
+            onclick="{on_tip_click_callback}({percentage})"
+            {disabled_attr}
+            style="
+                background: {bg_color};
+                color: #FFFFFF;
+                border: 1px solid {border_color};
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: {cursor_style};
+                opacity: {opacity};
+                transition: background 0.2s, border-color 0.2s;
+                min-width: 50px;
+            "
+        >{percentage}%</button>'''
+        buttons_html.append(button_html)
+    
+    return f'''
+    <div class="tip-buttons-row" style="
+        display: {display_style};
+        gap: 8px;
+        margin-top: 8px;
+        justify-content: center;
+        align-items: center;
+    ">
+        {"".join(buttons_html)}
+    </div>
+    '''
+
+
+def generate_tip_notification(percentage: int, tip_amount: float, tab_total: float) -> str:
+    """Generate notification message sent to Maya when user selects a tip.
+    
+    Creates a conversational message that conveys the user's tip selection
+    intent, including both the percentage and calculated amount.
+    
+    Args:
+        percentage: Selected tip percentage (10, 15, or 20)
+        tip_amount: Calculated tip amount in dollars
+        tab_total: Current tab total in dollars
+        
+    Returns:
+        Message conveying tip selection intent containing both percentage
+        and amount values.
+        
+    Requirements: 7.11
+    """
+    return f"I'd like to add a {percentage}% tip (${tip_amount:.2f}) for your great service!"
+
+
+def generate_tip_removal_notification() -> str:
+    """Generate notification message sent to Maya when user removes tip.
+    
+    Creates a conversational message that conveys the user's intent
+    to remove the previously selected tip.
+    
+    Returns:
+        Message conveying tip removal intent.
+        
+    Requirements: 7.12
+    """
+    return "I've decided to remove the tip."
+
+
 def create_tab_overlay_html(
     tab_amount: float,
     balance: float,
     prev_tab: float = 0.0,
     prev_balance: float = 1000.0,
-    avatar_path: Optional[str] = None
+    avatar_path: Optional[str] = None,
+    tip_percentage: Optional[int] = None,
+    tip_amount: float = 0.0,
+    on_tip_click_callback: str = "handleTipClick"
 ) -> str:
-    """Generate HTML/CSS/JS for tab overlay with animation.
+    """Generate HTML/CSS/JS for tab overlay with animation and tip buttons.
     
     Creates an overlay positioned at the bottom-left of Maya's avatar
-    showing the current tab and balance with count-up animations.
+    showing the current tab and balance with count-up animations,
+    plus tip selection buttons and tip/total display.
     
     Args:
-        tab_amount: Current tab total
+        tab_amount: Current tab total (drinks only)
         balance: Current user balance
         prev_tab: Previous tab amount (for animation start value)
         prev_balance: Previous balance (for animation start value)
         avatar_path: Path to avatar image (optional)
+        tip_percentage: Currently selected tip (10, 15, 20) or None
+        tip_amount: Calculated tip amount
+        on_tip_click_callback: JavaScript callback name for tip button clicks
         
     Returns:
-        HTML string with embedded CSS and JavaScript for animations
+        HTML string with embedded CSS and JavaScript for animations and tip buttons
         
-    Requirements: 2.1, 2.3, 2.4, 5.1, 5.2, 5.3, 5.4, 6.1
+    Requirements: 2.1, 2.3, 2.4, 5.1, 5.2, 5.3, 5.4, 6.1, 7.1, 7.3, 7.4
     """
     balance_color = get_balance_color(balance)
     avatar_src = avatar_path or "assets/bartender_avatar.jpg"
+    
+    # Generate tip buttons HTML
+    tip_buttons_html = create_tip_buttons_html(
+        tab_amount=tab_amount,
+        selected_percentage=tip_percentage,
+        on_tip_click_callback=on_tip_click_callback
+    )
+    
+    # Calculate total with tip
+    total_with_tip = tab_amount + tip_amount
+    
+    # Tip and total row - only shown when tip is selected
+    tip_display_style = "flex" if tip_percentage is not None else "none"
     
     html = f'''
 <div class="avatar-overlay-container" style="position: relative; display: inline-block; width: 100%; max-width: 600px;">
@@ -76,22 +208,53 @@ def create_tab_overlay_html(
         padding: 12px 16px;
         border-radius: 8px;
         display: flex;
-        gap: 12px;
-        align-items: center;
+        flex-direction: column;
+        gap: 8px;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         z-index: 10;
     ">
-        <span class="tab-display" id="tab-display" style="
-            color: #FFFFFF;
-            font-size: 16px;
-            font-weight: 600;
-        " data-value="{tab_amount}" data-prev="{prev_tab}">Tab: ${tab_amount:.2f}</span>
+        <!-- Row 1: Tab and Balance -->
+        <div class="tab-balance-row" style="
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        ">
+            <span class="tab-display" id="tab-display" style="
+                color: #FFFFFF;
+                font-size: 16px;
+                font-weight: 600;
+            " data-value="{tab_amount}" data-prev="{prev_tab}">Tab: ${tab_amount:.2f}</span>
+            
+            <span class="balance-display" id="balance-display" style="
+                color: {balance_color};
+                font-size: 16px;
+                font-weight: 600;
+            " data-value="{balance}" data-prev="{prev_balance}">Balance: ${balance:.2f}</span>
+        </div>
         
-        <span class="balance-display" id="balance-display" style="
-            color: {balance_color};
-            font-size: 16px;
-            font-weight: 600;
-        " data-value="{balance}" data-prev="{prev_balance}">Balance: ${balance:.2f}</span>
+        <!-- Row 2: Tip Buttons (hidden when tab is $0) -->
+        {tip_buttons_html}
+        
+        <!-- Row 3: Tip and Total (hidden when no tip selected) -->
+        <div class="tip-total-row" style="
+            display: {tip_display_style};
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px;
+        ">
+            <span class="tip-display" id="tip-display" style="
+                color: #90EE90;
+                font-size: 14px;
+                font-weight: 500;
+            " data-value="{tip_amount}">Tip: ${tip_amount:.2f}</span>
+            
+            <span class="total-display" id="total-display" style="
+                color: #FFD700;
+                font-size: 16px;
+                font-weight: 700;
+            " data-value="{total_with_tip}">Total: ${total_with_tip:.2f}</span>
+        </div>
     </div>
 </div>
 

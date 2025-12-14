@@ -28,7 +28,10 @@ class TestHandleGradioInput:
         
         mock_get_voice_audio.return_value = b'audio_data'
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
-        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_get_payment_state.return_value = {
+            'tab_total': 13.0, 'balance': 987.0,
+            'tip_percentage': None, 'tip_amount': 0.0
+        }
         mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
@@ -42,6 +45,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=mock_cartesia_client,
@@ -92,7 +97,10 @@ class TestHandleGradioInput:
         )
         
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
-        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_get_payment_state.return_value = {
+            'tab_total': 13.0, 'balance': 987.0,
+            'tip_percentage': None, 'tip_amount': 0.0
+        }
         mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function without TTS client
@@ -104,6 +112,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=None,  # No TTS client
@@ -140,7 +150,10 @@ class TestHandleGradioInput:
         )
         
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
-        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_get_payment_state.return_value = {
+            'tab_total': 13.0, 'balance': 987.0,
+            'tip_percentage': None, 'tip_amount': 0.0
+        }
         mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
@@ -152,6 +165,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -189,7 +204,10 @@ class TestHandleGradioInput:
         
         mock_get_voice_audio.side_effect = Exception("TTS failed")
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
-        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_get_payment_state.return_value = {
+            'tab_total': 13.0, 'balance': 987.0,
+            'tip_percentage': None, 'tip_amount': 0.0
+        }
         mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
@@ -201,6 +219,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -240,6 +260,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -287,7 +309,10 @@ class TestHandleGradioInput:
         
         mock_get_voice_audio.return_value = b'audio_data'
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
-        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_get_payment_state.return_value = {
+            'tab_total': 13.0, 'balance': 987.0,
+            'tip_percentage': None, 'tip_amount': 0.0
+        }
         mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function with RAG components
@@ -299,6 +324,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
@@ -341,7 +368,10 @@ class TestHandleGradioInput:
         )
         
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
-        mock_get_payment_state.return_value = {'tab_total': 13.0, 'balance': 987.0}
+        mock_get_payment_state.return_value = {
+            'tab_total': 13.0, 'balance': 987.0,
+            'tip_percentage': None, 'tip_amount': 0.0
+        }
         mock_create_overlay.return_value = '<div>overlay</div>'
 
         # Execute function
@@ -353,6 +383,8 @@ class TestHandleGradioInput:
             session_history_state=[{'role': 'user', 'content': 'Hi'}],
             current_tab=0.0,
             current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
             request=mock_request,
             llm=Mock(),
             cartesia_client=Mock(),
