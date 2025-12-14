@@ -362,3 +362,105 @@ class TestStatePreservationOnRejection:
         order_after = get_current_order_state(session_id, store)
         assert order_after == order_before
         assert len(order_after) == 1
+
+
+class TestTabAccumulationAccuracy:
+    """
+    **Feature: stripe-payment, Property 2: Tab Accumulation Accuracy**
+
+    *For any* sequence of drink orders with prices [P1, P2, ..., Pn],
+    the tab total SHALL equal the sum of all prices: sum(P1 + P2 + ... + Pn).
+
+    **Validates: Requirements 2.2**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        prices=st.lists(
+            st.floats(min_value=0.01, max_value=50.00, allow_nan=False),
+            min_size=1,
+            max_size=20
+        ),
+        test_id=st.integers(min_value=0, max_value=2**31)
+    )
+    def test_tab_accumulation_accuracy(self, prices, test_id):
+        """
+        Property 2: Tab Accumulation Accuracy
+
+        Preconditions: Session initialized with $1000 balance, empty tab
+        Generators: list of 1-20 item prices, each in [0.01, 50.00]
+        Invariant: tab_total == sum(all_item_prices) exactly
+        """
+        # Precondition: total must be <= 1000 (starting balance)
+        total_price = sum(prices)
+        assume(total_price <= 1000.00)
+
+        # Setup
+        store = {}
+        session_id = f"test_tab_accumulation_{test_id}"
+        initialize_state(session_id, store)
+
+        # Verify initial state
+        payment = get_payment_state(session_id, store)
+        assert payment['balance'] == 1000.00
+        assert payment['tab_total'] == 0.00
+
+        # Act: Add all items
+        for price in prices:
+            success, error, _ = atomic_order_update(session_id, store, price)
+            assert success, f"Order should succeed: {error}"
+
+        # Assert: tab_total == sum(prices)
+        payment = get_payment_state(session_id, store)
+        assert abs(payment['tab_total'] - total_price) < 0.001, (
+            f"Tab accumulation incorrect: "
+            f"expected {total_price}, got {payment['tab_total']}"
+        )
+
+    def test_single_item_tab(self):
+        """Edge case: single item"""
+        store = {}
+        session_id = "test_single_item_tab"
+        initialize_state(session_id, store)
+
+        price = 15.00
+        success, _, _ = atomic_order_update(session_id, store, price)
+
+        assert success
+        payment = get_payment_state(session_id, store)
+        assert abs(payment['tab_total'] - price) < 0.001
+
+    def test_many_small_items_tab(self):
+        """Edge case: many small items"""
+        store = {}
+        session_id = "test_many_small_items"
+        initialize_state(session_id, store)
+
+        # 100 items at $0.01 each = $1.00 total
+        small_price = 0.01
+        num_items = 100
+
+        for _ in range(num_items):
+            success, _, _ = atomic_order_update(session_id, store, small_price)
+            assert success
+
+        payment = get_payment_state(session_id, store)
+        expected_total = small_price * num_items
+        assert abs(payment['tab_total'] - expected_total) < 0.001
+
+    def test_items_totaling_exactly_1000(self):
+        """Edge case: items totaling exactly $1000"""
+        store = {}
+        session_id = "test_exact_1000"
+        initialize_state(session_id, store)
+
+        # Add items totaling exactly $1000
+        prices = [500.00, 300.00, 150.00, 50.00]  # = 1000.00
+
+        for price in prices:
+            success, _, _ = atomic_order_update(session_id, store, price)
+            assert success
+
+        payment = get_payment_state(session_id, store)
+        assert abs(payment['tab_total'] - 1000.00) < 0.001
+        assert abs(payment['balance'] - 0.00) < 0.001

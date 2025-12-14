@@ -358,3 +358,12 @@ class TestStateManager:
         mock_logger.info.assert_called()
         call_args = mock_logger.info.call_args[0][0]
         assert "Session" in call_args and "reset" in call_args
+
+    def test_atomic_payment_complete_failure(self):
+        """Test atomic_payment_complete handles exceptions correctly."""
+        # Mock _get_session_data to raise an exception
+        with patch('src.utils.state_manager._get_session_data', side_effect=Exception("Database error")):
+            result = atomic_payment_complete(self.session_id, self.store)
+            
+            assert result is False
+

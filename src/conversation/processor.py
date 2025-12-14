@@ -16,7 +16,7 @@ except ImportError:
 
 from ..config.logging_config import get_logger
 from ..llm.prompts import get_combined_prompt
-from ..llm.tools import get_all_tools
+from ..llm.tools import get_all_tools, set_current_session, clear_current_session
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
 from ..utils.state_manager import is_order_finished, get_current_order_state
 from .phase_manager import ConversationPhaseManager
@@ -93,6 +93,11 @@ def process_order(
         logger.warning("Received empty user input.")
         return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
 
+    # Set session context for tools to access
+    # This allows payment tools to know which session they're operating on
+    # Treat None as "no active session" - tools fall back to legacy behavior
+    set_current_session(session_id)
+    
     # Initialize phase manager
     phase_manager = ConversationPhaseManager(session_id, app_state)
     
@@ -149,7 +154,9 @@ def process_order(
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
-            
+        
+        # Clear session context before returning
+        clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
     
     # Fallback to traditional intent detection
@@ -176,7 +183,9 @@ def process_order(
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
-            
+        
+        # Clear session context before returning
+        clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
 
     # Prepare message history for LangChain model
@@ -377,3 +386,7 @@ def process_order(
         safe_history.append({'role': 'user', 'content': user_input_text})
         safe_history.append({'role': 'assistant', 'content': error_message})
         return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None
+    finally:
+        # Always clear session context after processing completes
+        # This ensures the session context is cleaned up even if an error occurs
+        clear_current_session()

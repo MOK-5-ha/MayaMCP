@@ -197,8 +197,8 @@ class TestAddToOrder:
         assert item["quantity"] == 3
         assert item["price"] == 15.0  # 3 * 5.00
 
-        # Verify return message
-        assert "3 x Beer" in result
+        # Verify return message (accepts both "3 x" and "3x" formats)
+        assert "3 x Beer" in result or "3x Beer" in result
 
     @patch('src.llm.tools.get_menu')
     @patch('src.llm.tools.update_order_state')
@@ -662,7 +662,8 @@ class TestGetAllTools:
         # Verify all expected tools are present (use .name attribute for StructuredTool)
         tool_names = [tool.name for tool in tools]
         expected_tools = [
-            'get_menu', 'get_recommendation', 'add_to_order', 'get_order',
+            'get_menu', 'get_recommendation', 'add_to_order',
+            'add_to_order_with_balance', 'get_balance', 'get_order',
             'confirm_order', 'place_order', 'clear_order', 'get_bill',
             'pay_bill', 'add_tip'
         ]

@@ -11,7 +11,7 @@ import os
 
 
 from src.conversation.phase_manager import ConversationPhaseManager
-from src.utils.state_manager import initialize_state, update_conversation_state
+from src.utils.state_manager import initialize_state, update_conversation_state, cleanup_session_lock
 
 
 class TestConversationPhaseManager:
@@ -27,6 +27,7 @@ class TestConversationPhaseManager:
     def teardown_method(self):
         """Cleanup after each test."""
         self.store.clear()
+        cleanup_session_lock(self.session_id)
 
     def test_init(self):
         """Test ConversationPhaseManager initialization."""

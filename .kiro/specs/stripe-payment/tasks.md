@@ -73,26 +73,26 @@
 - [x] 2. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Set up session context for tools
-  - [ ] 3.1 Add _current_session thread-local variable
+- [x] 3. Set up session context for tools
+  - [x] 3.1 Add _current_session thread-local variable
     - Create thread-local storage for session context in src/llm/tools.py
     - Initialize with default None (no active session) for backwards compatibility
     - Existing tools that don't use session context continue to work unchanged
     - _Requirements: 1.2_
-  - [ ] 3.2 Update process_order to set session context
+  - [x] 3.2 Update process_order to set session context
     - Set _current_session before calling LLM in processor.py
     - Clear _current_session after processing complete (in finally block to handle errors)
     - Initialize from existing session_id parameter passed to process_order
     - Treat None as "no active session" - tools fall back to legacy behavior
     - _Requirements: 1.2_
-  - [ ] 3.3 Add unit tests for session context lifecycle
+  - [x] 3.3 Add unit tests for session context lifecycle
     - Test set/clear semantics work correctly
     - Test legacy code reading from session store still works
     - Test error handling clears context properly
     - _Requirements: 1.2_
 
-- [ ] 4. Implement payment tools
-  - [ ] 4.1 Create ToolResponse types and PaymentError enum
+- [x] 4. Implement payment tools
+  - [x] 4.1 Create ToolResponse types and PaymentError enum
     - Define ToolSuccess, ToolError TypedDicts
     - Define PaymentError enum with documented error codes:
       - INSUFFICIENT_FUNDS: balance < order price (Req 1.3)
@@ -105,19 +105,19 @@
       - PAYMENT_TIMEOUT: payment status polling exceeded deadline
     - Each error code must have a human-readable message template
     - _Requirements: 1.3, 3.3, 3.4_
-  - [ ] 4.2 Implement add_to_order_with_balance tool
+  - [x] 4.2 Implement add_to_order_with_balance tool
     - Get session context from _current_session thread-local
     - Call atomic_order_update from state manager
     - Return structured ToolResponse
     - _Requirements: 1.2, 1.3, 1.5_
-  - [ ] 4.3 Implement get_balance tool
+  - [x] 4.3 Implement get_balance tool
     - Return current balance and tab from payment state
     - _Requirements: 1.4_
-  - [ ] 4.4 Update existing add_to_order to use balance checking
+  - [x] 4.4 Update existing add_to_order to use balance checking
     - Modify existing tool to call add_to_order_with_balance internally
     - Maintain backward compatibility
     - _Requirements: 1.2_
-  - [ ] 4.5 Write property test for tab accumulation accuracy
+  - [x] 4.5 Write property test for tab accumulation accuracy
     - **Property 2: Tab Accumulation Accuracy**
     - **Validates: Requirements 2.2**
     - Preconditions: Session initialized with $1000 balance, empty tab
@@ -126,7 +126,7 @@
     - Edge cases: single item, many small items, items totaling exactly $1000
     - Assertion: `assert abs(tab_total - sum(prices)) < 0.001`
 
-- [ ] 5. Checkpoint - Ensure all tests pass
+- [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 6. Create Stripe MCP client

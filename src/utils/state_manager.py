@@ -377,13 +377,13 @@ def get_order_history(session_id: Optional[str] = None, store: Optional[MutableM
     """Get order history."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
-    return data['history']
+    return data['history'].copy()
 
 def get_current_order_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> List[Dict[str, Any]]:
     """Get current order state."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
-    return data['current_order']['order']
+    return data['current_order']['order'].copy()
 
 def update_conversation_state(session_id_or_updates: Any = None, store_or_none: Optional[MutableMapping] = None, updates: Optional[Dict[str, Any]] = None) -> None:
     """
@@ -656,22 +656,27 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
         store: Mutable mapping to store state.
         
     Returns:
-        True if successful, False otherwise.
+        True if successful, False if an exception occurs.
     """
     lock = get_session_lock(session_id)
     
     with lock:
-        data = _get_session_data(session_id, store)
-        payment = data['payment']
-        
-        # Reset tab and mark as completed
-        payment['tab_total'] = 0.00
-        payment['payment_status'] = 'completed'
-        payment['needs_reconciliation'] = False
-        payment['version'] += 1
-        
-        _save_session_data(session_id, store, data)
-        
-        logger.info(f"Payment completed for {session_id}")
-        
-        return True
+        try:
+            data = _get_session_data(session_id, store)
+            payment = data['payment']
+            
+            # Reset tab and mark as completed
+            payment['tab_total'] = 0.00
+            payment['payment_status'] = 'completed'
+            payment['needs_reconciliation'] = False
+            payment['version'] += 1
+            
+            _save_session_data(session_id, store, data)
+            
+            logger.info(f"Payment completed for {session_id}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to complete payment for {session_id}: {str(e)}")
+            return False
