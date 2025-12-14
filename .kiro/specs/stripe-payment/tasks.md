@@ -129,16 +129,16 @@
 - [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Create Stripe MCP client
-  - [ ] 6.1 Create src/payments/__init__.py and stripe_mcp.py module
+- [x] 6. Create Stripe MCP client
+  - [x] 6.1 Create src/payments/__init__.py and stripe_mcp.py module
     - Create new payments package
     - Define StripeMCPClient class skeleton
     - _Requirements: 3.1, 4.1_
-  - [ ] 6.2 Implement idempotency key generation
+  - [x] 6.2 Implement idempotency key generation
     - Create generate_idempotency_key() method
     - Format: {session_id}_{unix_timestamp}
     - _Requirements: 3.1_
-  - [ ] 6.3 Implement create_payment_link with async retry logic
+  - [x] 6.3 Implement create_payment_link with async retry logic
     - Use non-blocking async retries with `asyncio.sleep()` to avoid blocking request threads
     - Initial attempt, then up to 3 retries (total up to 4 requests, configurable via MAX_RETRIES)
     - Timing sequence: await 1s before 1st retry, 2s before 2nd, 4s before 3rd
@@ -150,7 +150,7 @@
       - Surface fallback to user: Maya says "Using backup payment method"
       - Fall back to mock payment
     - _Requirements: 3.1, 3.2, 4.2_
-  - [ ] 6.4 Implement is_available check and fallback logic
+  - [x] 6.4 Implement is_available check and fallback logic
     - Availability check implementation:
       - Use lightweight probe: attempt to list Stripe MCP server tools via kiroPowers activate
       - Success criteria: server responds within 5 seconds with valid tool list
@@ -159,7 +159,7 @@
     - Cache availability result for 30 seconds to reduce probe overhead
     - Return False if unavailable, triggering immediate fallback to mock payment
     - _Requirements: 3.4_
-  - [ ] 6.5 Implement check_payment_status with timeout
+  - [x] 6.5 Implement check_payment_status with timeout
     - Poll interval: 2 seconds between attempts
     - Per-poll timeout: 5 seconds (each individual poll must complete within 5s)
     - Total wall-clock deadline: 30 seconds for entire polling operation
@@ -167,23 +167,23 @@
     - Return "timeout" status if wall-clock deadline exceeded
     - _Requirements: 3.3_
 
-- [ ] 7. Implement Stripe payment tools
-  - [ ] 7.1 Implement create_stripe_payment tool
+- [x] 7. Implement Stripe payment tools
+  - [x] 7.1 Implement create_stripe_payment tool
     - Generate idempotency key
     - Call StripeMCPClient.create_payment_link
     - Handle fallback to mock payment
     - Return structured response with url, payment_id, is_simulated
     - _Requirements: 3.1, 3.2, 3.4, 4.3_
-  - [ ] 7.2 Implement check_payment_status tool
+  - [x] 7.2 Implement check_payment_status tool
     - Call StripeMCPClient.check_payment_status
     - Handle timeout case
     - _Requirements: 3.3_
-  - [ ] 7.3 Implement atomic_payment_complete function
+  - [x] 7.3 Implement atomic_payment_complete function
     - Reset tab to $0.00
     - Set payment_status to completed
     - Atomic operation with version check
     - _Requirements: 3.3_
-  - [ ] 7.4 Write property test for payment completion state reset
+  - [x] 7.4 Write property test for payment completion state reset
     - **Property 5: Payment Completion State Reset**
     - **Validates: Requirements 3.3**
     - Preconditions: Session with non-zero tab, payment_status != "completed"
@@ -192,7 +192,7 @@
     - Edge cases: minimum tab ($0.01), maximum tab ($1000), already processing status
     - Assertion: `assert tab_total == 0.0 and payment_status == "completed"`
 
-- [ ] 8. Checkpoint - Ensure all tests pass
+- [x] 8. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Create tab overlay UI component

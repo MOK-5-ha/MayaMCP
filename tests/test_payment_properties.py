@@ -10,10 +10,12 @@ from hypothesis import given, strategies as st, settings, assume
 
 from src.utils.state_manager import (
     atomic_order_update,
+    atomic_payment_complete,
     get_payment_state,
     initialize_state,
     get_current_order_state,
     update_order_state,
+    update_payment_state,
     INSUFFICIENT_FUNDS,
     CONCURRENT_MODIFICATION,
     DEFAULT_PAYMENT_STATE,
@@ -464,3 +466,140 @@ class TestTabAccumulationAccuracy:
         payment = get_payment_state(session_id, store)
         assert abs(payment['tab_total'] - 1000.00) < 0.001
         assert abs(payment['balance'] - 0.00) < 0.001
+
+
+
+class TestPaymentCompletionStateReset:
+    """
+    **Feature: stripe-payment, Property 5: Payment Completion State Reset**
+
+    *For any* successful payment completion, the tab total SHALL reset to $0.00
+    and payment status SHALL be "completed".
+
+    **Validates: Requirements 3.3**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        tab_total=st.floats(min_value=0.01, max_value=1000.00, allow_nan=False),
+        payment_status=st.sampled_from(['pending', 'processing']),
+        test_id=st.integers(min_value=0, max_value=2**31)
+    )
+    def test_payment_completion_state_reset(self, tab_total, payment_status, test_id):
+        """
+        Property 5: Payment Completion State Reset
+
+        Preconditions: Session with non-zero tab, payment_status != "completed"
+        Generators: tab_total in [0.01, 1000.00], various payment_status values
+        Invariant: after completion, tab_total == 0.00 AND payment_status == "completed"
+        """
+        # Setup
+        store = {}
+        session_id = f"test_payment_complete_{test_id}"
+        initialize_state(session_id, store)
+
+        # Set up initial state with non-zero tab and non-completed status
+        store[session_id]['payment']['tab_total'] = tab_total
+        store[session_id]['payment']['payment_status'] = payment_status
+        store[session_id]['payment']['needs_reconciliation'] = False
+
+        # Verify preconditions
+        payment_before = get_payment_state(session_id, store)
+        assert payment_before['tab_total'] == tab_total
+        assert payment_before['payment_status'] == payment_status
+
+        # Act: Complete payment
+        success = atomic_payment_complete(session_id, store)
+
+        # Assert: Operation succeeded
+        assert success, "Payment completion should succeed"
+
+        # Assert: tab_total == 0.00 AND payment_status == "completed"
+        payment_after = get_payment_state(session_id, store)
+        assert payment_after['tab_total'] == 0.0, (
+            f"Tab should be reset to 0.00, got {payment_after['tab_total']}"
+        )
+        assert payment_after['payment_status'] == "completed", (
+            f"Status should be 'completed', got {payment_after['payment_status']}"
+        )
+
+    def test_minimum_tab_completion(self):
+        """Edge case: minimum tab ($0.01)"""
+        store = {}
+        session_id = "test_min_tab_complete"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 0.01
+        store[session_id]['payment']['payment_status'] = 'pending'
+
+        success = atomic_payment_complete(session_id, store)
+
+        assert success
+        payment = get_payment_state(session_id, store)
+        assert payment['tab_total'] == 0.0
+        assert payment['payment_status'] == "completed"
+
+    def test_maximum_tab_completion(self):
+        """Edge case: maximum tab ($1000)"""
+        store = {}
+        session_id = "test_max_tab_complete"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 1000.00
+        store[session_id]['payment']['payment_status'] = 'pending'
+
+        success = atomic_payment_complete(session_id, store)
+
+        assert success
+        payment = get_payment_state(session_id, store)
+        assert payment['tab_total'] == 0.0
+        assert payment['payment_status'] == "completed"
+
+    def test_processing_status_completion(self):
+        """Edge case: already processing status"""
+        store = {}
+        session_id = "test_processing_complete"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 50.00
+        store[session_id]['payment']['payment_status'] = 'processing'
+
+        success = atomic_payment_complete(session_id, store)
+
+        assert success
+        payment = get_payment_state(session_id, store)
+        assert payment['tab_total'] == 0.0
+        assert payment['payment_status'] == "completed"
+
+    def test_version_incremented_on_completion(self):
+        """Verify version is incremented on completion"""
+        store = {}
+        session_id = "test_version_increment"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 100.00
+        store[session_id]['payment']['payment_status'] = 'pending'
+        initial_version = store[session_id]['payment']['version']
+
+        success = atomic_payment_complete(session_id, store)
+
+        assert success
+        payment = get_payment_state(session_id, store)
+        assert payment['version'] == initial_version + 1
+
+    def test_needs_reconciliation_cleared_on_completion(self):
+        """Verify needs_reconciliation is set to False on completion"""
+        store = {}
+        session_id = "test_reconciliation_cleared"
+        initialize_state(session_id, store)
+
+        store[session_id]['payment']['tab_total'] = 75.00
+        store[session_id]['payment']['payment_status'] = 'processing'
+        store[session_id]['payment']['needs_reconciliation'] = True
+
+        success = atomic_payment_complete(session_id, store)
+
+        assert success
+        payment = get_payment_state(session_id, store)
+        assert payment['needs_reconciliation'] is False
+        assert payment['payment_status'] == "completed"

@@ -665,7 +665,7 @@ class TestGetAllTools:
             'get_menu', 'get_recommendation', 'add_to_order',
             'add_to_order_with_balance', 'get_balance', 'get_order',
             'confirm_order', 'place_order', 'clear_order', 'get_bill',
-            'pay_bill', 'add_tip'
+            'pay_bill', 'add_tip', 'create_stripe_payment', 'check_payment_status'
         ]
 
         for expected_tool in expected_tools:
@@ -673,3 +673,30 @@ class TestGetAllTools:
 
         # Verify correct count
         assert len(tools) == len(expected_tools)
+
+
+class TestAddToOrderWithBalance:
+    """Test cases for add_to_order_with_balance function."""
+
+    @patch('src.llm.tools.get_current_session')
+    @patch('src.llm.tools.get_global_store')
+    @patch('src.llm.tools.get_menu')
+    def test_add_to_order_with_balance_item_not_found(self, mock_get_menu, mock_get_store, mock_get_session):
+        """Test adding item not found in menu returns ITEM_NOT_FOUND error."""
+        # Setup mocks
+        mock_get_session.return_value = "test_session"
+        mock_get_store.return_value = {}
+        mock_get_menu.invoke.return_value = """
+        MENU:
+        Martini - $13.00
+        """
+
+        # Execute function using invoke
+        from src.llm.tools import add_to_order_with_balance
+        result = add_to_order_with_balance.invoke({"item_name": "Unknown Drink"})
+
+        # Verify error response
+        assert result["status"] == "error"
+        assert result["error"] == "ITEM_NOT_FOUND"
+        assert "Unknown Drink" in result["message"]
+
