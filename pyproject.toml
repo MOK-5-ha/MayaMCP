@@ -26,6 +26,9 @@ classifiers = [
 ]
 dynamic = ["dependencies"]
 
+[project.optional-dependencies]
+security = ["llm-guard"]
+
 [project.urls]
 Homepage = "https://github.com/MOK-5-ha/MayaMCP"
 Repository = "https://github.com/MOK-5-ha/MayaMCP"

@@ -24,3 +24,6 @@ opencv-python
 # Legacy FAISS (keeping for fallback compatibility)
 faiss-cpu>=1.10.0
 numpy>=1.24.0
+
+# Security (Optional)
+llm-guard>=0.3.0

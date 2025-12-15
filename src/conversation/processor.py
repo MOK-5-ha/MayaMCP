@@ -14,6 +14,13 @@ try:
 except ImportError:
     rag_pipeline = None
 
+try:
+    from ..security import scan_input, scan_output
+except ImportError:
+    # Graceful fallback if security module is missing or broken
+    def scan_input(text): return type('obj', (object,), {'is_valid': True, 'sanitized_text': text})
+    def scan_output(text, prompt=None): return type('obj', (object,), {'is_valid': True, 'sanitized_text': text})
+
 from ..config.logging_config import get_logger
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
@@ -93,6 +100,18 @@ def process_order(
         logger.warning("Received empty user input.")
         return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
 
+    # Security Scan: Input
+    scan_result = scan_input(user_input_text)
+    if not scan_result.is_valid:
+        logger.warning(f"Input blocked by security scanner: {scan_result.blocked_reason}")
+        blocked_msg = scan_result.blocked_reason
+        
+        updated_history = current_session_history[:]
+        updated_history.append({'role': 'user', 'content': user_input_text})
+        updated_history.append({'role': 'assistant', 'content': blocked_msg})
+        
+        return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
+
     # Set session context for tools to access
     # This allows payment tools to know which session they're operating on
     # Treat None as "no active session" - tools fall back to legacy behavior
@@ -153,6 +172,13 @@ def process_order(
         # Update history for Gradio display
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
+        
+        # Security Scan: Output
+        output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
+        if not output_scan_result.is_valid:
+            logger.warning("Output blocked by security scanner (speech act)")
+            agent_response_text = output_scan_result.sanitized_text
+
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
         
         # Clear session context before returning
@@ -182,6 +208,13 @@ def process_order(
         # Update history for Gradio display
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
+        
+        # Security Scan: Output
+        output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
+        if not output_scan_result.is_valid:
+            logger.warning("Output blocked by security scanner (intent)")
+            agent_response_text = output_scan_result.sanitized_text
+
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
         
         # Clear session context before returning
@@ -374,6 +407,13 @@ def process_order(
         # Update history for Gradio display
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
+        
+        # Security Scan: Output
+        output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
+        if not output_scan_result.is_valid:
+            logger.warning("Output blocked by security scanner")
+            agent_response_text = output_scan_result.sanitized_text
+
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
 
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
