@@ -45,6 +45,23 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - Default model: Google Gemini 2.5 Flash Lite (model id: `gemini-2.5-flash-lite`)
 - You can override the model via `GEMINI_MODEL_VERSION` in your `.env`
 
+## Security
+
+Maya features a built-in security layer powered by `llm-guard` that protects against:
+
+- **Prompt Injection**: Detects and blocks malicious inputs attempting to manipulate the agent.
+- **Input/Output Toxicity**: Filters toxic content in both user inputs and agent responses.
+
+The security features fail open to ensure availability if the scanning engine encounters errors.
+
+To enable security features, ensure the optional dependencies are installed:
+
+```bash
+pip install ".[security]"
+# or
+pip install -r requirements.txt
+```
+
 ## Setup
 
 Follow these steps to get Maya running locally.

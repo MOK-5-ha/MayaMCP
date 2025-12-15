@@ -39,6 +39,12 @@ The system degrades gracefully:
 - Payments: Stripe MCP → mock payment links
 - API errors never break conversation flow
 
+### Security Scanning
+Input and output scanning is integrated into the conversation loop:
+- **Inputs** are checked for prompt injection and toxicity before processing.
+- **Outputs** are checked for toxicity before being sent to the user.
+- See `src/security/` for configuration (`ScanConfig`) and scanning logic.
+
 ### Payment State Management
 Payment state is managed per-session with thread-safe locking:
 - Balance tracking with atomic updates
