@@ -18,7 +18,13 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - Menu management with several beverages
 - Real-time streaming voice chat
 - Gradio UI with agent avatar
-- MCP Stripe integration for simulation of transactions
+- **Stripe Payment Integration** (Test Mode)
+  - $1000 starting balance for simulated bar experience
+  - Live tab counter overlay on Maya's avatar
+  - Animated balance/tab updates with visual feedback
+  - Tip selection (10%, 15%, 20%) with toggle behavior
+  - Stripe payment links via MCP server (with mock fallback)
+  - Low balance warnings (orange < $50, red at $0)
 
 ## Project Structure
 
@@ -109,6 +115,48 @@ Note: `pip install -r requirements.txt` installs the Google AI Studio SDK (`goog
 3. Generate API key
 4. Add to `.env` as `CARTESIA_API_KEY`
 
+### Stripe API (Optional - for real payment links)
+
+The payment feature works out of the box with mock payments. For real Stripe integration:
+
+1. Visit [Stripe Dashboard](https://dashboard.stripe.com/register)
+2. Create a free account (no credit card required)
+3. Ensure **Test Mode** is enabled (toggle in top-right)
+4. Go to **Developers → API Keys**
+5. Copy your test secret key (`sk_test_...`)
+6. Configure the Stripe MCP server (see below)
+
+> ⚠️ **Important**: Only use test mode keys. The implementation enforces test mode for safety.
+
+#### Stripe MCP Server Setup
+
+Create `.kiro/settings/mcp.json` (or copy from `.kiro/settings/mcp.json.example`):
+
+```json
+{
+  "mcpServers": {
+    "stripe": {
+      "command": "uvx",
+      "args": ["mcp-server-stripe"],
+      "env": {
+        "STRIPE_SECRET_KEY": "sk_test_YOUR_TEST_KEY_HERE"
+      },
+      "disabled": false,
+      "autoApprove": ["create_payment_link", "get_payment_link"]
+    }
+  }
+}
+```
+
+Without this configuration, Maya uses mock payment links (fully functional for demos).
+
+#### Test Card Numbers
+
+When testing payments, use Stripe's test cards:
+- **Success**: `4242 4242 4242 4242`
+- **Decline**: `4000 0000 0000 0002`
+- Any future expiry date and 3-digit CVC work.
+
 Startup validation: On launch, Maya validates required API keys and logs clear, actionable messages if any are missing. The configured `GEMINI_MODEL_VERSION` is also checked against a known list; unrecognized models produce a warning without stopping the app.
 
 ## Usage
@@ -139,8 +187,20 @@ After setup, Maya will launch a Gradio web interface accessible at:
 #### Billing/Payment
 
 - View bill: "What's my total?"
-- Add tip: "Add a 20% tip"
+- Check balance: "What's my balance?"
+- Add tip: Click tip buttons (10%, 15%, 20%) or say "Add a 20% tip"
 - Pay: "I'll pay now"
+
+### Tab Counter & Balance Display
+
+Maya's avatar includes a real-time tab overlay showing:
+- **Tab**: Running total of your drink orders
+- **Balance**: Remaining funds (starts at $1000)
+- **Tip buttons**: Quick-select 10%, 15%, or 20% tip
+- **Visual feedback**: Animated count-up effects when values change
+- **Low balance warnings**: Orange text below $50, red at $0
+
+The overlay updates automatically as you order drinks and is positioned at the bottom-left of Maya's avatar.
 
 ### Voice Features
 

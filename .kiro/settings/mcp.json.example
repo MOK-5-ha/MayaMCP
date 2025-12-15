@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "stripe": {
+      "command": "uvx",
+      "args": ["mcp-server-stripe"],
+      "env": {
+        "STRIPE_SECRET_KEY": "sk_test_YOUR_TEST_SECRET_KEY_HERE"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "create_payment_link",
+        "get_payment_link"
+      ]
+    }
+  }
+}
