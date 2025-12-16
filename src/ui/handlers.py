@@ -37,7 +37,7 @@ def handle_gradio_input(
     app_state: Optional[MutableMapping] = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
 ) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any,
-           str, float, float, float, float, Optional[int], float]:
+           str, float, float, float, float, Optional[int], float, str]:
     """
     Gradio callback: Takes input/state, calls logic & TTS, returns updates.
 
@@ -55,12 +55,12 @@ def handle_gradio_input(
         rag_documents: Documents for RAG (optional)
         api_key: API key for various services
         app_state: Distributed state store (modal.Dict or dict)
-        avatar_path: Path to avatar image for overlay
+        avatar_path: Current avatar path state (from Gradio state)
 
     Returns:
         Tuple of (empty_input, updated_history, updated_history_for_gradio,
                   updated_order, audio_data, overlay_html, new_tab, new_balance,
-                  prev_tab, prev_balance, new_tip_percentage, new_tip_amount)
+                  prev_tab, prev_balance, new_tip_percentage, new_tip_amount, updated_avatar_path)
 
     Requirements: 2.2, 6.2, 7.3, 7.4
     """
@@ -81,7 +81,7 @@ def handle_gradio_input(
     logger.debug(f"Received session history state (len {len(session_history_state)}): {session_history_state}")
 
     # Call text processing logic first
-    emotion_state = "neutral"
+    emotion_state = None  # Default to None (no change) if not parsed
     try:
         response_text, updated_history, updated_history_for_gradio, updated_order, _, emotion_state = process_order(
             user_input_text=user_input,
@@ -100,13 +100,13 @@ def handle_gradio_input(
         safe_history = session_history_state[:]
         safe_history.append({'role': 'user', 'content': user_input})
         safe_history.append({'role': 'assistant', 'content': friendly})
-        # Return with unchanged payment state on error
+        # Return with unchanged payment state and unchanged avatar on error
         overlay_html = create_tab_overlay_html(
             tab_amount=current_tab,
             balance=current_balance,
             prev_tab=current_tab,
             prev_balance=current_balance,
-            avatar_path=avatar_path,
+            avatar_path=avatar_path, # Keep previous avatar state
             tip_percentage=current_tip_percentage,
             tip_amount=current_tip_amount
         )
@@ -114,7 +114,7 @@ def handle_gradio_input(
             "", safe_history, safe_history,
             get_current_order_state(session_id, app_state), None,
             overlay_html, current_tab, current_balance, current_tab, current_balance,
-            current_tip_percentage, current_tip_amount
+            current_tip_percentage, current_tip_amount, avatar_path
         )
 
     # --- Get Voice Audio ---
@@ -141,19 +141,27 @@ def handle_gradio_input(
     # Note: Assumes placeholder files exist: maya_neutral.mp4, maya_happy.mp4, etc.
     import os
     
-    # Safe fallback if unknown emotion
-    valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
-    if emotion_state not in valid_emotions:
-        emotion_state = "neutral"
-    
-    # Construct filename
-    # e.g. assets/maya_happy.mp4
-    emotion_filename = f"maya_{emotion_state}.mp4" 
-    potential_path = f"assets/{emotion_filename}"
-    
-    # Check if file exists, else fallback to default (likely static or neutral video)
-    final_avatar_path = potential_path if os.path.exists(potential_path) else avatar_path
-    logger.info(f"Emotion: {emotion_state} -> Avatar Path: {final_avatar_path}")
+    # Defaults to current path (persistence)
+    final_avatar_path = avatar_path 
+
+    if emotion_state:
+        # Safe fallback if unknown emotion
+        valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
+        if emotion_state not in valid_emotions:
+            emotion_state = "neutral"
+        
+        # Construct filename
+        # e.g. assets/maya_happy.mp4
+        emotion_filename = f"maya_{emotion_state}.mp4" 
+        potential_path = f"assets/{emotion_filename}"
+        
+        # Check if file exists, if not, do not change state (or fallback to neutral if logic dictates)
+        # Here we only update if the emotion asset exists
+        if os.path.exists(potential_path):
+             final_avatar_path = potential_path
+             logger.info(f"Emotion: {emotion_state} -> Avatar Path: {final_avatar_path}")
+        else:
+             logger.warning(f"Emotion {emotion_state} detected but asset {potential_path} missing. Keeping current avatar.")
 
     # Create overlay HTML with animation from previous to new values
     overlay_html = create_tab_overlay_html(
@@ -172,7 +180,7 @@ def handle_gradio_input(
     return (
         "", updated_history, updated_history_for_gradio, updated_order, audio_data,
         overlay_html, new_tab, new_balance, current_tab, current_balance,
-        new_tip_percentage, new_tip_amount
+        new_tip_percentage, new_tip_amount, final_avatar_path
     )
 
 def clear_chat_state(
@@ -223,7 +231,7 @@ def handle_tip_button_click(
     app_state: Optional[MutableMapping] = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], Any, str, float, float,
-           float, float, Optional[int], float]:
+           float, float, Optional[int], float, str]:
     """
     Handle tip button click event.
     
@@ -244,12 +252,12 @@ def handle_tip_button_click(
         rag_retriever: RAG retriever (optional)
         api_key: API key (optional)
         app_state: State store
-        avatar_path: Path to avatar image
+        avatar_path: Current avatar path state (from Gradio state)
         
     Returns:
         Tuple of (updated_history, updated_history_for_gradio, audio_data,
                   overlay_html, new_tab, new_balance, prev_tab, prev_balance,
-                  new_tip_percentage, new_tip_amount)
+                  new_tip_percentage, new_tip_amount, updated_avatar_path)
                   
     Requirements: 7.2, 7.5, 7.6, 7.11, 7.12
     """
@@ -289,7 +297,7 @@ def handle_tip_button_click(
         return (
             session_history_state, session_history_state, None,
             overlay_html, current_tab, current_balance, current_tab, current_balance,
-            current_tip_percentage, payment_state.get('tip_amount', 0.0)
+            current_tip_percentage, payment_state.get('tip_amount', 0.0), avatar_path
         )
     
     # Get updated payment state
@@ -313,7 +321,7 @@ def handle_tip_button_click(
     logger.info(f"Sending tip notification to Maya: {notification_message}")
     
     # Process the notification through Maya
-    emotion_state = "neutral"
+    emotion_state = None
     try:
         response_text, updated_history, updated_history_for_gradio, _, _, emotion_state = process_order(
             user_input_text=notification_message,
@@ -328,7 +336,7 @@ def handle_tip_button_click(
         )
     except Exception as e:
         logger.exception(f"Error processing tip notification: {e}")
-        # Return with updated tip state but no Maya response
+        # Return with updated tip state but no Maya response, keep avatar
         overlay_html = create_tab_overlay_html(
             tab_amount=new_tab,
             balance=new_balance,
@@ -341,7 +349,7 @@ def handle_tip_button_click(
         return (
             session_history_state, session_history_state, None,
             overlay_html, new_tab, new_balance, current_tab, current_balance,
-            new_tip_percentage, new_tip_amount
+            new_tip_percentage, new_tip_amount, avatar_path
         )
     
     # Get voice audio for Maya's response
@@ -354,14 +362,17 @@ def handle_tip_button_click(
             
     # Resolve Avatar based on Emotion State
     import os
-    valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
-    if emotion_state not in valid_emotions:
-        emotion_state = "neutral"
-    
-    emotion_filename = f"maya_{emotion_state}.mp4" 
-    potential_path = f"assets/{emotion_filename}"
-    
-    final_avatar_path = potential_path if os.path.exists(potential_path) else avatar_path
+    final_avatar_path = avatar_path
+    if emotion_state:
+        valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
+        if emotion_state not in valid_emotions:
+            emotion_state = "neutral"
+        
+        emotion_filename = f"maya_{emotion_state}.mp4" 
+        potential_path = f"assets/{emotion_filename}"
+        
+        if os.path.exists(potential_path):
+             final_avatar_path = potential_path
     
     overlay_html = create_tab_overlay_html(
         tab_amount=new_tab,
@@ -376,5 +387,5 @@ def handle_tip_button_click(
     return (
         updated_history, updated_history_for_gradio, audio_data,
         overlay_html, new_tab, new_balance, current_tab, current_balance,
-        new_tip_percentage, new_tip_amount
+        new_tip_percentage, new_tip_amount, final_avatar_path
     )

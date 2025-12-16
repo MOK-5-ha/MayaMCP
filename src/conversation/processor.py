@@ -178,7 +178,7 @@ def process_order(
                 emotion = match.group(1).lower()
                 clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
                 return emotion, clean_text
-            return "neutral", text
+            return None, text
 
         # Parse emotion from response
         emotion_state, agent_response_text = extract_emotion(agent_response_text)
@@ -448,7 +448,6 @@ def process_order(
         # Return original state on critical error
         safe_history = current_session_history[:]
         safe_history.append({'role': 'user', 'content': user_input_text})
-        safe_history.append({'role': 'assistant', 'content': error_message})
         safe_history.append({'role': 'assistant', 'content': error_message})
         return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None, "neutral"
     finally:

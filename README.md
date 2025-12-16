@@ -25,6 +25,11 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
   - Tip selection (10%, 15%, 20%) with toggle behavior
   - Stripe payment links via MCP server (with mock fallback)
   - Low balance warnings (orange < $50, red at $0)
+- **Emotion-Based Animations**
+  - Dynamic avatar switching based on Maya's emotional state
+  - Supports: Neutral, Happy, Flustered, Thinking, Mixing, Upset
+  - **State Persistence**: Avatar maintains expression during improper inputs or errors
+  - Context-aware emotional triggers (compliments, insults, tips, order placement)
 
 ## Project Structure
 

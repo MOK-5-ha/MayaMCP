@@ -93,7 +93,7 @@ def animate_avatar(
         
         # Download the video
         import requests
-        response = requests.get(video_url)
+        response = requests.get(video_url, timeout=120)  # 2 min timeout for video download
         response.raise_for_status()
         
         output_file = Path(output_path)
