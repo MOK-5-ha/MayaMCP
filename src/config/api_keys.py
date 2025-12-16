@@ -16,10 +16,12 @@ def get_api_keys() -> Dict[str, Optional[str]]:
     """
     google_key = os.getenv("GEMINI_API_KEY")
     cartesia_key = os.getenv("CARTESIA_API_KEY")
+    replicate_key = os.getenv("REPLICATE_API_TOKEN")
     
     return {
         "google_api_key": google_key.strip() if google_key is not None else None,
-        "cartesia_api_key": cartesia_key.strip() if cartesia_key is not None else None
+        "cartesia_api_key": cartesia_key.strip() if cartesia_key is not None else None,
+        "replicate_api_key": replicate_key.strip() if replicate_key is not None else None
     }
 
 def validate_api_keys(required_keys: Optional[list] = None) -> bool:

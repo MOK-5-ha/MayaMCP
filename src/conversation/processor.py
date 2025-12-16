@@ -169,6 +169,20 @@ def process_order(
         else:
             agent_response_text = "Absolutely! I'll take care of that for you."
             
+        import re
+        
+        # Helper to extract emotion state
+        def extract_emotion(text):
+            match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
+            if match:
+                emotion = match.group(1).lower()
+                clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
+                return emotion, clean_text
+            return "neutral", text
+
+        # Parse emotion from response
+        emotion_state, agent_response_text = extract_emotion(agent_response_text)
+        
         # Update history for Gradio display
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
@@ -178,12 +192,14 @@ def process_order(
         if not output_scan_result.is_valid:
             logger.warning("Output blocked by security scanner (speech act)")
             agent_response_text = output_scan_result.sanitized_text
+            emotion_state = "neutral"
 
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
         
         # Clear session context before returning
         clear_current_session()
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
+        # Return emotion_state as the last element (modifying return signature implicity, caller must adapt)
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
     # Fallback to traditional intent detection
     elif intent_match['intent'] and intent_match['confidence'] >= 0.5:
@@ -205,6 +221,9 @@ def process_order(
         else:
             agent_response_text = "I'm not sure what you're asking for. Could you please clarify?"
             
+        # Parse emotion from response
+        emotion_state, agent_response_text = extract_emotion(agent_response_text)
+        
         # Update history for Gradio display
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
@@ -214,12 +233,13 @@ def process_order(
         if not output_scan_result.is_valid:
             logger.warning("Output blocked by security scanner (intent)")
             agent_response_text = output_scan_result.sanitized_text
+            emotion_state = "neutral"
 
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
         
         # Clear session context before returning
         clear_current_session()
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
 
     # Prepare message history for LangChain model
     messages = []
@@ -404,6 +424,9 @@ def process_order(
         # Determine next phase
         next_phase = phase_manager.update_phase(order_placed)
         
+        # Parse emotion from response
+        emotion_state, agent_response_text = extract_emotion(agent_response_text)
+
         # Update history for Gradio display
         updated_history_for_gradio = current_session_history[:] 
         updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
@@ -413,10 +436,11 @@ def process_order(
         if not output_scan_result.is_valid:
             logger.warning("Output blocked by security scanner")
             agent_response_text = output_scan_result.sanitized_text
+            emotion_state = "neutral"
 
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
 
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
 
     except Exception as e:
         logger.exception(f"Critical error in process_order: {str(e)}")
@@ -425,7 +449,8 @@ def process_order(
         safe_history = current_session_history[:]
         safe_history.append({'role': 'user', 'content': user_input_text})
         safe_history.append({'role': 'assistant', 'content': error_message})
-        return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None
+        safe_history.append({'role': 'assistant', 'content': error_message})
+        return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None, "neutral"
     finally:
         # Always clear session context after processing completes
         # This ensures the session context is cleaned up even if an error occurs

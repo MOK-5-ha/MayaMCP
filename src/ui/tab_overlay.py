@@ -195,9 +195,17 @@ def create_tab_overlay_html(
     # Tip and total row - only shown when tip is selected
     tip_display_style = "flex" if tip_percentage is not None else "none"
     
+    # Check if avatar is a video
+    is_video = avatar_src.lower().endswith(('.mp4', '.webm', '.mov'))
+    
+    if is_video:
+        media_html = f'<video src="file/{avatar_src}" autoplay loop muted playsinline style="width: 100%; height: auto; display: block; border-radius: 8px;"></video>'
+    else:
+        media_html = f'<img src="file/{avatar_src}" alt="Maya the Bartender" style="width: 100%; height: auto; display: block; border-radius: 8px;">'
+    
     html = f'''
 <div class="avatar-overlay-container" style="position: relative; display: inline-block; width: 100%; max-width: 600px;">
-    <img src="file/{avatar_src}" alt="Maya the Bartender" style="width: 100%; height: auto; display: block; border-radius: 8px;">
+    {media_html}
     
     <div class="tab-overlay" style="
         position: absolute;

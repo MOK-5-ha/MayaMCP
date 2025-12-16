@@ -71,7 +71,14 @@ def launch_bartender_interface(
             avatar_path = None
     
     # Use default avatar path if not provided
-    effective_avatar_path = avatar_path or "assets/bartender_avatar.jpg"
+    if not avatar_path:
+        import os
+        if os.path.exists("assets/bartender_avatar.mp4"):
+             avatar_path = "assets/bartender_avatar.mp4"
+        else:
+             avatar_path = "assets/bartender_avatar.jpg"
+            
+    effective_avatar_path = avatar_path
 
     # Create the interface
     ui_theme = gr.themes.Ocean()

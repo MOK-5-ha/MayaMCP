@@ -81,8 +81,9 @@ def handle_gradio_input(
     logger.debug(f"Received session history state (len {len(session_history_state)}): {session_history_state}")
 
     # Call text processing logic first
+    emotion_state = "neutral"
     try:
-        response_text, updated_history, updated_history_for_gradio, updated_order, _ = process_order(
+        response_text, updated_history, updated_history_for_gradio, updated_order, _, emotion_state = process_order(
             user_input_text=user_input,
             current_session_history=session_history_state,
             llm=llm,
@@ -136,13 +137,31 @@ def handle_gradio_input(
     new_tip_percentage = payment_state['tip_percentage']
     new_tip_amount = payment_state['tip_amount']
 
+    # Resolve Avatar based on Emotion State
+    # Note: Assumes placeholder files exist: maya_neutral.mp4, maya_happy.mp4, etc.
+    import os
+    
+    # Safe fallback if unknown emotion
+    valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
+    if emotion_state not in valid_emotions:
+        emotion_state = "neutral"
+    
+    # Construct filename
+    # e.g. assets/maya_happy.mp4
+    emotion_filename = f"maya_{emotion_state}.mp4" 
+    potential_path = f"assets/{emotion_filename}"
+    
+    # Check if file exists, else fallback to default (likely static or neutral video)
+    final_avatar_path = potential_path if os.path.exists(potential_path) else avatar_path
+    logger.info(f"Emotion: {emotion_state} -> Avatar Path: {final_avatar_path}")
+
     # Create overlay HTML with animation from previous to new values
     overlay_html = create_tab_overlay_html(
         tab_amount=new_tab,
         balance=new_balance,
         prev_tab=current_tab,
         prev_balance=current_balance,
-        avatar_path=avatar_path,
+        avatar_path=final_avatar_path,
         tip_percentage=new_tip_percentage,
         tip_amount=new_tip_amount
     )
@@ -294,8 +313,9 @@ def handle_tip_button_click(
     logger.info(f"Sending tip notification to Maya: {notification_message}")
     
     # Process the notification through Maya
+    emotion_state = "neutral"
     try:
-        response_text, updated_history, updated_history_for_gradio, _, _ = process_order(
+        response_text, updated_history, updated_history_for_gradio, _, _, emotion_state = process_order(
             user_input_text=notification_message,
             current_session_history=session_history_state,
             llm=llm,
@@ -331,12 +351,24 @@ def handle_tip_button_click(
             audio_data = get_voice_audio(response_text, cartesia_client)
         except Exception as tts_err:
             logger.warning(f"TTS generation failed for tip response: {tts_err}")
+            
+    # Resolve Avatar based on Emotion State
+    import os
+    valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
+    if emotion_state not in valid_emotions:
+        emotion_state = "neutral"
+    
+    emotion_filename = f"maya_{emotion_state}.mp4" 
+    potential_path = f"assets/{emotion_filename}"
+    
+    final_avatar_path = potential_path if os.path.exists(potential_path) else avatar_path
+    
     overlay_html = create_tab_overlay_html(
         tab_amount=new_tab,
         balance=new_balance,
         prev_tab=current_tab,
         prev_balance=current_balance,
-        avatar_path=avatar_path,
+        avatar_path=final_avatar_path,
         tip_percentage=new_tip_percentage,
         tip_amount=new_tip_amount
     )
