@@ -27,7 +27,7 @@ The `process_order` function intercepts the raw LLM output before it reaches the
 
 ## State Persistence & Error Handling
 
-To prevents visual glitches (flickering to default) or jarring transitions, the system implements robust state persistence in `src/ui/handlers.py` and `src/ui/launcher.py`.
+To prevent visual glitches (flickering to default) or jarring transitions, the system implements robust state persistence in `src/ui/handlers.py` and `src/ui/launcher.py`.
 
 ### Logic Flow
 1.  **Initial State**: Standard `neutral` or static avatar.
