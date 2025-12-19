@@ -195,16 +195,55 @@ def create_tab_overlay_html(
     # Tip and total row - only shown when tip is selected
     tip_display_style = "flex" if tip_percentage is not None else "none"
     
-    # Check if avatar is a video
+    # Determine media type and poster
+    import os
     is_video = avatar_src.lower().endswith(('.mp4', '.webm', '.mov'))
     
+    # Logic for transition: Default -> Poster (Fade In) -> Video
+    # We set the container background to the default avatar.
+    # The new media (video/image) fades in over it.
+    
+    DEFAULT_AVATAR = "assets/bartender_avatar.jpg"
+    
+    poster_attr = ""
     if is_video:
-        media_html = f'<video src="file/{avatar_src}" autoplay loop muted playsinline style="width: 100%; height: auto; display: block; border-radius: 8px;"></video>'
+        # Try to find a companion image for the poster
+        base_name = os.path.splitext(avatar_src)[0]
+        for ext in ['.png', '.jpg', '.jpeg']:
+            possible_poster = f"{base_name}{ext}"
+            if os.path.exists(possible_poster):
+                poster_attr = f'poster="file/{possible_poster}"'
+                break
+    
+    style_animation = "animation: fadeIn 1.5s ease-in-out forwards;"
+    if not is_video and "bartender_avatar" in avatar_src and "image" not in avatar_src:
+        # Don't animate the default avatar if we are just showing it natively
+        # Note: "bartender_avatar.jpg" is the target string now
+        style_animation = ""
+
+    if is_video:
+        media_html = f'<video src="file/{avatar_src}" {poster_attr} autoplay loop muted playsinline class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}"></video>'
     else:
-        media_html = f'<img src="file/{avatar_src}" alt="Maya the Bartender" style="width: 100%; height: auto; display: block; border-radius: 8px;">'
+        media_html = f'<img src="file/{avatar_src}" alt="Maya" class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}">'
     
     html = f'''
-<div class="avatar-overlay-container" style="position: relative; display: inline-block; width: 100%; max-width: 600px;">
+<style>
+@keyframes fadeIn {{
+  from {{ opacity: 0; }}
+  to {{ opacity: 1; }}
+}}
+.avatar-overlay-container {{
+    position: relative; 
+    display: inline-block; 
+    width: 100%; 
+    max-width: 600px;
+    background-image: url("file/{DEFAULT_AVATAR}");
+    background-size: cover;
+    background-position: center;
+    border-radius: 8px;
+}}
+</style>
+<div class="avatar-overlay-container">
     {media_html}
     
     <div class="tab-overlay" style="

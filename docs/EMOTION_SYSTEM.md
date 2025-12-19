@@ -36,19 +36,35 @@ To prevent visual glitches (flickering to default) or jarring transitions, the s
 4.  **Error Handling**: If an exception occurs (network error, processing error), the state is **not reset**. The avatar remains as it was, preventing the UI from breaking immersion.
 5.  **Asset Validation**: Before switching states, the system checks if `assets/maya_{state}.mp4` exists. If the file is missing, it logs a warning and keeps the current avatar.
 
+## Transition Architecture (Fade-In)
+
+To ensure smooth visual transitions between the default avatar and emotional animations:
+1.  **Workflow**: Default Avatar (Background) -> Emotional Image (Fade In) -> Emotional Video (Play).
+2.  **Implementation**:
+    *   The container has the default avatar as a background image.
+    *   The video element has `opacity: 0` initially and animates to `1` over 1.5 seconds.
+    *   The video element uses the **static emotion image** as its `poster`.
+3.  **Result**: The default avatar is visible, then the emotional start-frame fades in smoothly, followed by the video playback.
+
 ## Asset Management
 
 Assets are located in the `assets/` directory.
 
 ### Naming Convention
--   `maya_{emotion}.mp4` (e.g., `maya_happy.mp4`, `maya_upset.mp4`)
+For each emotion, you need **two files**:
+1.  **Video**: `maya_{emotion}.mp4`
+2.  **Poster Image**: `maya_{emotion}.png` OR `maya_{emotion}.jpg`
+
+*Example*:
+-   `maya_flustered.mp4`
+-   `maya_flustered.png`
 
 ### Default Fallback
--   `gpt_avatar.jpg` (or configured default) is used if no state is active or on hard reset.
+-   `assets/bartender_avatar.jpg` is the system default.
 
 ## Adding New Emotions
 
 1.  **Update Prompt**: Add the new emotion to the list in `src/llm/prompts.py` with an example.
 2.  **Update Validation**: Add the string to the `valid_emotions` list in `src/ui/handlers.py`.
-3.  **Add Asset**: Drop a matching `maya_{new_emotion}.mp4` into `assets/`.
+3.  **Add Assets**: Drop matching `.mp4` and `.png/.jpg` files into `assets/`.
 4.  **Verify**: Use `EMOTION_VERIFICATION.md` to test the trigger.
