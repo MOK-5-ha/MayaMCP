@@ -73,6 +73,14 @@ def test_call_gemini_api_uses_genai_client(mock_genai_client, monkeypatch):
     assert models.last_call['contents'] == prompt
     assert models.last_call['config'] is not None
 
+    # Verify config values match the input cfg
+    passed_config = models.last_call['config']
+    assert getattr(passed_config, 'temperature', None) == cfg['temperature']
+    assert getattr(passed_config, 'top_p', None) == cfg['top_p']
+    assert getattr(passed_config, 'top_k', None) == cfg['top_k']
+    assert getattr(passed_config, 'max_output_tokens', None) == \
+        cfg['max_output_tokens']
+
 
 def test_rag_pipeline_generate_augmented_response(mock_genai_client):
     # Act

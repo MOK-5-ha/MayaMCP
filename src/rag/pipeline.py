@@ -1,6 +1,9 @@
 """Complete RAG pipeline orchestration."""
 
+import hashlib
 from typing import List
+
+import faiss
 
 from ..config.logging_config import get_logger
 from ..llm.client import get_genai_client
@@ -68,7 +71,7 @@ Answer:"""
 
 def rag_pipeline(
     query_text: str,
-    index,
+    index: faiss.Index,
     documents: List[str],
     api_key: str,
     model_version: str = "gemini-2.5-flash-preview-04-17"
@@ -96,8 +99,13 @@ def rag_pipeline(
 
         # If no relevant passages found, return fallback
         if not relevant_passages:
+            # Compute a non-reversible fingerprint to avoid logging PII
+            query_fingerprint = hashlib.sha256(
+                query_text.encode()
+            ).hexdigest()[:12]
             logger.warning(
-                "No relevant passages found for query: %s", query_text
+                "No relevant passages found for query_id: %s",
+                query_fingerprint
             )
             return RAG_FALLBACK_RESPONSE
 

@@ -167,16 +167,15 @@ class TestGetEmbeddingsBatch:
 
         Verifies that the API client is not invoked when input is empty.
         """
-        # Patch _get_embed_client to track if it's called
-        called = []
+        mock_client = MagicMock()
         monkeypatch.setattr(
             'src.rag.embeddings._get_embed_client',
-            lambda: called.append(1) or None
+            mock_client
         )
 
         result = get_embeddings_batch([])
         assert result == []
-        assert called == [], "API client should not be called for empty input"
+        mock_client.assert_not_called()
 
     def test_get_embeddings_batch_with_different_task_type(self, monkeypatch):
         """Test batch embedding with different task type."""

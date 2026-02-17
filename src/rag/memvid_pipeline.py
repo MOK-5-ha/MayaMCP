@@ -2,6 +2,7 @@
 Memvid-enhanced RAG pipeline for Maya
 """
 
+import hashlib
 from typing import List
 
 from ..config.logging_config import get_logger
@@ -11,6 +12,11 @@ from .memvid_store import search_memvid_documents
 
 logger = get_logger(__name__)
 
+# Fallback response for consistent error handling across Memvid functions
+MEMVID_FALLBACK_MESSAGE = (
+    "I'm Maya, your bartender at MOK 5-ha. My video memory seems to be "
+    "having a moment. Can I get you something from the menu?"
+)
 
 
 def generate_memvid_response(
@@ -57,9 +63,12 @@ Answer:"""
         return getattr(resp, "text", "") or ""
 
     except Exception as e:
-        classify_and_log_genai_error(e, logger, context="while generating Memvid-enhanced response")
+        classify_and_log_genai_error(
+            e, logger, context="while generating Memvid-enhanced response"
+        )
         # Fallback response
-        return "I'm Maya, your bartender at MOK 5-ha. My video memory seems to be having a moment. Can I get you something from the menu?"
+        return MEMVID_FALLBACK_MESSAGE
+
 
 def memvid_rag_pipeline(
     query_text: str,
@@ -86,22 +95,29 @@ def memvid_rag_pipeline(
             query_text=query_text,
             n_results=2  # Get 2 relevant passages for richer context
         )
-
-        # If no relevant passages found, return empty string
-        if not relevant_passages:
-            logger.warning("No relevant passages found for query: %s", query_text)
-            return ""
-
-        # Generate Memvid-enhanced response
-        enhanced_response = generate_memvid_response(
-            query_text=query_text,
-            retrieved_documents=relevant_passages,
-            api_key=api_key,
-            model_version=model_version
-        )
-
-        return enhanced_response
-
     except Exception as e:
-        classify_and_log_genai_error(e, logger, context="in Memvid RAG pipeline")
-        return "I'm Maya, your bartender at MOK 5-ha. My video memory seems to be having a moment. Can I get you something from the menu?"
+        # Non-GenAI error from Memvid retrieval
+        logger.exception("Error searching Memvid documents: %s", e)
+        return MEMVID_FALLBACK_MESSAGE
+
+    # If no relevant passages found, return empty string
+    if not relevant_passages:
+        # Compute a non-reversible fingerprint to avoid logging PII
+        query_fingerprint = hashlib.sha256(
+            query_text.encode()
+        ).hexdigest()[:12]
+        logger.warning(
+            "No relevant passages found for query_id: %s",
+            query_fingerprint
+        )
+        return ""
+
+    # Generate Memvid-enhanced response
+    enhanced_response = generate_memvid_response(
+        query_text=query_text,
+        retrieved_documents=relevant_passages,
+        api_key=api_key,
+        model_version=model_version
+    )
+
+    return enhanced_response

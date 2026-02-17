@@ -12,7 +12,7 @@ websockets>=15.0
 tenacity>=9.0.0
 
 # UI (stay on Gradio 5.x for stability)
-gradio>=5.0.0,<7.0.0
+gradio>=5.0.0,<6.0.0
 
 # TTS (stay on Cartesia 2.x for stability)
 cartesia>=2.0.0,<3.0.0

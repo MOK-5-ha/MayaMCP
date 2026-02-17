@@ -107,7 +107,7 @@ def _call_batch_embed(client, batch: List[str], task_type: str):
         raise
 
 
-def get_embeddings_batch(texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT") -> List[Optional[List[float]]]:
+def get_embeddings_batch(texts: List[str], task_type: str = DEFAULT_TASK_TYPE) -> List[Optional[List[float]]]:
     """
     Get embeddings for multiple texts via a single batch API call with chunking and retry.
 

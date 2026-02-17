@@ -27,7 +27,12 @@ if _importlib_util.find_spec('google.genai') is None:
     # These match the real google.genai.errors structure plus common aliases
     class APIError(Exception):
         """Base class for Google GenAI API errors."""
-        pass
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args)
+            # Store keyword args as attributes for SDK compatibility
+            for key, value in kwargs.items():
+                setattr(self, key, value)
 
     class ClientError(APIError):
         """Client-side error."""
@@ -70,9 +75,12 @@ if _importlib_util.find_spec('google.genai') is None:
         """Rate limit exceeded error."""
         pass
 
-    class TimeoutError(APIError):
-        """Request timeout error."""
+    class GenAITimeoutError(APIError):
+        """Request timeout error for GenAI operations."""
         pass
+
+    # Alias for SDK compatibility; shadows built-in intentionally
+    TimeoutError = GenAITimeoutError
 
     # Assign exception classes to the errors module before sys.modules
     errors_mod.APIError = APIError
