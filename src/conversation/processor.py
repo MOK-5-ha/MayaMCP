@@ -279,8 +279,20 @@ def process_order(
             try:
                 ai_response: AIMessage = llm.invoke(messages)
             except Exception as invoke_err:
-                logger.error(f"LLM invocation failed: {invoke_err}")
-                agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
+                err_msg = str(invoke_err).lower()
+                err_code = getattr(invoke_err, "status_code", None)
+                if (
+                    err_code == 429
+                    or "429" in err_msg
+                    or "rate" in err_msg
+                    or "quota" in err_msg
+                    or ("resource" in err_msg and "exhaust" in err_msg)
+                ):
+                    logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
+                    agent_response_text = "QUOTA_ERROR"
+                else:
+                    logger.error(f"LLM invocation failed: {invoke_err}")
+                    agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
                 break
 
             # Append the AI's response (could be text or tool call request)

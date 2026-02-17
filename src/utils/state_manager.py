@@ -303,6 +303,12 @@ DEFAULT_CURRENT_ORDER = {
     'finished': False
 }
 
+DEFAULT_API_KEY_STATE = {
+    'gemini_key': None,
+    'cartesia_key': None,
+    'keys_validated': False,
+}
+
 # =============================================================================
 # Backward Compatibility: Global Store and Default Session
 # =============================================================================
@@ -337,7 +343,8 @@ def _deep_copy_defaults() -> Dict[str, Any]:
         'conversation': copy.deepcopy(DEFAULT_CONVERSATION_STATE),
         'history': copy.deepcopy(DEFAULT_ORDER_HISTORY),
         'current_order': copy.deepcopy(DEFAULT_CURRENT_ORDER),
-        'payment': copy.deepcopy(DEFAULT_PAYMENT_STATE)
+        'payment': copy.deepcopy(DEFAULT_PAYMENT_STATE),
+        'api_keys': copy.deepcopy(DEFAULT_API_KEY_STATE),
     }
 
 
@@ -361,6 +368,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         import copy
         session_data = store[session_id]
         session_data['payment'] = copy.deepcopy(DEFAULT_PAYMENT_STATE)
+        session_data.setdefault('api_keys', copy.deepcopy(DEFAULT_API_KEY_STATE))
         store[session_id] = session_data
     else:
         # Handle migration for existing payment state missing tip fields
@@ -376,6 +384,11 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         if needs_update:
             logger.info(f"Adding tip fields to existing session {session_id}")
             session_data['payment'] = payment
+            store[session_id] = session_data
+        # Migrate: add api_keys if missing
+        if 'api_keys' not in session_data:
+            import copy
+            session_data['api_keys'] = copy.deepcopy(DEFAULT_API_KEY_STATE)
             store[session_id] = session_data
     return store[session_id]
 
@@ -512,6 +525,12 @@ def reset_session_state(session_id: Optional[str] = None, store: Optional[Mutabl
     session_id, store = _get_store_and_session(session_id, store)
     # Cleanup session lock to prevent memory leaks
     cleanup_session_lock(session_id)
+    # Cleanup cached LLM/TTS clients for this session
+    try:
+        from ..llm.session_registry import clear_session_clients
+        clear_session_clients(session_id)
+    except ImportError:
+        pass
     initialize_state(session_id, store)
     logger.info(f"Session state reset for {session_id}")
 
@@ -812,3 +831,64 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
         except Exception as e:
             logger.error(f"Failed to complete payment for {session_id}: {str(e)}")
             return False
+
+
+# =============================================================================
+# API Key State Functions (BYOK)
+# =============================================================================
+
+def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
+    """Get API key state for session.
+
+    Args:
+        session_id: Unique identifier for the user session.
+        store: Mutable mapping to store state.
+
+    Returns:
+        Copy of the API key state dictionary.
+    """
+    data = _get_session_data(session_id, store)
+    return data['api_keys'].copy()
+
+
+def set_api_keys(
+    session_id: str,
+    store: MutableMapping,
+    gemini_key: str,
+    cartesia_key: Optional[str] = None,
+) -> None:
+    """Store user-provided API keys for a session and mark as validated.
+
+    Args:
+        session_id: Unique identifier for the user session.
+        store: Mutable mapping to store state.
+        gemini_key: User's Gemini API key.
+        cartesia_key: User's Cartesia API key (optional).
+    """
+    lock = get_session_lock(session_id)
+
+    with lock:
+        data = _get_session_data(session_id, store)
+        data['api_keys'] = {
+            'gemini_key': gemini_key.strip() if gemini_key else None,
+            'cartesia_key': cartesia_key.strip() if cartesia_key else None,
+            'keys_validated': True,
+        }
+        _save_session_data(session_id, store, data)
+
+    logger.info(f"API keys stored for session {session_id}")
+
+
+def has_valid_keys(session_id: str, store: MutableMapping) -> bool:
+    """Check whether a session has validated API keys.
+
+    Args:
+        session_id: Unique identifier for the user session.
+        store: Mutable mapping to store state.
+
+    Returns:
+        True if the session has at least a validated Gemini key.
+    """
+    data = _get_session_data(session_id, store)
+    api_keys = data.get('api_keys', {})
+    return bool(api_keys.get('keys_validated') and api_keys.get('gemini_key'))

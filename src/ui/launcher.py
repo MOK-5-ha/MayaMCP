@@ -1,10 +1,11 @@
 """Gradio interface launcher."""
 
 import gradio as gr
-from typing import Optional, Callable, Tuple, List, Dict, Any
+from typing import Optional, Callable, List, Dict, Any
 from ..config.logging_config import get_logger
 from .components import setup_avatar
 from .tab_overlay import create_tab_overlay_html
+from .api_key_modal import create_help_instructions_md, handle_key_submission
 from ..utils.state_manager import DEFAULT_PAYMENT_STATE
 
 logger = get_logger(__name__)
@@ -49,6 +50,7 @@ def create_avatar_with_overlay(
 def launch_bartender_interface(
     handle_input_fn: Callable,
     clear_state_fn: Callable,
+    handle_key_submission_fn: Optional[Callable] = None,
     avatar_path: Optional[str] = None
 ) -> gr.Blocks:
     """
@@ -57,6 +59,8 @@ def launch_bartender_interface(
     Args:
         handle_input_fn: Function to handle user input
         clear_state_fn: Function to clear chat state
+        handle_key_submission_fn: Function to validate and store API keys (BYOK).
+                                  If None, the default handle_key_submission is used.
         avatar_path: Path to avatar image (will setup default if None)
 
     Returns:
@@ -84,124 +88,170 @@ def launch_bartender_interface(
     ui_theme = gr.themes.Ocean()
 
     with gr.Blocks(theme=ui_theme) as demo:
-        gr.Markdown("# MOK 5-ha - Meet Maya the Bartender 🍹👋")
-        gr.Markdown("Welcome to MOK 5-ha! I'm Maya, your virtual bartender. Ask me for a drink or check your order.")
+        gr.Markdown("# MOK 5-ha - Meet Maya the Bartender")
 
         # --- Define Session State Variables ---
         history_state = gr.State([])
         order_state = gr.State([])
+        keys_validated_state = gr.State(False)
         
         # --- Payment State Variables (Requirements: 2.2, 6.2, 7.2, 7.3) ---
-        tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])  # Current tab amount
-        balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])  # Current balance
-        prev_tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])  # Previous tab for animation
-        prev_balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])  # Previous balance for animation
-        tip_percentage_state = gr.State(DEFAULT_PAYMENT_STATE['tip_percentage'])  # Current tip percentage (10, 15, 20, or None)
-        tip_amount_state = gr.State(DEFAULT_PAYMENT_STATE['tip_amount'])  # Current tip amount
+        tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])
+        balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])
+        prev_tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])
+        prev_balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])
+        tip_percentage_state = gr.State(DEFAULT_PAYMENT_STATE['tip_percentage'])
+        tip_amount_state = gr.State(DEFAULT_PAYMENT_STATE['tip_amount'])
 
-        # --- Restructured Main Row with 2 Columns (Equal Scaling) ---
-        with gr.Row():
+        # =================================================================
+        # BYOK API Key Form (visible by default, hidden after validation)
+        # =================================================================
+        with gr.Column(visible=True) as api_key_column:
+            gr.Markdown(
+                "## Welcome to MOK 5-ha!\n"
+                "To get started, please provide your API keys below."
+            )
 
-            # --- Column 1: Avatar with Tab Overlay (Requirements: 2.1, 7.1) ---
-            with gr.Column(scale=1, min_width=200):
-                # Create initial overlay HTML
-                initial_overlay_html = create_avatar_with_overlay(
-                    avatar_path=effective_avatar_path,
-                    tab_amount=DEFAULT_PAYMENT_STATE['tab_total'],
-                    balance=DEFAULT_PAYMENT_STATE['balance'],
-                    prev_tab=DEFAULT_PAYMENT_STATE['tab_total'],
-                    prev_balance=DEFAULT_PAYMENT_STATE['balance'],
-                    tip_percentage=DEFAULT_PAYMENT_STATE['tip_percentage'],
-                    tip_amount=DEFAULT_PAYMENT_STATE['tip_amount']
-                )
-                avatar_overlay = gr.HTML(
-                    value=initial_overlay_html,
-                    label="Bartender Avatar",
-                    show_label=False,
-                    elem_classes=["avatar-overlay"]
-                )
+            gemini_key_input = gr.Textbox(
+                label="Gemini API Key (required)",
+                placeholder="Enter your Google Gemini API key...",
+                type="password",
+            )
+            cartesia_key_input = gr.Textbox(
+                label="Cartesia API Key (optional, for voice)",
+                placeholder="Enter your Cartesia API key for TTS...",
+                type="password",
+            )
 
-            # --- Column 2: Chat Interface ---
-            with gr.Column(scale=1): 
-                chatbot_display = gr.Chatbot(
-                    [],
-                    elem_id="chatbot",
-                    label="Conversation",
-                    height=489, 
-                    type="messages"
-                )
-                agent_audio_output = gr.Audio(
-                    label="Agent Voice",
-                    autoplay=True,
-                    streaming=False,
-                    format="wav",
-                    show_label=True,
-                    interactive=False
-                )
-                msg_input = gr.Textbox(
-                    label="Your Order / Message",
-                    placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')"
-                )
-                # Hidden textbox to receive tip button clicks from JavaScript (Requirements: 7.1, 7.11)
-                tip_click_input = gr.Textbox(
-                    value="",
-                    visible=False,
-                    elem_id="tip-click-input"
-                )
-                with gr.Row():
-                    clear_btn = gr.Button("Clear Conversation")
-                    submit_btn = gr.Button("Send", variant="primary")
+            key_error_display = gr.Markdown(value="", visible=True)
 
-        # --- Event Handlers ---
+            submit_keys_btn = gr.Button("Start Chatting", variant="primary")
+
+            with gr.Accordion("How to get API keys", open=False):
+                gr.Markdown(create_help_instructions_md())
+
+        # =================================================================
+        # Main Chat Interface (hidden until keys validated)
+        # =================================================================
+        with gr.Column(visible=False) as chat_column:
+            gr.Markdown(
+                "Welcome to MOK 5-ha! I'm Maya, your virtual bartender. "
+                "Ask me for a drink or check your order."
+            )
+
+            # Quota error overlay (initially empty, populated on 429 errors)
+            quota_error_display = gr.HTML(value="", visible=True)
+
+            # --- Main Row with 2 Columns (Equal Scaling) ---
+            with gr.Row():
+
+                # --- Column 1: Avatar with Tab Overlay ---
+                with gr.Column(scale=1, min_width=200):
+                    initial_overlay_html = create_avatar_with_overlay(
+                        avatar_path=effective_avatar_path,
+                        tab_amount=DEFAULT_PAYMENT_STATE['tab_total'],
+                        balance=DEFAULT_PAYMENT_STATE['balance'],
+                        prev_tab=DEFAULT_PAYMENT_STATE['tab_total'],
+                        prev_balance=DEFAULT_PAYMENT_STATE['balance'],
+                        tip_percentage=DEFAULT_PAYMENT_STATE['tip_percentage'],
+                        tip_amount=DEFAULT_PAYMENT_STATE['tip_amount']
+                    )
+                    avatar_overlay = gr.HTML(
+                        value=initial_overlay_html,
+                        label="Bartender Avatar",
+                        show_label=False,
+                        elem_classes=["avatar-overlay"]
+                    )
+
+                # --- Column 2: Chat Interface ---
+                with gr.Column(scale=1): 
+                    chatbot_display = gr.Chatbot(
+                        [],
+                        elem_id="chatbot",
+                        label="Conversation",
+                        height=489, 
+                        type="messages"
+                    )
+                    agent_audio_output = gr.Audio(
+                        label="Agent Voice",
+                        autoplay=True,
+                        streaming=False,
+                        format="wav",
+                        show_label=True,
+                        interactive=False
+                    )
+                    msg_input = gr.Textbox(
+                        label="Your Order / Message",
+                        placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')"
+                    )
+                    # Hidden textbox to receive tip button clicks from JavaScript
+                    tip_click_input = gr.Textbox(
+                        value="",
+                        visible=False,
+                        elem_id="tip-click-input"
+                    )
+                    with gr.Row():
+                        clear_btn = gr.Button("Clear Conversation")
+                        submit_btn = gr.Button("Send", variant="primary")
+
+        # =================================================================
+        # Event Handlers
+        # =================================================================
+
+        # --- BYOK Key Submission ---
+        if handle_key_submission_fn is None:
+            handle_key_submission_fn = handle_key_submission
+
+        submit_keys_btn.click(
+            handle_key_submission_fn,
+            inputs=[gemini_key_input, cartesia_key_input],
+            outputs=[key_error_display, api_key_column, chat_column, keys_validated_state],
+        )
+
         # Avatar state validation to ensure persistence
         avatar_state = gr.State(effective_avatar_path)
 
-        # Include tab/balance/tip state in inputs and outputs for animation (Requirements: 2.2, 2.3, 7.2, 7.3)
-        submit_inputs = [msg_input, history_state, tab_state, balance_state, tip_percentage_state, tip_amount_state, avatar_state]
-        submit_outputs = [
-            msg_input, chatbot_display, history_state, order_state, agent_audio_output,
-            avatar_overlay, tab_state, balance_state, prev_tab_state, prev_balance_state,
+        # --- Chat Input Submission ---
+        submit_inputs = [
+            msg_input, history_state, tab_state, balance_state,
             tip_percentage_state, tip_amount_state, avatar_state
+        ]
+        submit_outputs = [
+            msg_input, chatbot_display, history_state, order_state,
+            agent_audio_output, avatar_overlay, tab_state, balance_state,
+            prev_tab_state, prev_balance_state, tip_percentage_state,
+            tip_amount_state, avatar_state, quota_error_display
         ]
         
         msg_input.submit(handle_input_fn, submit_inputs, submit_outputs)
         submit_btn.click(handle_input_fn, submit_inputs, submit_outputs)
         
-        # --- Tip Button JavaScript Callback (Requirements: 7.1, 7.11) ---
-        # JavaScript to handle tip button clicks and trigger Gradio event
+        # --- Tip Button JavaScript Callback ---
         tip_button_js = """
         function handleTipClick(percentage) {
-            // Find the hidden tip input element
             const tipInput = document.querySelector('#tip-click-input textarea, #tip-click-input input');
             if (tipInput) {
-                // Set the value to the percentage clicked
                 tipInput.value = percentage.toString();
-                // Trigger input event to notify Gradio
                 tipInput.dispatchEvent(new Event('input', { bubbles: true }));
-                // Small delay then trigger change event
                 setTimeout(() => {
                     tipInput.dispatchEvent(new Event('change', { bubbles: true }));
                 }, 50);
             }
         }
-        // Make function globally available
         window.handleTipClick = handleTipClick;
         """
-        
-        # Add JavaScript to the page
         gr.HTML(f"<script>{tip_button_js}</script>", visible=False)
 
-        # Clear outputs include tab overlay reset (Requirements: 1.1, 7.10)
+        # --- Clear Button ---
         clear_outputs = [
             chatbot_display, history_state, order_state, agent_audio_output,
-            avatar_overlay, tab_state, balance_state, prev_tab_state, prev_balance_state,
-            tip_percentage_state, tip_amount_state, avatar_state
+            avatar_overlay, tab_state, balance_state, prev_tab_state,
+            prev_balance_state, tip_percentage_state, tip_amount_state,
+            avatar_state
         ]
         
-        # Create wrapper for clear function that includes avatar_path
         def clear_with_overlay(request: gr.Request):
             result = clear_state_fn(request)
-            # Reset overlay to default state using DEFAULT_PAYMENT_STATE as single source of truth
             overlay_html = create_avatar_with_overlay(
                 avatar_path=effective_avatar_path,
                 tab_amount=DEFAULT_PAYMENT_STATE['tab_total'],
@@ -211,7 +261,6 @@ def launch_bartender_interface(
                 tip_percentage=DEFAULT_PAYMENT_STATE['tip_percentage'],
                 tip_amount=DEFAULT_PAYMENT_STATE['tip_amount']
             )
-            # Return: chatbot, history, order, audio, overlay, tab, balance, prev_tab, prev_balance, tip_pct, tip_amt, avatar_state
             return (
                 result[0],  # chatbot
                 result[1],  # history
@@ -224,20 +273,12 @@ def launch_bartender_interface(
                 DEFAULT_PAYMENT_STATE['balance'],
                 DEFAULT_PAYMENT_STATE['tip_percentage'],
                 DEFAULT_PAYMENT_STATE['tip_amount'],
-                effective_avatar_path # Reset avatar state
+                effective_avatar_path
             )
         
         clear_btn.click(clear_with_overlay, [], clear_outputs)
         
-        # --- Tip Button Click Handler (Requirements: 7.1, 7.2, 7.5, 7.6, 7.11, 7.12) ---
-        # Note: The actual tip handling is done via the handle_tip_button_click function
-        # which is called when the hidden tip_click_input changes.
-        # The tip buttons in the overlay call handleTipClick(percentage) which updates
-        # the hidden input, triggering this handler.
-        # 
-        # For now, we wire the tip click to send a message through the normal chat flow.
-        # The tip notification message is generated and sent to Maya.
-        
+        # --- Tip Button Click Handler ---
         def handle_tip_click_wrapper(
             tip_percentage_str: str,
             current_tip_pct: Optional[int],
@@ -250,9 +291,7 @@ def launch_bartender_interface(
             """Wrapper to handle tip button clicks via the hidden input."""
             from .handlers import handle_tip_button_click
             
-            # Parse the percentage from the string
             if not tip_percentage_str or not tip_percentage_str.strip():
-                # No tip click, return unchanged state
                 overlay_html = create_avatar_with_overlay(
                     avatar_path=current_avatar,
                     tab_amount=current_tab,
@@ -287,35 +326,6 @@ def launch_bartender_interface(
                     current_tab, current_balance, current_tip_pct, 0.0, current_avatar
                 )
             
-            # Use the actual handler to process the tip click properly (including LLM response)
-            # This is simplified wrapper logic - in the real app we wire to handle_tip_button_click directly
-            # But here we need to match the signature expected by the .change() event
-            
-            # IMPORTANT: Since we can't easily import the complex dependencies here, 
-            # and the `tip_click_input.change` is already wired to `handle_tip_click_wrapper`,
-            # we should update this wrapper to call the real handler if possible, 
-            # or update the wiring to use the real handler with partials.
-            
-            # Given the constraints, we will rely on the direct wiring below which will use handle_tip_button_click
-            # However, `handle_tip_click_wrapper` is what is defined in the file currently (lines 230-329)
-            # Wait - the original file has `handle_tip_click_wrapper` as a fallback/placeholder.
-            # The actual wiring happens at `tip_click_input.change`.
-            # I will assume `handle_tip_button_click` IS used if passed as `handle_input_fn` meant `handle_gradio_input`.
-            # But the tip handler is separate. 
-            
-            # Let's look at the original code: 
-            # tip_click_input.change(handle_tip_click_wrapper, ...)
-            # So the wrapper IS the handler used.
-            # I must update the wrapper to accept/return avatar state.
-            
-            # Simplified Logic for wrapper (since it was placeholder in original):
-            # Just return unchanged avatar state.
-            
-            # NOTE: The original code had a placeholder implementation. 
-            # I will preserve that structure but add avatar_state support.
-            
-            # ... (omitted complex import logic for brevity, assuming similar placeholder behavior) ...
-            
             overlay_html = create_avatar_with_overlay(
                 avatar_path=current_avatar,
                 tab_amount=current_tab,
@@ -323,7 +333,7 @@ def launch_bartender_interface(
                 prev_tab=current_tab,
                 prev_balance=current_balance,
                 tip_percentage=current_tip_pct,
-                tip_amount=0.0 # Placeholder
+                tip_amount=0.0
             )
             
             return (

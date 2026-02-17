@@ -66,12 +66,11 @@ def serve_maya():
 
     # Import Maya components using absolute package imports (package is installed in image)
     from config.logging_config import setup_logging
-    from llm.client import initialize_llm
     from llm.tools import get_all_tools
     from rag.memvid_store import initialize_memvid_store
-    from voice.tts import initialize_cartesia_client
     from ui.launcher import launch_bartender_interface
-    from ui.handlers import handle_gradio_input
+    from ui.handlers import handle_gradio_input, clear_chat_state
+    from ui.api_key_modal import handle_key_submission
     from utils.state_manager import initialize_state
     # Setup logging
     logger = setup_logging()
@@ -153,67 +152,65 @@ def serve_maya():
         )
 
     # GEMINI_API_KEY is preferred (matches config.api_keys); GOOGLE_API_KEY for legacy support
-    google_api_key = _require_any("GEMINI_API_KEY", "GOOGLE_API_KEY")
-    cartesia_api_key = _require_any("CARTESIA_API_KEY")
+    # Keys are now optional for the main app (BYOK) but still used for RAG initialisation
+    google_api_key = None
+    try:
+        google_api_key = _require_any("GEMINI_API_KEY", "GOOGLE_API_KEY")
+    except RuntimeError:
+        logger.info("No server-side Gemini API key found; RAG will use session keys or be skipped")
 
     # Initialize state
     initialize_state()
 
-    # Initialize LLM
+    # Get tool definitions (static, shared)
     tools = get_all_tools()
-    llm = initialize_llm(api_key=google_api_key, tools=tools)
-    logger.info(f"LLM initialized with {len(tools)} tools")
+    logger.info(f"Loaded {len(tools)} tool definitions")
 
     # Initialize RAG with Memvid (will build video on first run)
-    try:
-        logger.info("Initializing Memvid RAG system...")
-        rag_retriever, rag_documents = initialize_memvid_store()
-        rag_index = None
-        logger.info(f"Memvid RAG initialized with {len(rag_documents)} documents")
-    except Exception as e:
-        logger.warning(f"Memvid initialization failed: {e}. Attempting FAISS fallback...")
-        try:
-            from rag.vector_store import initialize_vector_store
-            rag_index, rag_documents = initialize_vector_store()
-            rag_retriever = None
-            logger.info(f"FAISS RAG initialized with {len(rag_documents)} documents")
-        except Exception as e2:
-            logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
-            rag_index, rag_documents, rag_retriever = None, None, None
+    rag_index = None
+    rag_documents = None
+    rag_retriever = None
 
-    # Initialize Cartesia TTS
-    try:
-        cartesia_client = initialize_cartesia_client(cartesia_api_key)
-        logger.info("Cartesia TTS initialized")
-    except Exception as e:
-        logger.warning(f"Cartesia initialization failed: {e}")
-        cartesia_client = None
+    if google_api_key:
+        try:
+            logger.info("Initializing Memvid RAG system...")
+            rag_retriever, rag_documents = initialize_memvid_store()
+            logger.info(f"Memvid RAG initialized with {len(rag_documents)} documents")
+        except Exception as e:
+            logger.warning(f"Memvid initialization failed: {e}. Attempting FAISS fallback...")
+            try:
+                from rag.vector_store import initialize_vector_store
+                rag_index, rag_documents = initialize_vector_store()
+                logger.info(f"FAISS RAG initialized with {len(rag_documents)} documents")
+            except Exception as e2:
+                logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
+    else:
+        logger.info("Skipping RAG initialization (no server-side Gemini key)")
+
+    # NOTE: LLM and TTS are NOT initialised here (BYOK mode).
+    # Per-session clients are lazily created via src/llm/session_registry.
 
     # Create handler with dependencies
     handle_input_with_deps = partial(
         handle_gradio_input,
-        llm=llm,
-        cartesia_client=cartesia_client,
+        tools=tools,
         rag_index=rag_index,
         rag_documents=rag_documents,
         rag_retriever=rag_retriever,
-        api_key=google_api_key,
+        rag_api_key=google_api_key,
         app_state=state_store
     )
 
-    # Import clear state function
-    from ui.handlers import clear_chat_state
-    
-    # Pre-bind app_state to clear function as well if needed, though clear_state often implies
-    # clearing the specific session. The generic clear_chat_state might need refactoring too.
-    # checking ui/handlers.py signature in next steps, but binding it here for consistency if needed.
     clear_state_with_deps = partial(clear_chat_state, app_state=state_store)
+
+    handle_keys_with_deps = partial(handle_key_submission, app_state=state_store)
 
     # Create Gradio interface
     logger.info("Creating Maya's Gradio interface...")
     interface = launch_bartender_interface(
         handle_input_fn=handle_input_with_deps,
-        clear_state_fn=clear_state_with_deps
+        clear_state_fn=clear_state_with_deps,
+        handle_key_submission_fn=handle_keys_with_deps,
     )
 
     # Mount Gradio app with FastAPI for Modal
@@ -292,8 +289,6 @@ def serve_maya():
     def healthz():
         # Check critical dependencies
         checks = []
-        if llm is None:
-            checks.append("LLM not initialized")
         
         # Check RAG availability (either Memvid or FAISS)
         rag_available = False

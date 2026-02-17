@@ -12,31 +12,31 @@ from functools import partial
 from config import (
     setup_logging, 
     get_api_keys, 
-    validate_api_keys
 )
 from config.logging_config import get_logger
-from llm import initialize_llm, get_all_tools
+from llm import get_all_tools
 from config.model_config import get_model_config, is_valid_gemini_model
 from rag import initialize_vector_store, initialize_memvid_store
-from voice import initialize_cartesia_client
 from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
+from ui.api_key_modal import handle_key_submission
 from utils import initialize_state
 
 def main():
     """Main application entry point."""
     # Setup logging
     logger = setup_logging()
-    logger.info("Starting MayaMCP - AI Bartending Agent")
+    logger.info("Starting MayaMCP - AI Bartending Agent (BYOK mode)")
     
     try:
-        # Validate API keys
+        # Load API keys (optional now -- used only for RAG initialisation)
         api_keys = get_api_keys()
-        if not validate_api_keys():
-            logger.error("Required API keys not found. Please check your .env file.")
-            logger.error("Required: GEMINI_API_KEY, CARTESIA_API_KEY")
-            sys.exit(1)
-        
-        logger.info("API keys validated successfully")
+        google_api_key = api_keys.get("google_api_key")
+        cartesia_api_key = api_keys.get("cartesia_api_key")
+
+        if google_api_key:
+            logger.info("Found GEMINI_API_KEY in environment (will use for RAG)")
+        else:
+            logger.info("No GEMINI_API_KEY in environment; RAG will use session keys or be skipped")
 
         # Proactive model validation (warning-only)
         model_cfg = get_model_config()
@@ -52,54 +52,55 @@ def main():
         initialize_state()
         logger.info("Application state initialized")
 
-        # Initialize LLM with tools
+        # Get tool definitions (static, shared across all sessions)
         tools = get_all_tools()
-        llm = initialize_llm(api_key=api_keys["google_api_key"], tools=tools)
-        logger.info(f"LLM initialized with {len(tools)} tools")
-        
+        logger.info(f"Loaded {len(tools)} tool definitions")
+
         # Initialize RAG system - try Memvid first, fallback to FAISS
-        try:
-            # Try Memvid first
-            logger.info("Attempting to initialize Memvid-based RAG...")
-            rag_retriever, rag_documents = initialize_memvid_store()
-            rag_index = None  # Memvid uses retriever instead of index
-            logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
-        except Exception as e:
-            logger.warning(f"Memvid initialization failed: {e}. Falling back to FAISS...")
+        rag_index = None
+        rag_documents = None
+        rag_retriever = None
+
+        if google_api_key:
             try:
-                rag_index, rag_documents = initialize_vector_store()
-                rag_retriever = None  # FAISS uses index instead of retriever
-                logger.info(f"FAISS RAG system initialized with {len(rag_documents)} documents")
-            except Exception as e2:
-                logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
-                rag_index, rag_documents, rag_retriever = None, None, None
+                logger.info("Attempting to initialize Memvid-based RAG...")
+                rag_retriever, rag_documents = initialize_memvid_store()
+                logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
+            except Exception as e:
+                logger.warning(f"Memvid initialization failed: {e}. Falling back to FAISS...")
+                try:
+                    rag_index, rag_documents = initialize_vector_store()
+                    logger.info(f"FAISS RAG system initialized with {len(rag_documents)} documents")
+                except Exception as e2:
+                    logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
+        else:
+            logger.info("Skipping RAG initialization (no server-side Gemini key)")
         
-        # Initialize Cartesia TTS client
-        try:
-            cartesia_client = initialize_cartesia_client(api_keys["cartesia_api_key"])
-            logger.info("Cartesia TTS client initialized")
-        except Exception as e:
-            logger.warning(f"Cartesia initialization failed: {e}. Continuing without TTS.")
-            cartesia_client = None
-        
+        # NOTE: LLM and TTS are NOT initialised here.
+        # Each user session provides their own keys (BYOK).
+        # Per-session clients are lazily created via src/llm/session_registry.
+
         # Initialize app state for local run (ephemeral, in-memory)
-        # In deployment, this is replaced by modal.Dict
         app_state = {}
         
         # Create partially applied handler functions with dependencies
         handle_input_with_deps = partial(
             handle_gradio_input,
-            llm=llm,
-            cartesia_client=cartesia_client,
+            tools=tools,
             rag_index=rag_index,
             rag_documents=rag_documents,
             rag_retriever=rag_retriever,
-            api_key=api_keys["google_api_key"],
+            rag_api_key=google_api_key,
             app_state=app_state
         )
 
         clear_state_with_deps = partial(
             clear_chat_state,
+            app_state=app_state
+        )
+
+        handle_keys_with_deps = partial(
+            handle_key_submission,
             app_state=app_state
         )
         
@@ -108,7 +109,8 @@ def main():
         try:
             interface = launch_bartender_interface(
                 handle_input_fn=handle_input_with_deps,
-                clear_state_fn=clear_chat_state
+                clear_state_fn=clear_state_with_deps,
+                handle_key_submission_fn=handle_keys_with_deps,
             )
             # Local/dev launch only; Modal serves via ASGI in deploy.py
             if os.getenv("PYTHON_ENV", "development").lower() != "production":

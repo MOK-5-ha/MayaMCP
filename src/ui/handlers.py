@@ -5,10 +5,13 @@ import gradio as gr
 from ..config.logging_config import get_logger
 from ..conversation.processor import process_order
 from ..voice.tts import get_voice_audio
+from ..llm.session_registry import get_session_llm, get_session_tts
 from ..utils.state_manager import (
     reset_session_state,
     get_current_order_state,
     get_payment_state,
+    get_api_key_state,
+    has_valid_keys,
     set_tip,
     DEFAULT_PAYMENT_STATE
 )
@@ -17,8 +20,23 @@ from .tab_overlay import (
     generate_tip_notification,
     generate_tip_removal_notification
 )
+from .api_key_modal import QUOTA_ERROR_SENTINEL, create_quota_error_html
 
 logger = get_logger(__name__)
+
+
+def _is_quota_error(error: Exception) -> bool:
+    """Check whether an exception looks like a Gemini quota / rate-limit error."""
+    msg = str(error).lower()
+    code = getattr(error, "status_code", None)
+    return (
+        code == 429
+        or "429" in msg
+        or "rate" in msg
+        or "quota" in msg
+        or "resource" in msg and "exhaust" in msg
+    )
+
 
 def handle_gradio_input(
     user_input: str,
@@ -28,45 +46,28 @@ def handle_gradio_input(
     current_tip_percentage: Optional[int],
     current_tip_amount: float,
     request: gr.Request,
-    llm,
-    cartesia_client=None,
+    tools=None,
     rag_index=None,
     rag_documents: Optional[List[str]] = None,
     rag_retriever=None,
-    api_key: Optional[str] = None,
+    rag_api_key: Optional[str] = None,
     app_state: Optional[MutableMapping] = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
 ) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any,
-           str, float, float, float, float, Optional[int], float, str]:
+           str, float, float, float, float, Optional[int], float, str, str]:
     """
     Gradio callback: Takes input/state, calls logic & TTS, returns updates.
 
-    Args:
-        user_input: User's text input
-        session_history_state: Current session history
-        current_tab: Current tab amount (for animation)
-        current_balance: Current balance (for animation)
-        current_tip_percentage: Current tip percentage (for overlay)
-        current_tip_amount: Current tip amount (for overlay)
-        request: Gradio request object containing session info
-        llm: Initialized LLM instance
-        cartesia_client: Cartesia client for TTS (optional)
-        rag_index: FAISS index for RAG (optional)
-        rag_documents: Documents for RAG (optional)
-        api_key: API key for various services
-        app_state: Distributed state store (modal.Dict or dict)
-        avatar_path: Current avatar path state (from Gradio state)
+    Uses per-session LLM and TTS clients from the BYOK session registry.
 
     Returns:
         Tuple of (empty_input, updated_history, updated_history_for_gradio,
                   updated_order, audio_data, overlay_html, new_tab, new_balance,
-                  prev_tab, prev_balance, new_tip_percentage, new_tip_amount, updated_avatar_path)
-
-    Requirements: 2.2, 6.2, 7.3, 7.4
+                  prev_tab, prev_balance, new_tip_percentage, new_tip_amount,
+                  updated_avatar_path, quota_error_html)
     """
     if app_state is None:
-        # Fallback for local testing if not injected
-        logger.warning("app_state not provided, using a temporary local dict (state will be lost on restart)")
+        logger.warning("app_state not provided, using a temporary local dict")
         app_state = {}
 
     # Extract session ID from request
@@ -78,10 +79,39 @@ def handle_gradio_input(
         logger.warning("No request object provided, using default session ID")
 
     logger.info(f"Gradio input from {session_id}: '{user_input}'")
-    logger.debug(f"Received session history state (len {len(session_history_state)}): {session_history_state}")
 
-    # Call text processing logic first
-    emotion_state = None  # Default to None (no change) if not parsed
+    # --- Get per-session API keys ---
+    if not has_valid_keys(session_id, app_state):
+        safe_history = session_history_state[:]
+        safe_history.append({'role': 'user', 'content': user_input})
+        safe_history.append({'role': 'assistant', 'content': 'Please provide your API keys first.'})
+        overlay_html = create_tab_overlay_html(
+            tab_amount=current_tab, balance=current_balance,
+            prev_tab=current_tab, prev_balance=current_balance,
+            avatar_path=avatar_path,
+            tip_percentage=current_tip_percentage, tip_amount=current_tip_amount
+        )
+        return (
+            "", safe_history, safe_history,
+            get_current_order_state(session_id, app_state), None,
+            overlay_html, current_tab, current_balance, current_tab, current_balance,
+            current_tip_percentage, current_tip_amount, avatar_path, ""
+        )
+
+    api_key_state = get_api_key_state(session_id, app_state)
+    gemini_key = api_key_state['gemini_key']
+    cartesia_key = api_key_state.get('cartesia_key')
+
+    # Lazy-initialise per-session LLM and TTS
+    llm = get_session_llm(session_id, gemini_key, tools)
+    cartesia_client = get_session_tts(session_id, cartesia_key)
+
+    # Use the user's gemini key for RAG if no dedicated RAG key was provided
+    effective_rag_key = rag_api_key or gemini_key
+
+    # Call text processing logic
+    emotion_state = None
+    quota_error_html = ""
     try:
         response_text, updated_history, updated_history_for_gradio, updated_order, _, emotion_state = process_order(
             user_input_text=user_input,
@@ -90,31 +120,42 @@ def handle_gradio_input(
             rag_index=rag_index,
             rag_documents=rag_documents,
             rag_retriever=rag_retriever,
-            api_key=api_key,
+            api_key=effective_rag_key,
             session_id=session_id,
             app_state=app_state
         )
+
+        # Check for the quota-error sentinel returned by the processor
+        if response_text == QUOTA_ERROR_SENTINEL:
+            quota_error_html = create_quota_error_html()
+            response_text = "It looks like your API key has hit its rate limit. Please check the popup for details."
+            updated_history = session_history_state[:]
+            updated_history.append({'role': 'user', 'content': user_input})
+            updated_history.append({'role': 'assistant', 'content': response_text})
+            updated_history_for_gradio = updated_history
+
     except Exception as e:
-        logger.exception(f"Error during process_order: {e}")
-        friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
+        if _is_quota_error(e):
+            quota_error_html = create_quota_error_html()
+            friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."
+        else:
+            logger.exception(f"Error during process_order: {e}")
+            friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
+
         safe_history = session_history_state[:]
         safe_history.append({'role': 'user', 'content': user_input})
         safe_history.append({'role': 'assistant', 'content': friendly})
-        # Return with unchanged payment state and unchanged avatar on error
         overlay_html = create_tab_overlay_html(
-            tab_amount=current_tab,
-            balance=current_balance,
-            prev_tab=current_tab,
-            prev_balance=current_balance,
-            avatar_path=avatar_path, # Keep previous avatar state
-            tip_percentage=current_tip_percentage,
-            tip_amount=current_tip_amount
+            tab_amount=current_tab, balance=current_balance,
+            prev_tab=current_tab, prev_balance=current_balance,
+            avatar_path=avatar_path,
+            tip_percentage=current_tip_percentage, tip_amount=current_tip_amount
         )
         return (
             "", safe_history, safe_history,
             get_current_order_state(session_id, app_state), None,
             overlay_html, current_tab, current_balance, current_tab, current_balance,
-            current_tip_percentage, current_tip_amount, avatar_path
+            current_tip_percentage, current_tip_amount, avatar_path, quota_error_html
         )
 
     # --- Get Voice Audio ---
@@ -138,25 +179,17 @@ def handle_gradio_input(
     new_tip_amount = payment_state['tip_amount']
 
     # Resolve Avatar based on Emotion State
-    # Note: Assumes placeholder files exist: maya_neutral.mp4, maya_happy.mp4, etc.
     import os
-    
-    # Defaults to current path (persistence)
     final_avatar_path = avatar_path 
 
     if emotion_state:
-        # Safe fallback if unknown emotion
         valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
         if emotion_state not in valid_emotions:
             emotion_state = "neutral"
         
-        # Construct filename
-        # e.g. assets/maya_happy.mp4
         emotion_filename = f"maya_{emotion_state}.mp4" 
         potential_path = f"assets/{emotion_filename}"
         
-        # Check if file exists, if not, do not change state (or fallback to neutral if logic dictates)
-        # Here we only update if the emotion asset exists
         if os.path.exists(potential_path):
              final_avatar_path = potential_path
              logger.info(f"Emotion: {emotion_state} -> Avatar Path: {final_avatar_path}")
@@ -174,13 +207,10 @@ def handle_gradio_input(
         tip_amount=new_tip_amount
     )
 
-    # Return updates including audio data (which might be None)
-    # First return value is empty string to clear the input field
-    # Also return overlay HTML and payment state for animation
     return (
         "", updated_history, updated_history_for_gradio, updated_order, audio_data,
         overlay_html, new_tab, new_balance, current_tab, current_balance,
-        new_tip_percentage, new_tip_amount, final_avatar_path
+        new_tip_percentage, new_tip_amount, final_avatar_path, quota_error_html
     )
 
 def clear_chat_state(
@@ -208,10 +238,8 @@ def clear_chat_state(
         reset_session_state(session_id, app_state)
     except Exception:
         logger.exception("Failed to reset session state")
-        # Return empty state to ensure clean UI even if backend reset failed
         return [], [], [], None
 
-    # Return cleared state tuple
     return [], [], [], None
 
 
@@ -222,12 +250,11 @@ def handle_tip_button_click(
     current_balance: float,
     session_history_state: List[Dict[str, str]],
     request: gr.Request,
-    llm,
-    cartesia_client=None,
+    tools=None,
     rag_index=None,
     rag_documents: Optional[List[str]] = None,
     rag_retriever=None,
-    api_key: Optional[str] = None,
+    rag_api_key: Optional[str] = None,
     app_state: Optional[MutableMapping] = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], Any, str, float, float,
@@ -237,29 +264,6 @@ def handle_tip_button_click(
     
     Implements toggle behavior: clicking the same percentage removes the tip.
     Sends notification to Maya about tip selection/removal.
-    
-    Args:
-        percentage: The tip percentage clicked (10, 15, or 20)
-        current_tip_percentage: Currently selected tip percentage or None
-        current_tab: Current tab amount
-        current_balance: Current balance
-        session_history_state: Current session history
-        request: Gradio request object
-        llm: LLM instance for processing Maya's response
-        cartesia_client: TTS client (optional)
-        rag_index: RAG index (optional)
-        rag_documents: RAG documents (optional)
-        rag_retriever: RAG retriever (optional)
-        api_key: API key (optional)
-        app_state: State store
-        avatar_path: Current avatar path state (from Gradio state)
-        
-    Returns:
-        Tuple of (updated_history, updated_history_for_gradio, audio_data,
-                  overlay_html, new_tab, new_balance, prev_tab, prev_balance,
-                  new_tip_percentage, new_tip_amount, updated_avatar_path)
-                  
-    Requirements: 7.2, 7.5, 7.6, 7.11, 7.12
     """
     from ..conversation.processor import process_order
     from ..voice.tts import get_voice_audio
@@ -268,28 +272,31 @@ def handle_tip_button_click(
         logger.warning("app_state not provided for tip handler")
         app_state = {}
     
-    # Extract session ID
     session_id = "default"
     if request:
         session_id = request.session_hash
     
     logger.info(f"Tip button clicked for session {session_id}: {percentage}%")
     
-    # Determine if this is a toggle (remove tip) or new selection
+    # Get per-session clients
+    api_key_state = get_api_key_state(session_id, app_state)
+    gemini_key = api_key_state.get('gemini_key')
+    cartesia_key = api_key_state.get('cartesia_key')
+
+    llm = get_session_llm(session_id, gemini_key, tools) if gemini_key else None
+    cartesia_client = get_session_tts(session_id, cartesia_key) if cartesia_key else None
+    effective_rag_key = rag_api_key or gemini_key
+
     is_toggle = (percentage == current_tip_percentage)
     
-    # Update tip in state manager (handles toggle behavior internally)
     try:
         new_tip_amount, _total = set_tip(session_id, app_state, percentage)
-    except ValueError as e:
+    except ValueError:
         logger.exception("Invalid tip percentage")
-        # Return unchanged state on error
         payment_state = get_payment_state(session_id, app_state)
         overlay_html = create_tab_overlay_html(
-            tab_amount=current_tab,
-            balance=current_balance,
-            prev_tab=current_tab,
-            prev_balance=current_balance,
+            tab_amount=current_tab, balance=current_balance,
+            prev_tab=current_tab, prev_balance=current_balance,
             avatar_path=avatar_path,
             tip_percentage=current_tip_percentage,
             tip_amount=payment_state.get('tip_amount', 0.0)
@@ -300,57 +307,48 @@ def handle_tip_button_click(
             current_tip_percentage, payment_state.get('tip_amount', 0.0), avatar_path
         )
     
-    # Get updated payment state
     payment_state = get_payment_state(session_id, app_state)
     new_tip_percentage = payment_state['tip_percentage']
     new_tab = payment_state['tab_total']
     new_balance = payment_state['balance']
     
-    # Generate notification message for Maya
     if is_toggle:
-        # Tip was removed (toggle behavior)
         notification_message = generate_tip_removal_notification()
     else:
-        # New tip selected
         notification_message = generate_tip_notification(
-            percentage=percentage,
-            tip_amount=new_tip_amount,
-            tab_total=new_tab
+            percentage=percentage, tip_amount=new_tip_amount, tab_total=new_tab
         )
     
     logger.info(f"Sending tip notification to Maya: {notification_message}")
     
-    # Process the notification through Maya
     emotion_state = None
-    try:
-        response_text, updated_history, updated_history_for_gradio, _, _, emotion_state = process_order(
-            user_input_text=notification_message,
-            current_session_history=session_history_state,
-            llm=llm,
-            rag_index=rag_index,
-            rag_documents=rag_documents,
-            rag_retriever=rag_retriever,
-            api_key=api_key,
-            session_id=session_id,
-            app_state=app_state
-        )
-    except Exception as e:
-        logger.exception(f"Error processing tip notification: {e}")
-        # Return with updated tip state but no Maya response, keep avatar
-        overlay_html = create_tab_overlay_html(
-            tab_amount=new_tab,
-            balance=new_balance,
-            prev_tab=current_tab,
-            prev_balance=current_balance,
-            avatar_path=avatar_path,
-            tip_percentage=new_tip_percentage,
-            tip_amount=new_tip_amount
-        )
-        return (
-            session_history_state, session_history_state, None,
-            overlay_html, new_tab, new_balance, current_tab, current_balance,
-            new_tip_percentage, new_tip_amount, avatar_path
-        )
+    if llm:
+        try:
+            response_text, updated_history, updated_history_for_gradio, _, _, emotion_state = process_order(
+                user_input_text=notification_message,
+                current_session_history=session_history_state,
+                llm=llm,
+                rag_index=rag_index, rag_documents=rag_documents,
+                rag_retriever=rag_retriever, api_key=effective_rag_key,
+                session_id=session_id, app_state=app_state
+            )
+        except Exception as e:
+            logger.exception(f"Error processing tip notification: {e}")
+            overlay_html = create_tab_overlay_html(
+                tab_amount=new_tab, balance=new_balance,
+                prev_tab=current_tab, prev_balance=current_balance,
+                avatar_path=avatar_path,
+                tip_percentage=new_tip_percentage, tip_amount=new_tip_amount
+            )
+            return (
+                session_history_state, session_history_state, None,
+                overlay_html, new_tab, new_balance, current_tab, current_balance,
+                new_tip_percentage, new_tip_amount, avatar_path
+            )
+    else:
+        updated_history = session_history_state
+        updated_history_for_gradio = session_history_state
+        response_text = ""
     
     # Get voice audio for Maya's response
     audio_data = None
@@ -375,13 +373,10 @@ def handle_tip_button_click(
              final_avatar_path = potential_path
     
     overlay_html = create_tab_overlay_html(
-        tab_amount=new_tab,
-        balance=new_balance,
-        prev_tab=current_tab,
-        prev_balance=current_balance,
+        tab_amount=new_tab, balance=new_balance,
+        prev_tab=current_tab, prev_balance=current_balance,
         avatar_path=final_avatar_path,
-        tip_percentage=new_tip_percentage,
-        tip_amount=new_tip_amount
+        tip_percentage=new_tip_percentage, tip_amount=new_tip_amount
     )
     
     return (
