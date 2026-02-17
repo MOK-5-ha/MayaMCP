@@ -2,12 +2,12 @@
 Memvid-enhanced RAG pipeline for Maya
 """
 
-import google.generativeai as genai
 from typing import List
 
-from .memvid_store import search_memvid_documents
 from ..config.logging_config import get_logger
+from ..llm.client import get_genai_client
 from ..utils.errors import classify_and_log_genai_error
+from .memvid_store import search_memvid_documents
 
 logger = get_logger(__name__)
 
@@ -50,10 +50,9 @@ Question: {query_oneline}
 Answer:"""
 
     try:
-        # Configure and call Google Generative AI (free Gemini API)
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(model_version)
-        resp = model.generate_content(prompt)
+        # Call Google GenAI via singleton client
+        client = get_genai_client(api_key)
+        resp = client.models.generate_content(model=model_version, contents=prompt)
 
         return getattr(resp, "text", "") or ""
 

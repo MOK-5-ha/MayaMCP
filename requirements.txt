@@ -1,29 +1,38 @@
-google-generativeai>=0.8.0
-# Modern Google GenAI SDK (used by src/ code)
-google-genai>=1.0.0
+# Google GenAI SDK (new unified SDK, replaces google-generativeai)
+google-genai>=1.10.0
 
-langchain-google-genai>=2.0.10
-langchain-core>=0.3.50
+# LangChain with Google GenAI (v4+ uses google-genai)
+langchain-google-genai>=4.0.0
+langchain-core>=0.3.50,<0.4.0
+
+# Core dependencies
 python-dotenv>=1.0.0
-requests>=2.31.0
-websockets>=12.0
-tenacity>=8.2.3
-gradio>=4.0.0
-cartesia>=2.0.0
+requests>=2.32.0
+websockets>=15.0
+tenacity>=9.0.0
+
+# UI (stay on Gradio 5.x for stability)
+gradio>=5.0.0,<6.0.0
+
+# TTS (stay on Cartesia 2.x for stability)
+cartesia>=2.0.0,<3.0.0
+
+# Visualization
 matplotlib>=3.0.0
-pillow>=8.0.0
+pillow>=11.0.0,<13.0.0
 
 # Testing dependencies
 hypothesis>=6.0.0
+pytest>=8.0.0,<9.0.0
 
 # RAG dependencies
 # Memvid dependencies (optional - will fallback if not available)
 qrcode[pil]
-opencv-python
+opencv-python>=4.11.0
 
 # Legacy FAISS (keeping for fallback compatibility)
 faiss-cpu>=1.10.0
-numpy>=1.24.0
+numpy>=1.24.0,<3.0.0
 
 # Security (Optional)
 llm-guard>=0.3.0

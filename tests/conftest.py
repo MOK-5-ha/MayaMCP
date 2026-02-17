@@ -1,10 +1,13 @@
 """
 Global test configuration and shims for optional third-party SDKs.
-This ensures tests run even if google-generativeai or google-genai are not installed locally.
+This ensures tests run even if google-genai is not installed locally.
 """
 
+import importlib.util as _importlib_util
 import sys
-from types import ModuleType, SimpleNamespace as NS
+from types import ModuleType
+from types import SimpleNamespace as NS
+
 import pytest
 
 # Create 'google' package if missing
@@ -13,51 +16,23 @@ if 'google' not in sys.modules:
     google_module.__path__ = []  # Required for importlib.util.find_spec
     sys.modules['google'] = google_module
 
-# Stub google.generativeai (AI Studio free-tier SDK) only if the real package is not available
-import importlib.util as _importlib_util
-if _importlib_util.find_spec('google.generativeai') is None:
-    genai = ModuleType('google.generativeai')
-
-    # Minimal surface used by the code
-    def _configure(api_key: str | None = None, **kwargs):
-        setattr(genai, '_last_config', {'api_key': api_key, **kwargs})
-
-    class _Response:
-        def __init__(self, text: str = ""):
-            self.text = text
-
-    class _GenerativeModel:
-        def __init__(self, model: str):
-            self._model = model
-        def generate_content(self, contents=None, generation_config=None):
-            return _Response(text="")
-
-    def _embed_content(model: str, content: str, **kwargs):
-        # Default embedding response shape: dict with embedding.values
-        return {"embedding": {"values": [0.0]}}
-
-    def _batch_embed_contents(model: str, requests: list[dict], **kwargs):
-        # Return list-like embeddings matching requests length
-        return {"embeddings": [{"values": [0.0]} for _ in requests]}
-
-    genai.configure = _configure
-    genai.GenerativeModel = _GenerativeModel
-    genai.embed_content = _embed_content
-    genai.batch_embed_contents = _batch_embed_contents
-
-    sys.modules['google.generativeai'] = genai
-
-# Keep legacy google.genai stubs for any tests that still import it
-if 'google.genai' not in sys.modules:
+# Stub google.genai SDK only if the real package is NOT installed
+if _importlib_util.find_spec('google.genai') is None:
     genai_mod = ModuleType('google.genai')
     types_mod = ModuleType('google.genai.types')
+    errors_mod = ModuleType('google.genai.errors')
 
     class GenerateContentConfig:
-        def __init__(self, temperature=None, top_p=None, top_k=None, max_output_tokens=None):
+        def __init__(self, temperature=None, top_p=None, top_k=None, max_output_tokens=None, **kwargs):
             self.temperature = temperature
             self.top_p = top_p
             self.top_k = top_k
             self.max_output_tokens = max_output_tokens
+
+    class EmbedContentConfig:
+        def __init__(self, task_type=None, output_dimensionality=None, **kwargs):
+            self.task_type = task_type
+            self.output_dimensionality = output_dimensionality
 
     class GenerateContentResponse:
         def __init__(self, text: str = ""):
@@ -66,8 +41,11 @@ if 'google.genai' not in sys.modules:
     class _Models:
         def generate_content(self, model: str, contents=None, config=None):
             return NS(text="")
-        def embed_content(self, model: str, input=None, task_type=None):
-            return NS(embedding=NS(values=[0.0]))
+        def embed_content(self, model: str, contents=None, config=None):
+            # Handle both single and batch (list input)
+            if isinstance(contents, list):
+                return NS(embeddings=[NS(values=[0.0]) for _ in contents])
+            return NS(embeddings=[NS(values=[0.0])])
 
     class Client:
         def __init__(self, *args, **kwargs):
@@ -75,10 +53,12 @@ if 'google.genai' not in sys.modules:
 
     genai_mod.Client = Client
     types_mod.GenerateContentConfig = GenerateContentConfig
+    types_mod.EmbedContentConfig = EmbedContentConfig
     types_mod.GenerateContentResponse = GenerateContentResponse
 
     sys.modules['google.genai'] = genai_mod
     sys.modules['google.genai.types'] = types_mod
+    sys.modules['google.genai.errors'] = errors_mod
     sys.modules['google'].genai = genai_mod
 
 # Autouse fixture: no-op (kept for compatibility).
@@ -101,29 +81,26 @@ def pytest_addoption(parser):
 def force_rebuild_flag(request):
     """
     Fixture to determine if expensive rebuilds should be performed.
-    
+
     Priority (highest to lowest):
     1. Command-line flag: pytest --force-rebuild
     2. Environment variable: TEST_FORCE_REBUILD=1
     3. Default: False (for CI efficiency)
-    
+
     Usage in tests:
     - def test_something(force_rebuild_flag): initialize_store(force_rebuild=force_rebuild_flag)
     - Environment: TEST_FORCE_REBUILD=1 pytest tests/test_memvid.py
     - CLI: pytest --force-rebuild tests/test_memvid.py
     """
     import os
-    
+
     # Check command-line option first
     if request.config.getoption("--force-rebuild"):
         return True
-    
+
     # Check environment variable
     if os.getenv("TEST_FORCE_REBUILD", "0") == "1":
         return True
-    
+
     # Default to False for CI efficiency
     return False
-
-
-

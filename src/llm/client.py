@@ -1,15 +1,17 @@
 """LLM client initialization and API calls."""
 
-import google.generativeai as genai
-import threading
-from langchain_google_genai import ChatGoogleGenerativeAI
-from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging
-from typing import Dict, List, Any, Optional
-from ..config.logging_config import get_logger
-from ..config.model_config import get_model_config, get_generation_config
-from ..utils.errors import classify_and_log_genai_error
+import threading
+from typing import Any, Dict, List, Optional
 
+from google import genai
+from google.genai import types
+from langchain_google_genai import ChatGoogleGenerativeAI
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
+
+from ..config.logging_config import get_logger
+from ..config.model_config import get_model_config
+from ..utils.errors import classify_and_log_genai_error
 
 logger = get_logger(__name__)
 # Optional: SDK-specific errors and HTTP client timeout classes
@@ -41,34 +43,36 @@ GenaiTimeoutError = getattr(genai_errors, "TimeoutError", _NoSDKError) if genai_
 
 # ---- Unified Google GenAI client/wrapper utilities ----
 
-_GENAI_CONFIGURED = False
-_CONFIG_LOCK = threading.Lock()
-
-def configure_genai(api_key: str) -> None:
-    """Configure the Google Generative AI client for API key auth."""
-    global _GENAI_CONFIGURED
-    if _GENAI_CONFIGURED:
-        return
-
-    with _CONFIG_LOCK:
-        if not _GENAI_CONFIGURED:
-            genai.configure(api_key=api_key)
-            _GENAI_CONFIGURED = True
+_genai_client: Optional[genai.Client] = None
+_genai_client_key: Optional[str] = None
+_CLIENT_LOCK = threading.Lock()
 
 
-def get_generative_model(model_name: str) -> genai.GenerativeModel:
-    """Return a GenerativeModel for the given model name."""
-    return genai.GenerativeModel(model_name)
+def get_genai_client(api_key: str) -> genai.Client:
+    """Return a singleton genai.Client, creating it if needed.
+
+    Thread-safe. If *api_key* differs from the key used to create the
+    current client the client is recreated (supports key rotation).
+    """
+    global _genai_client, _genai_client_key
+    if _genai_client is not None and _genai_client_key == api_key:
+        return _genai_client
+
+    with _CLIENT_LOCK:
+        if _genai_client is None or _genai_client_key != api_key:
+            _genai_client = genai.Client(api_key=api_key)
+            _genai_client_key = api_key
+    return _genai_client
 
 
-def build_generate_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Map our generation config dict for google-generativeai (dict-based)."""
-    return {
-        "temperature": config_dict.get("temperature"),
-        "top_p": config_dict.get("top_p"),
-        "top_k": config_dict.get("top_k"),
-        "max_output_tokens": config_dict.get("max_output_tokens"),
-    }
+def build_generate_config(config_dict: Dict[str, Any]) -> types.GenerateContentConfig:
+    """Map our generation config dict to a GenerateContentConfig."""
+    return types.GenerateContentConfig(
+        temperature=config_dict.get("temperature"),
+        top_p=config_dict.get("top_p"),
+        top_k=config_dict.get("top_k"),
+        max_output_tokens=config_dict.get("max_output_tokens"),
+    )
 
 
 def get_model_name() -> str:
@@ -119,7 +123,7 @@ def initialize_llm(api_key: str, tools: Optional[List] = None) -> ChatGoogleGene
             tool_word = "tool" if tool_count == 1 else "tools"
             logger.info(f"Successfully initialized LangChain ChatGoogleGenerativeAI model bound with {tool_count} {tool_word}.")
         else:
-            logger.info(f"Successfully initialized LangChain ChatGoogleGenerativeAI model without tools.")
+            logger.info("Successfully initialized LangChain ChatGoogleGenerativeAI model without tools.")
 
         return llm
 
@@ -137,7 +141,7 @@ def call_gemini_api(
     prompt_content: List[Dict],
     config: Dict,
     api_key: str
-) -> genai.types.GenerateContentResponse:
+) -> types.GenerateContentResponse:
     """
     Internal function to call the Gemini API with retry logic.
 
@@ -151,21 +155,21 @@ def call_gemini_api(
     """
     logger.debug("Calling Gemini API...")
 
-    # Configure Google Generative AI (free Gemini API)
-    configure_genai(api_key)
+    # Get singleton client
+    client = get_genai_client(api_key)
 
     # Get model name from shared config
     model_name = get_model_name()
 
-    # Map our config dict to generation_config (dict)
+    # Map our config dict to GenerateContentConfig
     gen_config = build_generate_config(config)
 
-    # Call the API via GenerativeModel
+    # Call the API via client
     try:
-        model = get_generative_model(model_name)
-        response = model.generate_content(
+        response = client.models.generate_content(
+            model=model_name,
             contents=prompt_content,
-            generation_config=gen_config,
+            config=gen_config,
         )
     except GenaiRateLimitError as e:
         logger.warning(f"Rate limit hit calling Gemini: {e}")
