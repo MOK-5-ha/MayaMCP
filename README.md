@@ -47,7 +47,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ### Model Information
 
-- Default model: Google Gemini 2.5 Flash Lite (model id: `gemini-2.5-flash-lite`)
+- Default model: Google Gemini 3 Flash (model id: `gemini-3.0-flash`)
 - You can override the model via `GEMINI_MODEL_VERSION` in your `.env`
 
 ## Security
@@ -88,7 +88,7 @@ GEMINI_API_KEY=your_google_api_key_here
 CARTESIA_API_KEY=your_cartesia_api_key_here
 
 # Model Configuration (optional)
-GEMINI_MODEL_VERSION=gemini-2.5-flash-lite
+GEMINI_MODEL_VERSION=gemini-3.0-flash
 TEMPERATURE=0.7
 MAX_OUTPUT_TOKENS=2048
 

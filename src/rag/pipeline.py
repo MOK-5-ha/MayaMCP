@@ -23,7 +23,7 @@ def generate_augmented_response(
     query_text: str,
     retrieved_documents: List[str],
     api_key: str,
-    model_version: str = "gemini-2.5-flash-preview-04-17"
+    model_version: str = "gemini-3.0-flash"
 ) -> str:
     """
     Generate a response augmented with the retrieved documents.
@@ -74,7 +74,7 @@ def rag_pipeline(
     index: faiss.Index,
     documents: List[str],
     api_key: str,
-    model_version: str = "gemini-2.5-flash-preview-04-17"
+    model_version: str = "gemini-3.0-flash"
 ) -> str:
     """
     Complete RAG pipeline for query processing.

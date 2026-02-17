@@ -23,7 +23,7 @@ def generate_memvid_response(
     query_text: str,
     retrieved_documents: List[str],
     api_key: str,
-    model_version: str = "gemini-2.5-flash-preview-04-17"
+    model_version: str = "gemini-3.0-flash"
 ) -> str:
     """
     Generate a response augmented with Memvid-retrieved documents.
@@ -74,7 +74,7 @@ def memvid_rag_pipeline(
     query_text: str,
     memvid_retriever,
     api_key: str,
-    model_version: str = "gemini-2.5-flash-preview-04-17"
+    model_version: str = "gemini-3.0-flash"
 ) -> str:
     """
     Complete Memvid-based RAG pipeline for query processing.

@@ -55,7 +55,7 @@ def mock_genai_client(monkeypatch):
 
 def test_call_gemini_api_uses_genai_client(mock_genai_client, monkeypatch):
     # Arrange
-    monkeypatch.setattr(llm_client, 'get_model_name', lambda: 'gemini-2.5-flash-lite', raising=False)
+    monkeypatch.setattr(llm_client, 'get_model_name', lambda: 'gemini-3.0-flash', raising=False)
 
     prompt = [{"role": "user", "content": "Hello"}]
     cfg = {"temperature": 0.7, "top_p": 0.9, "top_k": 1, "max_output_tokens": 128}
@@ -69,7 +69,7 @@ def test_call_gemini_api_uses_genai_client(mock_genai_client, monkeypatch):
     models = mock_genai_client['models']
     assert models.call_count == 1, "Expected exactly one API call"
     assert models.last_call is not None
-    assert models.last_call['model'] == 'gemini-2.5-flash-lite'
+    assert models.last_call['model'] == 'gemini-3.0-flash'
     assert models.last_call['contents'] == prompt
     assert models.last_call['config'] is not None
 
@@ -88,7 +88,7 @@ def test_rag_pipeline_generate_augmented_response(mock_genai_client):
         query_text="Hi",
         retrieved_documents=["doc1", "doc2"],
         api_key='abc',
-        model_version='gemini-2.5-flash-lite'
+        model_version='gemini-3.0-flash'
     )
 
     # Assert
@@ -96,7 +96,7 @@ def test_rag_pipeline_generate_augmented_response(mock_genai_client):
     assert mock_genai_client['data']['key'] == 'abc'
     models = mock_genai_client['models']
     assert models.call_count == 1, "Expected exactly one API call"
-    assert models.last_call['model'] == 'gemini-2.5-flash-lite'
+    assert models.last_call['model'] == 'gemini-3.0-flash'
 
     # Verify prompt structure and document formatting
     prompt_contents = models.last_call['contents']
@@ -139,7 +139,7 @@ def test_memvid_pipeline_generate_response(mock_genai_client):
         query_text="Hi",
         retrieved_documents=["mem1", "mem2"],
         api_key='xyz',
-        model_version='gemini-2.5-flash-lite'
+        model_version='gemini-3.0-flash'
     )
 
     # Assert
@@ -147,7 +147,7 @@ def test_memvid_pipeline_generate_response(mock_genai_client):
     assert mock_genai_client['data']['key'] == 'xyz'
     models = mock_genai_client['models']
     assert models.call_count == 1, "Expected exactly one API call"
-    assert models.last_call['model'] == 'gemini-2.5-flash-lite'
+    assert models.last_call['model'] == 'gemini-3.0-flash'
 
     # Verify Memvid prompt structure and document formatting
     memvid_prompt_contents = models.last_call['contents']

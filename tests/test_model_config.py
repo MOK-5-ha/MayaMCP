@@ -142,7 +142,7 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-2.5-flash-lite",
+            "model_version": "gemini-3.0-flash",
             "temperature": 0.7,
             "max_output_tokens": 2048,
             "top_p": 0.95,
@@ -178,7 +178,7 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-2.5-flash-lite",
+            "model_version": "gemini-3.0-flash",
             "temperature": 0.7,
             "max_output_tokens": 2048,
             "top_p": 0.95,
@@ -300,6 +300,7 @@ class TestGetKnownGeminiModels:
         models = get_known_gemini_models()
 
         expected_models = [
+            "gemini-3.0-flash",
             "gemini-2.5-flash-lite",
             "gemini-2.5-flash",
             "gemini-2.5-pro",
@@ -335,6 +336,7 @@ class TestIsValidGeminiModel:
     def test_is_valid_gemini_model_known_models(self):
         """Test is_valid_gemini_model with known valid models."""
         valid_models = [
+            "gemini-3.0-flash",
             "gemini-2.5-flash-lite",
             "gemini-2.5-flash",
             "gemini-2.5-pro",
@@ -367,7 +369,7 @@ class TestIsValidGeminiModel:
     def test_is_valid_gemini_model_with_whitespace(self):
         """Test is_valid_gemini_model strips whitespace from valid model."""
         # The function calls str().strip() so this should work
-        assert is_valid_gemini_model("  gemini-2.5-flash-lite  ") is True
+        assert is_valid_gemini_model("  gemini-3.0-flash  ") is True
 
     def test_is_valid_gemini_model_none_input(self):
         """Test is_valid_gemini_model with None input."""

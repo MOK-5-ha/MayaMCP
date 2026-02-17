@@ -96,7 +96,7 @@ Required:
 - `CARTESIA_API_KEY` - Cartesia TTS API key
 
 Optional:
-- `GEMINI_MODEL_VERSION` - Model ID (default: `gemini-2.5-flash-lite`)
+- `GEMINI_MODEL_VERSION` - Model ID (default: `gemini-3.0-flash`)
 - `TEMPERATURE` - LLM temperature (default: `0.7`)
 - `MAX_OUTPUT_TOKENS` - Response limit (default: `2048`)
 - `STRIPE_SECRET_KEY` - Stripe test mode key (optional, for real payment links)
