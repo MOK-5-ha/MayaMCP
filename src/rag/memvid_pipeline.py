@@ -23,7 +23,7 @@ def generate_memvid_response(
     query_text: str,
     retrieved_documents: List[str],
     api_key: str,
-    model_version: str = "gemini-3.0-flash"
+    model_version: str = "gemini-3-flash-preview"
 ) -> str:
     """
     Generate a response augmented with Memvid-retrieved documents.
@@ -74,7 +74,7 @@ def memvid_rag_pipeline(
     query_text: str,
     memvid_retriever,
     api_key: str,
-    model_version: str = "gemini-3.0-flash"
+    model_version: str = "gemini-3-flash-preview"
 ) -> str:
     """
     Complete Memvid-based RAG pipeline for query processing.
@@ -100,7 +100,7 @@ def memvid_rag_pipeline(
         logger.exception("Error searching Memvid documents: %s", e)
         return MEMVID_FALLBACK_MESSAGE
 
-    # If no relevant passages found, return empty string
+    # If no relevant passages found, return fallback message
     if not relevant_passages:
         # Compute a non-reversible fingerprint to avoid logging PII
         query_fingerprint = hashlib.sha256(
@@ -110,7 +110,7 @@ def memvid_rag_pipeline(
             "No relevant passages found for query_id: %s",
             query_fingerprint
         )
-        return ""
+        return MEMVID_FALLBACK_MESSAGE
 
     # Generate Memvid-enhanced response
     enhanced_response = generate_memvid_response(

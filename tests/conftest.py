@@ -94,6 +94,7 @@ if _importlib_util.find_spec('google.genai') is None:
     errors_mod.AuthenticationError = AuthenticationError
     errors_mod.UnauthenticatedError = UnauthenticatedError
     errors_mod.RateLimitError = RateLimitError
+    errors_mod.GenAITimeoutError = GenAITimeoutError
     errors_mod.TimeoutError = TimeoutError
 
     class GenerateContentConfig:

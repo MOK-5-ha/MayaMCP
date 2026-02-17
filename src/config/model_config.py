@@ -28,6 +28,22 @@ def _parse_int_env(name: str, default: int) -> int:
         return default
 
 
+def _get_default_temperature(model_version: str) -> float:
+    """Get the recommended default temperature for a given model.
+
+    Google strongly recommends temperature=1.0 for Gemini 3 models as their
+    reasoning capabilities are optimized for this setting. Lower values may
+    cause unexpected behavior (looping, degraded performance) in complex
+    tasks.
+
+    For older models (Gemini 2.x and earlier), 0.7 remains a reasonable
+    default.
+    """
+    if model_version.startswith("gemini-3"):
+        return 1.0
+    return 0.7
+
+
 def get_model_config() -> Dict[str, Any]:
     """
     Get model configuration from environment variables.
@@ -35,9 +51,13 @@ def get_model_config() -> Dict[str, Any]:
     Returns:
         Dictionary containing model configuration.
     """
+    model_version = os.getenv(
+        "GEMINI_MODEL_VERSION", "gemini-3-flash-preview"
+    )
+    default_temp = _get_default_temperature(model_version)
     return {
-        "model_version": os.getenv("GEMINI_MODEL_VERSION", "gemini-3.0-flash"),
-        "temperature": _parse_float_env("TEMPERATURE", 0.7),
+        "model_version": model_version,
+        "temperature": _parse_float_env("TEMPERATURE", default_temp),
         "max_output_tokens": _parse_int_env("MAX_OUTPUT_TOKENS", 2048),
         "top_p": 0.95,
         "top_k": 1
@@ -76,9 +96,12 @@ def get_cartesia_config() -> Dict[str, Any]:
         }
     }
 
+
 # Known valid Gemini model identifiers (non-exhaustive; update as needed)
 KNOWN_GEMINI_MODELS: List[str] = [
-    "gemini-3.0-flash",
+    "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
+    "gemini-3-pro-image-preview",
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -94,7 +117,8 @@ def get_known_gemini_models() -> List[str]:
 def is_valid_gemini_model(model_name: str) -> bool:
     """Check if the provided model name is in the known valid list.
 
-    Note: This is a permissive check used for warnings only; the app will continue even if false.
+    Note: This is a permissive check used for warnings only; the app
+    will continue even if false.
     """
     try:
         return str(model_name).strip() in KNOWN_GEMINI_MODELS
