@@ -7,19 +7,19 @@ langchain-core>=0.3.50,<0.4.0
 
 # Core dependencies
 python-dotenv>=1.0.0
-requests>=2.32.0
+requests>=2.32.2,<3.0.0
 websockets>=15.0
 tenacity>=9.0.0
 
 # UI (stay on Gradio 5.x for stability)
-gradio>=5.0.0,<6.0.0
+gradio>=5.0.0,<7.0.0
 
 # TTS (stay on Cartesia 2.x for stability)
 cartesia>=2.0.0,<3.0.0
 
 # Visualization
 matplotlib>=3.0.0
-pillow>=11.0.0,<13.0.0
+pillow>=12.1.1,<13.0.0
 
 # Testing dependencies
 hypothesis>=6.0.0

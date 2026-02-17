@@ -335,7 +335,7 @@ class TestLLMClient:
     @patch('src.llm.client.get_model_name')
     @patch('src.llm.client.build_generate_config')
     def test_call_gemini_api_retry_behavior(self, mock_build_config, mock_get_model_name,
-                                            mock_get_client):
+                                            mock_get_client, monkeypatch):
         """Test call_gemini_api retries on failure."""
         mock_get_model_name.return_value = "gemini-1.5-flash"
         mock_build_config.return_value = MagicMock()
@@ -350,22 +350,18 @@ class TestLLMClient:
             mock_response
         ]
 
-        original_sleep = call_gemini_api.retry.sleep
-        call_gemini_api.retry.sleep = lambda x: None
+        # Use monkeypatch to avoid touching implementation internals directly
+        monkeypatch.setattr(call_gemini_api.retry, 'sleep', lambda x: None)
 
-        try:
-            prompt_content = [{"role": "user", "content": "Test prompt"}]
-            config = {"temperature": 0.7}
-            api_key = "test_api_key"
+        prompt_content = [{"role": "user", "content": "Test prompt"}]
+        config = {"temperature": 0.7}
+        api_key = "test_api_key"
 
-            result = call_gemini_api(prompt_content, config, api_key)
+        result = call_gemini_api(prompt_content, config, api_key)
 
-            # Verify it was called 3 times (2 failures + 1 success)
-            assert mock_client.models.generate_content.call_count == 3
-            assert result == mock_response
-
-        finally:
-            call_gemini_api.retry.sleep = original_sleep
+        # Verify it was called 3 times (2 failures + 1 success)
+        assert mock_client.models.generate_content.call_count == 3
+        assert result == mock_response
 
     def test_module_imports(self):
         """Test that all necessary modules are imported correctly."""

@@ -49,6 +49,9 @@ def _parse_embedding_values(emb) -> Optional[List[float]]:
     """Extract a float list from a single embedding object."""
     if hasattr(emb, "values"):
         values_attr = emb.values
+        # Some protobuf repeated-field accessors or wrapper objects expose
+        # emb.values as a callable method rather than a plain list; invoke
+        # it to retrieve the actual sequence in that case.
         vec_source = values_attr() if callable(values_attr) else values_attr
         return list(vec_source)
     if isinstance(emb, list):
@@ -66,7 +69,7 @@ def get_embedding(text: str, task_type: str = DEFAULT_TASK_TYPE) -> Optional[Lis
         if client is None:
             return None
 
-        config = types.EmbedContentConfig(task_type=task_type) if task_type != DEFAULT_TASK_TYPE else None
+        config = types.EmbedContentConfig(task_type=task_type)
         response = client.models.embed_content(
             model=EMBEDDING_MODEL,
             contents=text,
@@ -92,7 +95,7 @@ def get_embedding(text: str, task_type: str = DEFAULT_TASK_TYPE) -> Optional[Lis
 def _call_batch_embed(client, batch: List[str], task_type: str):
     """Call batch embedding API with retry logic."""
     try:
-        config = types.EmbedContentConfig(task_type=task_type) if task_type != DEFAULT_TASK_TYPE else None
+        config = types.EmbedContentConfig(task_type=task_type)
         resp = client.models.embed_content(
             model=EMBEDDING_MODEL,
             contents=batch,

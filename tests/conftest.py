@@ -22,6 +22,72 @@ if _importlib_util.find_spec('google.genai') is None:
     types_mod = ModuleType('google.genai.types')
     errors_mod = ModuleType('google.genai.errors')
 
+    # Exception class stubs for google.genai.errors
+    # Allow imports like "from google.genai.errors import APIError"
+    # These match the real google.genai.errors structure plus common aliases
+    class APIError(Exception):
+        """Base class for Google GenAI API errors."""
+        pass
+
+    class ClientError(APIError):
+        """Client-side error."""
+        pass
+
+    class ServerError(APIError):
+        """Server-side error."""
+        pass
+
+    class FunctionInvocationError(APIError):
+        """Error during function invocation."""
+        pass
+
+    # Common aliases/expected names that code may check via getattr
+    class NotFoundError(APIError):
+        """Resource not found error."""
+        pass
+
+    class InvalidArgumentError(APIError):
+        """Invalid argument error."""
+        pass
+
+    class PermissionDenied(APIError):
+        """Permission denied error."""
+        pass
+
+    class PermissionDeniedError(PermissionDenied):
+        """Alias for PermissionDenied for SDK compatibility."""
+        pass
+
+    class AuthenticationError(APIError):
+        """Authentication error."""
+        pass
+
+    class UnauthenticatedError(APIError):
+        """Unauthenticated error."""
+        pass
+
+    class RateLimitError(APIError):
+        """Rate limit exceeded error."""
+        pass
+
+    class TimeoutError(APIError):
+        """Request timeout error."""
+        pass
+
+    # Assign exception classes to the errors module before sys.modules
+    errors_mod.APIError = APIError
+    errors_mod.ClientError = ClientError
+    errors_mod.ServerError = ServerError
+    errors_mod.FunctionInvocationError = FunctionInvocationError
+    errors_mod.NotFoundError = NotFoundError
+    errors_mod.InvalidArgumentError = InvalidArgumentError
+    errors_mod.PermissionDenied = PermissionDenied
+    errors_mod.PermissionDeniedError = PermissionDeniedError
+    errors_mod.AuthenticationError = AuthenticationError
+    errors_mod.UnauthenticatedError = UnauthenticatedError
+    errors_mod.RateLimitError = RateLimitError
+    errors_mod.TimeoutError = TimeoutError
+
     class GenerateContentConfig:
         def __init__(self, temperature=None, top_p=None, top_k=None, max_output_tokens=None, **kwargs):
             self.temperature = temperature

@@ -62,7 +62,8 @@ def get_genai_client(api_key: str) -> genai.Client:
         if _genai_client is None or _genai_client_key != api_key:
             _genai_client = genai.Client(api_key=api_key)
             _genai_client_key = api_key
-    return _genai_client
+        local_client = _genai_client
+    return local_client
 
 
 def build_generate_config(config_dict: Dict[str, Any]) -> types.GenerateContentConfig:

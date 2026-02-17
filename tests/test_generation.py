@@ -18,14 +18,19 @@ import src.rag.pipeline as rag_pipeline
 class _FakeModels:
     """Fake models attribute for a mock genai.Client."""
     def __init__(self):
+        self.call_count = 0
+        self.call_history = []
         self.last_call = None
 
     def generate_content(self, model: str, contents=None, config=None):
-        self.last_call = {
+        self.call_count += 1
+        call_record = {
             'model': model,
             'contents': contents,
             'config': config,
         }
+        self.call_history.append(call_record)
+        self.last_call = call_record
         return NS(text="OK")
 
 
@@ -62,9 +67,11 @@ def test_call_gemini_api_uses_genai_client(mock_genai_client, monkeypatch):
     assert getattr(resp, 'text', None) == "OK"
     assert mock_genai_client['data']['key'] == 'k'
     models = mock_genai_client['models']
+    assert models.call_count == 1, "Expected exactly one API call"
     assert models.last_call is not None
     assert models.last_call['model'] == 'gemini-2.5-flash-lite'
     assert models.last_call['contents'] == prompt
+    assert models.last_call['config'] is not None
 
 
 def test_rag_pipeline_generate_augmented_response(mock_genai_client):
@@ -80,6 +87,7 @@ def test_rag_pipeline_generate_augmented_response(mock_genai_client):
     assert out == "OK"
     assert mock_genai_client['data']['key'] == 'abc'
     models = mock_genai_client['models']
+    assert models.call_count == 1, "Expected exactly one API call"
     assert models.last_call['model'] == 'gemini-2.5-flash-lite'
 
     # Verify prompt structure and document formatting
@@ -130,6 +138,7 @@ def test_memvid_pipeline_generate_response(mock_genai_client):
     assert out == "OK"
     assert mock_genai_client['data']['key'] == 'xyz'
     models = mock_genai_client['models']
+    assert models.call_count == 1, "Expected exactly one API call"
     assert models.last_call['model'] == 'gemini-2.5-flash-lite'
 
     # Verify Memvid prompt structure and document formatting

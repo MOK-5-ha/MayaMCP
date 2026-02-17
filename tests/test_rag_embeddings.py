@@ -25,7 +25,7 @@ class TestGetEmbedding:
         client = _make_mock_client(embed_return=mock_response)
         monkeypatch.setattr('src.rag.embeddings._get_embed_client', lambda: client)
 
-        result = get_embedding("test text", "RETRIEVAL_DOCUMENT")
+        result = get_embedding("test text")
 
         # Verify embed_content was called
         client.models.embed_content.assert_called_once()
@@ -122,10 +122,12 @@ class TestGetEmbeddingsBatch:
         assert result == [None, None]
 
     def test_get_embeddings_batch_with_list_response(self, monkeypatch):
-        """Test batch embedding with list response format."""
+        """Test batch embedding with plain list response format."""
+        # This tests the case where embeddings are returned as plain lists
+        # instead of objects with .values attribute
         mock_response = NS(embeddings=[
-            NS(values=[0.1, 0.2]),
-            NS(values=[0.3, 0.4])
+            [0.1, 0.2],
+            [0.3, 0.4]
         ])
         client = _make_mock_client(embed_return=mock_response)
         monkeypatch.setattr('src.rag.embeddings._get_embed_client', lambda: client)
@@ -161,9 +163,20 @@ class TestGetEmbeddingsBatch:
         assert result == [None, None]
 
     def test_get_embeddings_batch_empty_input(self, monkeypatch):
-        """Test batch embedding with empty input list."""
+        """Test batch embedding with empty input list.
+
+        Verifies that the API client is not invoked when input is empty.
+        """
+        # Patch _get_embed_client to track if it's called
+        called = []
+        monkeypatch.setattr(
+            'src.rag.embeddings._get_embed_client',
+            lambda: called.append(1) or None
+        )
+
         result = get_embeddings_batch([])
         assert result == []
+        assert called == [], "API client should not be called for empty input"
 
     def test_get_embeddings_batch_with_different_task_type(self, monkeypatch):
         """Test batch embedding with different task type."""
@@ -193,8 +206,7 @@ class TestGetEmbeddingsBatch:
         mock_response2 = NS(embeddings=[
             NS(values=[0.5, 0.6])
         ])
-        client = _make_mock_client()
-        client.models.embed_content.side_effect = [mock_response1, mock_response2]
+        client = _make_mock_client(embed_side_effect=[mock_response1, mock_response2])
         monkeypatch.setattr('src.rag.embeddings._get_embed_client', lambda: client)
 
         with patch('src.rag.embeddings.BATCH_SIZE', 2):

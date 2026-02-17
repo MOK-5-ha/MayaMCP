@@ -104,4 +104,4 @@ def memvid_rag_pipeline(
 
     except Exception as e:
         classify_and_log_genai_error(e, logger, context="in Memvid RAG pipeline")
-        return ""
+        return "I'm Maya, your bartender at MOK 5-ha. My video memory seems to be having a moment. Can I get you something from the menu?"

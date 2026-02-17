@@ -9,6 +9,13 @@ from .retrieval import retrieve_relevant_passages
 
 logger = get_logger(__name__)
 
+# Fallback response for consistent error handling across RAG functions
+RAG_FALLBACK_RESPONSE = (
+    "I'm Maya, your bartender at MOK 5-ha. I'm not sure how to "
+    "respond to that. Can I get you something from the menu?"
+)
+
+
 def generate_augmented_response(
     query_text: str,
     retrieved_documents: List[str],
@@ -52,9 +59,12 @@ Answer:"""
         return getattr(resp, "text", "") or ""
 
     except Exception as e:
-        classify_and_log_genai_error(e, logger, context="while generating augmented response")
+        classify_and_log_genai_error(
+            e, logger, context="while generating augmented response"
+        )
         # Fallback response
-        return "I'm Maya, your bartender at MOK 5-ha. I'm not sure how to respond to that. Can I get you something from the menu?"
+        return RAG_FALLBACK_RESPONSE
+
 
 def rag_pipeline(
     query_text: str,
@@ -84,10 +94,12 @@ def rag_pipeline(
             query_text=query_text
         )
 
-        # If no relevant passages found, return empty string
+        # If no relevant passages found, return fallback
         if not relevant_passages:
-            logger.warning("No relevant passages found for query: %s", query_text)
-            return ""
+            logger.warning(
+                "No relevant passages found for query: %s", query_text
+            )
+            return RAG_FALLBACK_RESPONSE
 
         # Generate augmented response
         augmented_response = generate_augmented_response(
@@ -101,4 +113,4 @@ def rag_pipeline(
 
     except Exception as e:
         logger.error("Error in RAG pipeline: %s", str(e), exc_info=True)
-        return ""
+        return RAG_FALLBACK_RESPONSE
