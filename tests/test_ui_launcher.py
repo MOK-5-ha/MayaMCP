@@ -87,24 +87,6 @@ def _setup_launcher_mocks(
         mock_accordion.return_value = ui_mocks['accordion_context']
 
 
-# Shared patch decorator list for all launcher tests
-_LAUNCHER_PATCHES = [
-    'src.ui.launcher.create_tab_overlay_html',
-    'src.ui.launcher.setup_avatar',
-    'src.ui.launcher.gr.themes.Ocean',
-    'src.ui.launcher.gr.Blocks',
-    'src.ui.launcher.gr.Markdown',
-    'src.ui.launcher.gr.State',
-    'src.ui.launcher.gr.Row',
-    'src.ui.launcher.gr.Column',
-    'src.ui.launcher.gr.HTML',
-    'src.ui.launcher.gr.Chatbot',
-    'src.ui.launcher.gr.Audio',
-    'src.ui.launcher.gr.Textbox',
-    'src.ui.launcher.gr.Button',
-    'src.ui.launcher.gr.Accordion',
-]
-
 
 class TestLaunchBartenderInterface:
     """Test cases for launch_bartender_interface function."""

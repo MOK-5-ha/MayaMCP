@@ -85,7 +85,7 @@ def handle_key_submission(
     cartesia_key: str,
     request: gr.Request,
     app_state: Optional[MutableMapping] = None,
-) -> Tuple:
+) -> Tuple[str, gr.Column, gr.Column, bool]:
     """Validate keys, store them in session state, and toggle UI visibility.
 
     Returns:
@@ -96,7 +96,7 @@ def handle_key_submission(
         app_state = {}
 
     session_id = "default"
-    if request:
+    if request and request.session_hash:
         session_id = request.session_hash
 
     # --- Validate Gemini key (required) ---
@@ -108,7 +108,16 @@ def handle_key_submission(
             False,
         )
 
-    is_valid, error_msg = validate_gemini_key(gemini_key.strip())
+    try:
+        is_valid, error_msg = validate_gemini_key(gemini_key.strip())
+    except Exception as e:
+        logger.exception("Exception during Gemini key validation")
+        return (
+            f"**Error:** Unable to validate API key. Please check your connection and try again.",
+            gr.Column(visible=True),
+            gr.Column(visible=False),
+            False,
+        )
     if not is_valid:
         return (
             f"**Error:** {error_msg}",

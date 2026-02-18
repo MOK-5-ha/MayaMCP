@@ -289,11 +289,23 @@ def process_order(
                     or ("resource" in err_msg and "exhaust" in err_msg)
                 ):
                     logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
-                    agent_response_text = "QUOTA_ERROR"
+                    # Return early so the sentinel never reaches emotion
+                    # parsing, security scanning, or conversation history.
+                    # The caller (handlers.py) intercepts response_text ==
+                    # QUOTA_ERROR_SENTINEL and rebuilds the history with a
+                    # user-facing message + shows the quota popup.
+                    quota_history = current_session_history[:]
+                    quota_history.append({'role': 'user', 'content': user_input_text})
+                    clear_current_session()
+                    return (
+                        "QUOTA_ERROR", quota_history, quota_history,
+                        get_current_order_state(session_id, app_state),
+                        None, "neutral",
+                    )
                 else:
                     logger.error(f"LLM invocation failed: {invoke_err}")
                     agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
-                break
+                    break
 
             # Append the AI's response (could be text or tool call request)
             if not hasattr(ai_response, "content"):

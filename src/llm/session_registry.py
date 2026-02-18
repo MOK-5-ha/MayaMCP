@@ -42,13 +42,20 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     from .client import initialize_llm
 
     llm = initialize_llm(api_key=api_key, tools=tools)
-    logger.info(f"Created new LLM instance for session {session_id[:8]}...")
+    logger.info("Created new LLM instance for session %s...", session_id[:8])
 
     with _registry_lock:
         if session_id not in _session_clients:
             _session_clients[session_id] = {}
-        _session_clients[session_id]["llm"] = llm
-        _session_clients[session_id]["gemini_hash"] = key_hash
+        entry = _session_clients[session_id]
+        # Another thread may have stored an LLM while we were creating ours
+        existing = entry.get("llm")
+        if existing and entry.get("gemini_hash") == key_hash:
+            # Discard the redundant instance we just built
+            # (ChatGoogleGenerativeAI is stateless — no close needed)
+            return existing
+        entry["llm"] = llm
+        entry["gemini_hash"] = key_hash
 
     return llm
 
@@ -89,8 +96,23 @@ def get_session_tts(session_id: str, api_key: Optional[str] = None):
     with _registry_lock:
         if session_id not in _session_clients:
             _session_clients[session_id] = {}
-        _session_clients[session_id]["tts"] = tts
-        _session_clients[session_id]["cartesia_hash"] = key_hash
+        entry = _session_clients[session_id]
+        # Another thread may have stored a TTS client while we were creating ours
+        existing = entry.get("tts")
+        if existing and entry.get("cartesia_hash") == key_hash:
+            # Close the redundant Cartesia client we just built
+            close_fn = getattr(tts, "close", None)
+            if callable(close_fn):
+                try:
+                    close_fn()
+                except Exception:
+                    logger.exception(
+                        "Failed to close redundant TTS client for session %s",
+                        session_id[:8],
+                    )
+            return existing
+        entry["tts"] = tts
+        entry["cartesia_hash"] = key_hash
 
     return tts
 
@@ -98,9 +120,29 @@ def get_session_tts(session_id: str, api_key: Optional[str] = None):
 def clear_session_clients(session_id: str) -> None:
     """Remove cached LLM and TTS clients for a session.
 
+    Attempts to close the Cartesia TTS client (which owns an httpx
+    connection pool) before discarding the entry.  ChatGoogleGenerativeAI
+    is stateless and has no close method, so it is simply dereferenced.
+
     Called on session reset to free resources.
     """
     with _registry_lock:
-        if session_id in _session_clients:
-            del _session_clients[session_id]
-            logger.info(f"Cleared cached clients for session {session_id[:8]}...")
+        entry = _session_clients.pop(session_id, None)
+
+    if entry is None:
+        return
+
+    # Close the TTS client if it exposes a close() method (Cartesia does)
+    tts = entry.get("tts")
+    if tts is not None:
+        close_fn = getattr(tts, "close", None)
+        if callable(close_fn):
+            try:
+                close_fn()
+            except Exception:
+                logger.exception(
+                    "Failed to close TTS client for session %s",
+                    session_id[:8],
+                )
+
+    logger.info("Cleared cached clients for session %s...", session_id[:8])

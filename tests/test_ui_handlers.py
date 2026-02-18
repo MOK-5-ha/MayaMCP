@@ -13,7 +13,6 @@ def _make_request(session_id="test_session"):
 
 def _seed_session_keys(app_state, session_id="test_session"):
     """Populate app_state with validated BYOK keys for the given session."""
-    import copy
     from src.utils.state_manager import _deep_copy_defaults
     defaults = _deep_copy_defaults()
     defaults['api_keys'] = {

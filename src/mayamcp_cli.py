@@ -31,7 +31,6 @@ def main():
         # Load API keys (optional now -- used only for RAG initialisation)
         api_keys = get_api_keys()
         google_api_key = api_keys.get("google_api_key")
-        cartesia_api_key = api_keys.get("cartesia_api_key")
 
         if google_api_key:
             logger.info("Found GEMINI_API_KEY in environment (will use for RAG)")

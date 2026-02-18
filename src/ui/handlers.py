@@ -1,6 +1,7 @@
 """Gradio event handlers."""
 
 from typing import List, Dict, Tuple, Any, MutableMapping, Optional
+import os
 import gradio as gr
 from ..config.logging_config import get_logger
 from ..conversation.processor import process_order
@@ -34,7 +35,7 @@ def _is_quota_error(error: Exception) -> bool:
         or "429" in msg
         or "rate" in msg
         or "quota" in msg
-        or "resource" in msg and "exhaust" in msg
+        or ("resource" in msg and "exhaust" in msg)
     )
 
 
@@ -179,8 +180,7 @@ def handle_gradio_input(
     new_tip_amount = payment_state['tip_amount']
 
     # Resolve Avatar based on Emotion State
-    import os
-    final_avatar_path = avatar_path 
+    final_avatar_path = avatar_path
 
     if emotion_state:
         valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
@@ -265,8 +265,6 @@ def handle_tip_button_click(
     Implements toggle behavior: clicking the same percentage removes the tip.
     Sends notification to Maya about tip selection/removal.
     """
-    from ..conversation.processor import process_order
-    from ..voice.tts import get_voice_audio
     
     if app_state is None:
         logger.warning("app_state not provided for tip handler")
@@ -359,7 +357,6 @@ def handle_tip_button_click(
             logger.warning(f"TTS generation failed for tip response: {tts_err}")
             
     # Resolve Avatar based on Emotion State
-    import os
     final_avatar_path = avatar_path
     if emotion_state:
         valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]

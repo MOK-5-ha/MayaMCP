@@ -362,35 +362,45 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     if session_id not in store:
         logger.info(f"Initializing new session state for {session_id}")
         store[session_id] = _deep_copy_defaults()
-    # Handle existing sessions that don't have payment state (migration)
-    elif 'payment' not in store[session_id]:
+        return store[session_id]
+
+    import copy
+    session_data = store[session_id]
+    needs_update = False
+
+    # Handle migration for session data (Requirement: 2.2, 7.2, 7.3, 3.1)
+    
+    # 1. Ensure 'api_keys' exists
+    if 'api_keys' not in session_data:
+        logger.info(f"Adding api_keys state to existing session {session_id}")
+        session_data['api_keys'] = copy.deepcopy(DEFAULT_API_KEY_STATE)
+        needs_update = True
+        
+    # 2. Ensure 'payment' exists
+    if 'payment' not in session_data:
         logger.info(f"Adding payment state to existing session {session_id}")
-        import copy
-        session_data = store[session_id]
         session_data['payment'] = copy.deepcopy(DEFAULT_PAYMENT_STATE)
-        session_data.setdefault('api_keys', copy.deepcopy(DEFAULT_API_KEY_STATE))
-        store[session_id] = session_data
+        needs_update = True
     else:
-        # Handle migration for existing payment state missing tip fields
-        session_data = store[session_id]
-        payment = session_data.get('payment', {})
-        needs_update = False
+        # 3. Ensure tip fields exist within existing payment state
+        payment = session_data['payment']
+        payment_needs_update = False
         if 'tip_percentage' not in payment:
             payment['tip_percentage'] = None
-            needs_update = True
+            payment_needs_update = True
         if 'tip_amount' not in payment:
             payment['tip_amount'] = 0.00
-            needs_update = True
-        if needs_update:
-            logger.info(f"Adding tip fields to existing session {session_id}")
+            payment_needs_update = True
+        
+        if payment_needs_update:
+            logger.info(f"Adding missing tip fields to existing session {session_id}")
             session_data['payment'] = payment
-            store[session_id] = session_data
-        # Migrate: add api_keys if missing
-        if 'api_keys' not in session_data:
-            import copy
-            session_data['api_keys'] = copy.deepcopy(DEFAULT_API_KEY_STATE)
-            store[session_id] = session_data
-    return store[session_id]
+            needs_update = True
+
+    if needs_update:
+        store[session_id] = session_data
+
+    return session_data
 
 def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, Any]) -> None:
     """
@@ -529,8 +539,12 @@ def reset_session_state(session_id: Optional[str] = None, store: Optional[Mutabl
     try:
         from ..llm.session_registry import clear_session_clients
         clear_session_clients(session_id)
-    except ImportError:
-        pass
+    except Exception:
+        logger.error(
+            "Failed to clear session clients for %s",
+            session_id,
+            exc_info=True,
+        )
     initialize_state(session_id, store)
     logger.info(f"Session state reset for {session_id}")
 
@@ -870,8 +884,8 @@ def set_api_keys(
     with lock:
         data = _get_session_data(session_id, store)
         data['api_keys'] = {
-            'gemini_key': gemini_key.strip() if gemini_key else None,
-            'cartesia_key': cartesia_key.strip() if cartesia_key else None,
+            'gemini_key': (gemini_key.strip() or None) if gemini_key else None,
+            'cartesia_key': (cartesia_key.strip() or None) if cartesia_key else None,
             'keys_validated': True,
         }
         _save_session_data(session_id, store, data)

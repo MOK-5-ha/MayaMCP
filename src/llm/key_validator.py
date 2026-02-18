@@ -1,7 +1,5 @@
 """Lightweight API key validation for BYOK authentication."""
 
-import threading
-
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -9,18 +7,18 @@ logger = get_logger(__name__)
 # Reuse SDK error classes from client.py
 try:
     from google import genai
-    from google.genai import errors as genai_errors
 except ImportError:
     genai = None
-    genai_errors = None
 
-_VALIDATE_LOCK = threading.Lock()
+# Timeout in milliseconds for the validation request (10 seconds).
+_VALIDATION_TIMEOUT_MS = 10_000
 
 
-def validate_gemini_key(api_key: str) -> tuple:
+def validate_gemini_key(api_key: str) -> tuple[bool, str]:
     """Validate a Gemini API key with a lightweight API call.
 
-    Makes a ``models.list()`` request which consumes no tokens.
+    Makes a ``models.list()`` request (page_size=1) which consumes no
+    tokens and fetches only the first model entry to minimise latency.
 
     Args:
         api_key: The Gemini API key to validate.
@@ -38,10 +36,13 @@ def validate_gemini_key(api_key: str) -> tuple:
         return False, "Server configuration error. Please try again later."
 
     try:
-        with _VALIDATE_LOCK:
-            client = genai.Client(api_key=api_key)
-            # models.list() is the cheapest possible call - no tokens consumed
-            _models = list(client.models.list())
+        client = genai.Client(
+            api_key=api_key,
+            http_options={"timeout": _VALIDATION_TIMEOUT_MS},
+        )
+        # Fetch only the first model entry — cheapest possible call,
+        # no tokens consumed, proves the key is valid.
+        next(iter(client.models.list(config={"page_size": 1})), None)
         logger.info("Gemini API key validated successfully")
         return True, ""
     except Exception as e:
@@ -83,4 +84,4 @@ def validate_gemini_key(api_key: str) -> tuple:
 
         # Unknown error
         logger.error(f"Gemini key validation unexpected error: {e}")
-        return False, f"Validation failed: {e}"
+        return False, "Validation failed. Please try again or contact support."
