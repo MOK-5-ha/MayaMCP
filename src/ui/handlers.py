@@ -39,6 +39,38 @@ def _is_quota_error(error: Exception) -> bool:
     )
 
 
+def resolve_avatar_path(
+    emotion_state: Optional[str],
+    current_avatar_path: str,
+    logger: Any
+) -> str:
+    """
+    Resolve the final avatar/video path based on the emotion state.
+    
+    Normalizes emotions, checks for asset existence, and handles logging.
+    """
+    if not emotion_state:
+        return current_avatar_path
+
+    valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
+    
+    # Normalize unknown or missing emotions
+    resolved_emotion = emotion_state if emotion_state in valid_emotions else "neutral"
+    
+    emotion_filename = f"maya_{resolved_emotion}.mp4"
+    potential_path = f"assets/{emotion_filename}"
+    
+    if os.path.exists(potential_path):
+        logger.info(f"Emotion: {resolved_emotion} -> Avatar Path: {potential_path}")
+        return potential_path
+    else:
+        logger.warning(
+            f"Emotion {resolved_emotion} detected but asset {potential_path} missing. "
+            "Keeping current avatar."
+        )
+        return current_avatar_path
+
+
 def handle_gradio_input(
     user_input: str,
     session_history_state: List[Dict[str, str]],
@@ -180,21 +212,7 @@ def handle_gradio_input(
     new_tip_amount = payment_state['tip_amount']
 
     # Resolve Avatar based on Emotion State
-    final_avatar_path = avatar_path
-
-    if emotion_state:
-        valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
-        if emotion_state not in valid_emotions:
-            emotion_state = "neutral"
-        
-        emotion_filename = f"maya_{emotion_state}.mp4" 
-        potential_path = f"assets/{emotion_filename}"
-        
-        if os.path.exists(potential_path):
-             final_avatar_path = potential_path
-             logger.info(f"Emotion: {emotion_state} -> Avatar Path: {final_avatar_path}")
-        else:
-             logger.warning(f"Emotion {emotion_state} detected but asset {potential_path} missing. Keeping current avatar.")
+    final_avatar_path = resolve_avatar_path(emotion_state, avatar_path, logger)
 
     # Create overlay HTML with animation from previous to new values
     overlay_html = create_tab_overlay_html(
@@ -357,17 +375,7 @@ def handle_tip_button_click(
             logger.warning(f"TTS generation failed for tip response: {tts_err}")
             
     # Resolve Avatar based on Emotion State
-    final_avatar_path = avatar_path
-    if emotion_state:
-        valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
-        if emotion_state not in valid_emotions:
-            emotion_state = "neutral"
-        
-        emotion_filename = f"maya_{emotion_state}.mp4" 
-        potential_path = f"assets/{emotion_filename}"
-        
-        if os.path.exists(potential_path):
-             final_avatar_path = potential_path
+    final_avatar_path = resolve_avatar_path(emotion_state, avatar_path, logger)
     
     overlay_html = create_tab_overlay_html(
         tab_amount=new_tab, balance=new_balance,

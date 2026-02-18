@@ -394,7 +394,6 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         
         if payment_needs_update:
             logger.info(f"Adding missing tip fields to existing session {session_id}")
-            session_data['payment'] = payment
             needs_update = True
 
     if needs_update:

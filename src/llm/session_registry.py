@@ -88,9 +88,9 @@ def get_session_tts(session_id: str, api_key: Optional[str] = None):
         from ..voice.tts import initialize_cartesia_client
 
         tts = initialize_cartesia_client(api_key)
-        logger.info(f"Created new TTS client for session {session_id[:8]}...")
+        logger.info("Created new TTS client for session %s...", session_id[:8])
     except Exception as e:
-        logger.warning(f"Failed to create TTS client for session {session_id[:8]}...: {e}")
+        logger.warning("Failed to create TTS client for session %s...: %s", session_id[:8], e)
         return None
 
     with _registry_lock:
@@ -111,6 +111,17 @@ def get_session_tts(session_id: str, api_key: Optional[str] = None):
                         session_id[:8],
                     )
             return existing
+        if existing and entry.get("cartesia_hash") != key_hash:
+            # API key changed: close the old client to avoid leaking httpx pool
+            close_fn = getattr(existing, "close", None)
+            if callable(close_fn):
+                try:
+                    close_fn()
+                except Exception:
+                    logger.exception(
+                        "Failed to close old TTS client for session %s upon key rotation",
+                        session_id[:8],
+                    )
         entry["tts"] = tts
         entry["cartesia_hash"] = key_hash
 

@@ -10,8 +10,8 @@ try:
 except ImportError:
     genai = None
 
-# Timeout in milliseconds for the validation request (10 seconds).
-_VALIDATION_TIMEOUT_MS = 10_000
+# Timeout in seconds for the validation request.
+_VALIDATION_TIMEOUT_S = 10
 
 
 def validate_gemini_key(api_key: str) -> tuple[bool, str]:
@@ -38,7 +38,7 @@ def validate_gemini_key(api_key: str) -> tuple[bool, str]:
     try:
         client = genai.Client(
             api_key=api_key,
-            http_options={"timeout": _VALIDATION_TIMEOUT_MS},
+            http_options={"timeout": _VALIDATION_TIMEOUT_S},
         )
         # Fetch only the first model entry — cheapest possible call,
         # no tokens consumed, proves the key is valid.
