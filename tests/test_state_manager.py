@@ -18,17 +18,14 @@ from src.utils.state_manager import (
     update_order_state,
     reset_session_state,
     is_order_finished,
-    get_order_total,
     get_payment_state,
     update_payment_state,
     atomic_order_update,
-    check_sufficient_funds,
     atomic_payment_complete,
     validate_payment_state,
     is_valid_status_transition,
     get_session_lock,
     cleanup_session_lock,
-    cleanup_expired_session_locks,
     PaymentStateValidationError,
     DEFAULT_PAYMENT_STATE,
     INSUFFICIENT_FUNDS,
@@ -250,28 +247,7 @@ class TestStateManager:
 
         assert is_order_finished(self.session_id, self.store) is False
 
-    def test_get_order_total_empty_order(self):
-        """Test get_order_total with empty order."""
-        assert get_order_total(self.session_id, self.store) == pytest.approx(0.0)
-
-    def test_get_order_total_with_items(self):
-        """Test get_order_total with items."""
-        update_order_state(self.session_id, self.store, 'add_item', {'name': 'Item1', 'price': 10.0})
-        assert get_order_total(self.session_id, self.store) == pytest.approx(10.0)
-
-        update_order_state(self.session_id, self.store, 'add_item', {'name': 'Item2', 'price': 15.5})
-        assert get_order_total(self.session_id, self.store) == pytest.approx(25.5)
-
-        update_order_state(self.session_id, self.store, 'add_item', {'name': 'Item3', 'price': 7.25})
-        assert get_order_total(self.session_id, self.store) == pytest.approx(32.75)
-
-    def test_get_order_total_after_place_order(self):
-        """Test get_order_total after placing order (should be 0)."""
-        update_order_state(self.session_id, self.store, 'add_item', {'name': 'Test', 'price': 10.0})
-        assert get_order_total(self.session_id, self.store) == pytest.approx(10.0)
-
         update_order_state(self.session_id, self.store, 'place_order')
-        assert get_order_total(self.session_id, self.store) == pytest.approx(0.0)  # Current order cleared
 
     def test_complex_order_workflow(self):
         """Test complex order workflow."""
@@ -279,7 +255,6 @@ class TestStateManager:
         update_order_state(self.session_id, self.store, 'add_item', {'name': 'Whiskey', 'price': 12.0})
         update_order_state(self.session_id, self.store, 'add_item', {'name': 'Beer', 'price': 5.0})
 
-        assert get_order_total(self.session_id, self.store) == pytest.approx(17.0)
         assert len(get_current_order_state(self.session_id, self.store)) == 2
         assert get_order_history(self.session_id, self.store)['total_cost'] == pytest.approx(17.0)
 
@@ -287,7 +262,6 @@ class TestStateManager:
         update_order_state(self.session_id, self.store, 'place_order')
 
         assert is_order_finished(self.session_id, self.store) is True
-        assert get_order_total(self.session_id, self.store) == pytest.approx(0.0)
         assert len(get_current_order_state(self.session_id, self.store)) == 0
         assert get_order_history(self.session_id, self.store)['total_cost'] == pytest.approx(17.0)  # History preserved
 

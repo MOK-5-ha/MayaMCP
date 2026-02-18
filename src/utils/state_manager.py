@@ -242,46 +242,6 @@ def cleanup_session_lock(session_id: str) -> None:
     logger.debug(f"Session lock cleaned up for {session_id}")
 
 
-def cleanup_expired_session_locks(max_age_seconds: int = SESSION_EXPIRY_SECONDS) -> int:
-    """
-    Background task to clean up locks for sessions inactive > max_age.
-    
-    Operational guidance:
-    - Scheduler: Use threading.Timer in app process (simple, no external deps)
-    - Frequency: Run every 10 minutes
-    - Startup: Register timer on app initialization in main.py
-    - Shutdown: Cancel timer gracefully on app shutdown
-    - Error handling: Catch all exceptions, log errors, continue (fail-safe)
-    - Idempotence: Safe to run concurrently (mutex protects dict)
-    - Monitoring: Log cleaned count, emit metric maya_session_locks_cleaned_total
-    - Alert: If cleanup fails 3 consecutive times, log critical error
-    
-    Args:
-        max_age_seconds: Maximum age in seconds before session is expired.
-        
-    Returns:
-        Number of locks cleaned up (for metrics).
-    """
-    cleaned_count = 0
-    current_time = time.time()
-    
-    with _session_locks_mutex:
-        expired_sessions = [
-            session_id for session_id, last_access in _session_last_access.items()
-            if current_time - last_access > max_age_seconds
-        ]
-        
-        for session_id in expired_sessions:
-            _session_locks.pop(session_id, None)
-            _session_last_access.pop(session_id, None)
-            cleaned_count += 1
-    
-    if cleaned_count > 0:
-        logger.info(f"Cleaned up {cleaned_count} expired session locks")
-    
-    return cleaned_count
-
-
 # Default State Templates
 DEFAULT_CONVERSATION_STATE = {
     'turn_count': 0,
@@ -553,13 +513,6 @@ def is_order_finished(session_id: Optional[str] = None, store: Optional[MutableM
     data = _get_session_data(session_id, store)
     return data['current_order']['finished']
 
-def get_order_total(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> float:
-    """Get total cost of current order."""
-    session_id, store = _get_store_and_session(session_id, store)
-    data = _get_session_data(session_id, store)
-    return sum(item['price'] for item in data['current_order']['order'])
-
-
 # =============================================================================
 # Payment State Functions
 # =============================================================================
@@ -786,27 +739,6 @@ def atomic_order_update(
         )
         
         return (True, "", new_balance)
-
-
-def check_sufficient_funds(
-    session_id: str, 
-    store: MutableMapping, 
-    amount: float
-) -> Tuple[bool, float]:
-    """
-    Check if user has sufficient balance.
-    
-    Args:
-        session_id: Unique identifier for the user session.
-        store: Mutable mapping to store state.
-        amount: Amount to check against balance.
-        
-    Returns:
-        Tuple of (has_funds, current_balance).
-    """
-    payment = get_payment_state(session_id, store)
-    current_balance = payment['balance']
-    return (current_balance >= amount, current_balance)
 
 
 def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:

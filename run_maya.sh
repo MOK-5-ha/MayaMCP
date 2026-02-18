@@ -8,14 +8,10 @@ set -e
 echo "🍹 Starting Maya - AI Bartending Agent 🍹"
 echo "========================================="
 
-# Check if .env file exists
-if [ ! -f ".env" ]; then
-    echo "❌ Error: .env file not found!"
-    echo "Please create a .env file with your API keys:"
-    echo "GEMINI_API_KEY=your_google_api_key"
-    echo "CARTESIA_API_KEY=your_cartesia_api_key"
-    exit 1
-fi
+# MayaMCP always starts in BYOK mode.
+# Users provide API keys via the UI for maximum security and privacy.
+echo "ℹ️  Maya is running in BYOK (Bring Your Own Key) mode."
+echo "   Please have your Gemini API key ready."
 
 # Check if Python is available
 if ! command -v python3 &> /dev/null; then

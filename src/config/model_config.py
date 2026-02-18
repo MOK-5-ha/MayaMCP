@@ -63,21 +63,6 @@ def get_model_config() -> Dict[str, Any]:
         "top_k": 1
     }
 
-def get_generation_config() -> Dict[str, Any]:
-    """
-    Get generation configuration for LLM calls.
-
-    Returns:
-        Dictionary containing generation parameters.
-    """
-    config = get_model_config()
-    return {
-        "temperature": config["temperature"],
-        "top_p": config["top_p"],
-        "top_k": config["top_k"],
-        "max_output_tokens": config["max_output_tokens"]
-    }
-
 def get_cartesia_config() -> Dict[str, Any]:
     """
     Get Cartesia TTS configuration.
@@ -109,10 +94,6 @@ KNOWN_GEMINI_MODELS: List[str] = [
     "gemini-2.0-flash-001",
     "gemini-2.0-flash-exp",
 ]
-
-def get_known_gemini_models() -> List[str]:
-    """Return the known list of valid Gemini model identifiers."""
-    return KNOWN_GEMINI_MODELS.copy()
 
 def is_valid_gemini_model(model_name: str) -> bool:
     """Check if the provided model name is in the known valid list.

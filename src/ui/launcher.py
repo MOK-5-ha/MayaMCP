@@ -289,8 +289,6 @@ def launch_bartender_interface(
             request: gr.Request
         ):
             """Wrapper to handle tip button clicks via the hidden input."""
-            from .handlers import handle_tip_button_click
-            
             if not tip_percentage_str or not tip_percentage_str.strip():
                 overlay_html = create_avatar_with_overlay(
                     avatar_path=current_avatar,

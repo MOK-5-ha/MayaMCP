@@ -136,28 +136,13 @@ def serve_maya():
 
 
 
-    # Validate and fetch required API keys early
-    # Helper that checks multiple env var names for backwards compatibility
-    def _require_any(*names: str) -> str:
-        """Return the first set env var from names, or raise if none are set.
-        
-        Preferred name should come first (e.g., GEMINI_API_KEY before GOOGLE_API_KEY).
-        """
-        for name in names:
-            val = os.getenv(name)
-            if val and val.strip():
-                return val.strip()
-        raise RuntimeError(
-            f"Missing required environment variable: set one of {', '.join(names)}"
-        )
-
-    # GEMINI_API_KEY is preferred (matches config.api_keys); GOOGLE_API_KEY for legacy support
     # Keys are now optional for the main app (BYOK) but still used for RAG initialisation
-    google_api_key = None
-    try:
-        google_api_key = _require_any("GEMINI_API_KEY", "GOOGLE_API_KEY")
-    except RuntimeError:
+    google_api_key = os.getenv("GEMINI_API_KEY")
+    if not (google_api_key and google_api_key.strip()):
+        google_api_key = None
         logger.info("No server-side Gemini API key found; RAG will use session keys or be skipped")
+    else:
+        google_api_key = google_api_key.strip()
 
     # Initialize state
     initialize_state()

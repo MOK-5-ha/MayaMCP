@@ -13,13 +13,10 @@ from ..utils.state_manager import (
     get_payment_state,
     get_api_key_state,
     has_valid_keys,
-    set_tip,
     DEFAULT_PAYMENT_STATE
 )
 from .tab_overlay import (
     create_tab_overlay_html,
-    generate_tip_notification,
-    generate_tip_removal_notification
 )
 from .api_key_modal import QUOTA_ERROR_SENTINEL, create_quota_error_html
 
@@ -259,133 +256,3 @@ def clear_chat_state(
         return [], [], [], None
 
     return [], [], [], None
-
-
-def handle_tip_button_click(
-    percentage: int,
-    current_tip_percentage: Optional[int],
-    current_tab: float,
-    current_balance: float,
-    session_history_state: List[Dict[str, str]],
-    request: gr.Request,
-    tools=None,
-    rag_index=None,
-    rag_documents: Optional[List[str]] = None,
-    rag_retriever=None,
-    rag_api_key: Optional[str] = None,
-    app_state: Optional[MutableMapping] = None,
-    avatar_path: str = "assets/bartender_avatar.jpg"
-) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], Any, str, float, float,
-           float, float, Optional[int], float, str]:
-    """
-    Handle tip button click event.
-    
-    Implements toggle behavior: clicking the same percentage removes the tip.
-    Sends notification to Maya about tip selection/removal.
-    """
-    
-    if app_state is None:
-        logger.warning("app_state not provided for tip handler")
-        app_state = {}
-    
-    session_id = "default"
-    if request:
-        session_id = request.session_hash
-    
-    logger.info(f"Tip button clicked for session {session_id}: {percentage}%")
-    
-    # Get per-session clients
-    api_key_state = get_api_key_state(session_id, app_state)
-    gemini_key = api_key_state.get('gemini_key')
-    cartesia_key = api_key_state.get('cartesia_key')
-
-    llm = get_session_llm(session_id, gemini_key, tools) if gemini_key else None
-    cartesia_client = get_session_tts(session_id, cartesia_key) if cartesia_key else None
-    effective_rag_key = rag_api_key or gemini_key
-
-    is_toggle = (percentage == current_tip_percentage)
-    
-    try:
-        new_tip_amount, _total = set_tip(session_id, app_state, percentage)
-    except ValueError:
-        logger.exception("Invalid tip percentage")
-        payment_state = get_payment_state(session_id, app_state)
-        overlay_html = create_tab_overlay_html(
-            tab_amount=current_tab, balance=current_balance,
-            prev_tab=current_tab, prev_balance=current_balance,
-            avatar_path=avatar_path,
-            tip_percentage=current_tip_percentage,
-            tip_amount=payment_state.get('tip_amount', 0.0)
-        )
-        return (
-            session_history_state, session_history_state, None,
-            overlay_html, current_tab, current_balance, current_tab, current_balance,
-            current_tip_percentage, payment_state.get('tip_amount', 0.0), avatar_path
-        )
-    
-    payment_state = get_payment_state(session_id, app_state)
-    new_tip_percentage = payment_state['tip_percentage']
-    new_tab = payment_state['tab_total']
-    new_balance = payment_state['balance']
-    
-    if is_toggle:
-        notification_message = generate_tip_removal_notification()
-    else:
-        notification_message = generate_tip_notification(
-            percentage=percentage, tip_amount=new_tip_amount, tab_total=new_tab
-        )
-    
-    logger.info(f"Sending tip notification to Maya: {notification_message}")
-    
-    emotion_state = None
-    if llm:
-        try:
-            response_text, updated_history, updated_history_for_gradio, _, _, emotion_state = process_order(
-                user_input_text=notification_message,
-                current_session_history=session_history_state,
-                llm=llm,
-                rag_index=rag_index, rag_documents=rag_documents,
-                rag_retriever=rag_retriever, api_key=effective_rag_key,
-                session_id=session_id, app_state=app_state
-            )
-        except Exception as e:
-            logger.exception(f"Error processing tip notification: {e}")
-            overlay_html = create_tab_overlay_html(
-                tab_amount=new_tab, balance=new_balance,
-                prev_tab=current_tab, prev_balance=current_balance,
-                avatar_path=avatar_path,
-                tip_percentage=new_tip_percentage, tip_amount=new_tip_amount
-            )
-            return (
-                session_history_state, session_history_state, None,
-                overlay_html, new_tab, new_balance, current_tab, current_balance,
-                new_tip_percentage, new_tip_amount, avatar_path
-            )
-    else:
-        updated_history = session_history_state
-        updated_history_for_gradio = session_history_state
-        response_text = ""
-    
-    # Get voice audio for Maya's response
-    audio_data = None
-    if cartesia_client and response_text and response_text.strip():
-        try:
-            audio_data = get_voice_audio(response_text, cartesia_client)
-        except Exception as tts_err:
-            logger.warning(f"TTS generation failed for tip response: {tts_err}")
-            
-    # Resolve Avatar based on Emotion State
-    final_avatar_path = resolve_avatar_path(emotion_state, avatar_path, logger)
-    
-    overlay_html = create_tab_overlay_html(
-        tab_amount=new_tab, balance=new_balance,
-        prev_tab=current_tab, prev_balance=current_balance,
-        avatar_path=final_avatar_path,
-        tip_percentage=new_tip_percentage, tip_amount=new_tip_amount
-    )
-    
-    return (
-        updated_history, updated_history_for_gradio, audio_data,
-        overlay_html, new_tab, new_balance, current_tab, current_balance,
-        new_tip_percentage, new_tip_amount, final_avatar_path
-    )

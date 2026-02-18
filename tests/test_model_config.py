@@ -11,9 +11,7 @@ from src.config.model_config import (
     _parse_float_env,
     _parse_int_env,
     get_model_config,
-    get_generation_config,
     get_cartesia_config,
-    get_known_gemini_models,
     is_valid_gemini_model,
     KNOWN_GEMINI_MODELS
 )
@@ -142,8 +140,8 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-3.0-flash",
-            "temperature": 0.7,
+            "model_version": "gemini-3-flash-preview",
+            "temperature": 1.0,
             "max_output_tokens": 2048,
             "top_p": 0.95,
             "top_k": 1
@@ -171,15 +169,15 @@ class TestGetModelConfig:
     @patch.dict(os.environ, {
         'TEMPERATURE': 'invalid',
         'MAX_OUTPUT_TOKENS': 'not_a_number'
-    })
+    }, clear=True)
     @patch('src.config.model_config.logger')
     def test_get_model_config_invalid_env_values_use_defaults(self, mock_logger):
         """Test get_model_config with invalid env values uses defaults."""
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-3.0-flash",
-            "temperature": 0.7,
+            "model_version": "gemini-3-flash-preview",
+            "temperature": 1.0,
             "max_output_tokens": 2048,
             "top_p": 0.95,
             "top_k": 1
@@ -194,56 +192,6 @@ class TestGetModelConfig:
         assert config["model_version"] == ""
 
 
-class TestGetGenerationConfig:
-    """Test cases for get_generation_config function."""
-
-    @patch('src.config.model_config.get_model_config')
-    def test_get_generation_config_uses_model_config(self, mock_get_model_config):
-        """Test that get_generation_config uses values from get_model_config."""
-        mock_get_model_config.return_value = {
-            "model_version": "test-model",
-            "temperature": 0.8,
-            "max_output_tokens": 1024,
-            "top_p": 0.95,
-            "top_k": 1
-        }
-
-        config = get_generation_config()
-
-        expected = {
-            "temperature": 0.8,
-            "top_p": 0.95,
-            "top_k": 1,
-            "max_output_tokens": 1024
-        }
-        assert config == expected
-
-    @patch('src.config.model_config.get_model_config')
-    def test_get_generation_config_excludes_model_version(self, mock_get_model_config):
-        """Test that get_generation_config excludes model_version."""
-        mock_get_model_config.return_value = {
-            "model_version": "should-not-be-included",
-            "temperature": 0.5,
-            "max_output_tokens": 512,
-            "top_p": 0.95,
-            "top_k": 1
-        }
-
-        config = get_generation_config()
-        assert "model_version" not in config
-
-    @patch.dict(os.environ, {
-        'TEMPERATURE': '0.3',
-        'MAX_OUTPUT_TOKENS': '8192'
-    })
-    def test_get_generation_config_integration(self):
-        """Test get_generation_config integration with environment variables."""
-        config = get_generation_config()
-
-        assert config["temperature"] == 0.3
-        assert config["max_output_tokens"] == 8192
-        assert config["top_p"] == 0.95
-        assert config["top_k"] == 1
 
 
 class TestGetCartesiaConfig:
@@ -287,47 +235,6 @@ class TestGetCartesiaConfig:
         assert output_format["encoding"] == "pcm_f32le"
 
 
-class TestGetKnownGeminiModels:
-    """Test cases for get_known_gemini_models function."""
-
-    def test_get_known_gemini_models_returns_list(self):
-        """Test that get_known_gemini_models returns a list."""
-        models = get_known_gemini_models()
-        assert isinstance(models, list)
-
-    def test_get_known_gemini_models_contains_expected_models(self):
-        """Test that get_known_gemini_models contains expected models."""
-        models = get_known_gemini_models()
-
-        expected_models = [
-            "gemini-3.0-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-001",
-            "gemini-2.0-flash-exp",
-        ]
-
-        for model in expected_models:
-            assert model in models
-
-    def test_get_known_gemini_models_is_copy(self):
-        """Test that get_known_gemini_models returns a copy, not the original list."""
-        models1 = get_known_gemini_models()
-        models2 = get_known_gemini_models()
-
-        # Modify one list
-        models1.append("new-model")
-
-        # Other list should be unaffected
-        assert "new-model" not in models2
-        assert len(models2) == len(KNOWN_GEMINI_MODELS)
-
-    def test_get_known_gemini_models_matches_constant(self):
-        """Test that get_known_gemini_models matches KNOWN_GEMINI_MODELS constant."""
-        models = get_known_gemini_models()
-        assert models == KNOWN_GEMINI_MODELS
 
 
 class TestIsValidGeminiModel:
@@ -336,7 +243,8 @@ class TestIsValidGeminiModel:
     def test_is_valid_gemini_model_known_models(self):
         """Test is_valid_gemini_model with known valid models."""
         valid_models = [
-            "gemini-3.0-flash",
+            "gemini-3-flash-preview",
+            "gemini-3-pro-preview",
             "gemini-2.5-flash-lite",
             "gemini-2.5-flash",
             "gemini-2.5-pro",
@@ -369,7 +277,7 @@ class TestIsValidGeminiModel:
     def test_is_valid_gemini_model_with_whitespace(self):
         """Test is_valid_gemini_model strips whitespace from valid model."""
         # The function calls str().strip() so this should work
-        assert is_valid_gemini_model("  gemini-3.0-flash  ") is True
+        assert is_valid_gemini_model("  gemini-3-flash-preview  ") is True
 
     def test_is_valid_gemini_model_none_input(self):
         """Test is_valid_gemini_model with None input."""
