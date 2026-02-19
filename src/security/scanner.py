@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Any
 from .config import ScanConfig
@@ -39,6 +40,24 @@ def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
         config = ScanConfig()
 
     if not is_available():
+        # Fallback: Basic Regex Scanning
+        fallback_patterns = [
+            r"ignore previous instructions",
+            r"you are now",
+            r"system prompt",
+            r"roleplay as",
+            r"bypass mode",
+        ]
+        text_lower = text.lower()
+        for pattern in fallback_patterns:
+            if re.search(pattern, text_lower):
+                logger.warning(f"Blocked by fallback regex scanner: {pattern}")
+                return ScanResult(
+                    is_valid=False, 
+                    sanitized_text=text,
+                    blocked_reason=INPUT_BLOCKED_INJECTION,
+                    scanner_scores={"fallback_regex": 1.0}
+                )
         return ScanResult(is_valid=True, sanitized_text=text)
 
     try:

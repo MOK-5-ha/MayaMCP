@@ -6,6 +6,7 @@ import time
 from typing import Dict, List, Any, Optional, MutableMapping, Tuple, Literal
 from typing_extensions import TypedDict
 from ..config.logging_config import get_logger
+from ..security.encryption import get_encryption_manager
 
 logger = get_logger(__name__)
 
@@ -782,18 +783,36 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
 # API Key State Functions (BYOK)
 # =============================================================================
 
-def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
-    """Get API key state for session.
-
+    """Get API key state for session (decrypted).
+    
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
 
     Returns:
-        Copy of the API key state dictionary.
+        Copy of the API key state dictionary with decrypted keys.
     """
     data = _get_session_data(session_id, store)
-    return data['api_keys'].copy()
+    state = data['api_keys'].copy()
+    
+    # Decrypt keys if present
+    encryption_manager = get_encryption_manager()
+    if state.get('gemini_key'):
+        try:
+            state['gemini_key'] = encryption_manager.decrypt(state['gemini_key'])
+        except Exception:
+             # Fallback if somehow not encrypted or key changed (though decrypt handles this)
+             logger.warning(f"Failed to decrypt gemini_key for {session_id}")
+             state['gemini_key'] = None
+             
+    if state.get('cartesia_key'):
+        try:
+            state['cartesia_key'] = encryption_manager.decrypt(state['cartesia_key'])
+        except Exception:
+             logger.warning(f"Failed to decrypt cartesia_key for {session_id}")
+             state['cartesia_key'] = None
+             
+    return state
 
 
 def set_api_keys(
@@ -802,7 +821,7 @@ def set_api_keys(
     gemini_key: str,
     cartesia_key: Optional[str] = None,
 ) -> None:
-    """Store user-provided API keys for a session and mark as validated.
+    """Store user-provided API keys for a session (encrypted).
 
     Args:
         session_id: Unique identifier for the user session.
@@ -811,17 +830,26 @@ def set_api_keys(
         cartesia_key: User's Cartesia API key (optional).
     """
     lock = get_session_lock(session_id)
+    encryption_manager = get_encryption_manager()
 
     with lock:
         data = _get_session_data(session_id, store)
+        
+        # Encrypt keys before storage
+        encrypted_gemini = encryption_manager.encrypt(gemini_key.strip()) if gemini_key else None
+        
+        encrypted_cartesia = None
+        if cartesia_key and cartesia_key.strip():
+             encrypted_cartesia = encryption_manager.encrypt(cartesia_key.strip())
+             
         data['api_keys'] = {
-            'gemini_key': (gemini_key.strip() or None) if gemini_key else None,
-            'cartesia_key': (cartesia_key.strip() or None) if cartesia_key else None,
+            'gemini_key': encrypted_gemini,
+            'cartesia_key': encrypted_cartesia,
             'keys_validated': True,
         }
         _save_session_data(session_id, store, data)
 
-    logger.info(f"API keys stored for session {session_id}")
+    logger.info(f"API keys stored (encrypted) for session {session_id}")
 
 
 def has_valid_keys(session_id: str, store: MutableMapping) -> bool:

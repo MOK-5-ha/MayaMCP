@@ -34,5 +34,6 @@ opencv-python>=4.11.0
 faiss-cpu>=1.10.0
 numpy>=1.24.0,<3.0.0
 
-# Security (Optional)
+# Security
 llm-guard>=0.3.0
+cryptography>=42.0.0
