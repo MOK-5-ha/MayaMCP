@@ -2,6 +2,7 @@
 
 from typing import List, Dict, Tuple, Any
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+import re
 
 # RAG pipeline imports moved to top for performance
 try:
@@ -72,13 +73,12 @@ def _process_drink_context(drink_context: str) -> str:
 
 def extract_emotion(text):
     """Helper to extract emotion state from text."""
-    import re
     match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
     if match:
         emotion = match.group(1).lower()
         clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
         return emotion, clean_text
-    return None, text
+    return "neutral", text
 
 def process_order(
     user_input_text: str,

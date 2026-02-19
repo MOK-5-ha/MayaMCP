@@ -362,7 +362,8 @@ class TestMemvidRetriever:
                             "total_chunks": 3,
                             "total_frames": 1000,
                             "cache_size": 0,
-                            "dependencies_available": False
+                            "dependencies_available": False,
+                            "index_loaded": True
                         }
                         assert stats == expected_stats
 

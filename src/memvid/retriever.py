@@ -6,7 +6,7 @@ Retrieves text from video memory using QR code decoding
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import time
 
 from .utils import extract_frame, decode_qr, check_dependencies
@@ -33,16 +33,17 @@ class MemvidRetriever:
             self.dependencies_available = False
             
         # Load index
-        self.index_data = self._load_index()
+        self.index_data, self.index_loaded = self._load_index()
         self._frame_cache = {}
         
         # Verify index is a dict
         if not isinstance(self.index_data, dict):
             logger.warning(f"Memvid index must be a JSON object: {self.index_file}. Using empty index.")
             self.index_data = {"chunks": [], "total_frames": 0}
+            self.index_loaded = False
         
         # Verify index has data
-        if not self.index_data.get("chunks"):
+        elif not self.index_data.get("chunks"):
             logger.warning(f"Memvid index invalid or empty: {self.index_file}")
             # Do not raise, allow empty index
             if "chunks" not in self.index_data:
@@ -53,14 +54,14 @@ class MemvidRetriever:
         
         logger.info(f"Initialized retriever with {len(self.index_data['chunks'])} chunks")
     
-    def _load_index(self) -> Dict[str, Any]:
-        """Load index file"""
+    def _load_index(self) -> Tuple[Dict[str, Any], bool]:
+        """Load index file, returns (data, success)"""
         try:
             with open(self.index_file, 'r') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
+                return json.load(f), True
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(f"Failed to load Memvid index {self.index_file}: {e}. Using empty index.")
-            return {"chunks": [], "total_frames": 0}
+            return {"chunks": [], "total_frames": 0}, False
     
     def _verify_video(self):
         """Verify video file exists and is accessible"""
@@ -193,5 +194,6 @@ class MemvidRetriever:
             "total_chunks": len(self.index_data["chunks"]),
             "total_frames": self.index_data.get("total_frames", 0),
             "cache_size": len(self._frame_cache),
-            "dependencies_available": self.dependencies_available
+            "dependencies_available": self.dependencies_available,
+            "index_loaded": self.index_loaded
         }
