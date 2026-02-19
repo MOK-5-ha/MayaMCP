@@ -4,9 +4,7 @@ Unit tests for src.config.api_keys module.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
-import sys
-import os
+from unittest.mock import patch
 import importlib
 
 

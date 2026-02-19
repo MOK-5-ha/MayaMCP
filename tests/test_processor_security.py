@@ -31,7 +31,7 @@ def test_processor_blocks_injection(mock_security):
     mock_input.return_value.blocked_reason = "Blocked!"
     
     llm = DummyLLM("should not see this")
-    response, _, _, _, _ = proc.process_order(
+    response, _, _, _, _, _ = proc.process_order(
         user_input_text="injection",
         current_session_history=[],
         llm=llm
@@ -52,7 +52,7 @@ def test_processor_replaces_toxic_output(mock_security):
     
     llm = DummyLLM("toxic response")
     
-    response, _, _, _, _ = proc.process_order(
+    response, _, _, _, _, _ = proc.process_order(
         user_input_text="hello",
         current_session_history=[],
         llm=llm
@@ -69,7 +69,7 @@ def test_processor_allows_valid_interaction(mock_security):
     
     llm = DummyLLM("ok response")
     
-    response, _, _, _, _ = proc.process_order(
+    response, _, _, _, _, _ = proc.process_order(
         user_input_text="hello",
         current_session_history=[],
         llm=llm

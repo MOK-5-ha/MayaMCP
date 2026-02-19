@@ -105,7 +105,7 @@ def test_maya_memvid_full():
     print("\n🗣️  Testing casual conversation (should use Memvid RAG)")
     print("-" * 60)
     
-    response, updated_history, _, _, _ = process_order(
+    response, updated_history, _, _, _, _ = process_order(
         user_input_text="I'm feeling philosophical today. What's this place about?",
         current_session_history=session_history,
         llm=llm,
@@ -120,7 +120,7 @@ def test_maya_memvid_full():
     print("\n🗣️  Testing drink order (should use tools, not RAG)")
     print("-" * 50)
     
-    response_whiskey, history_after_whiskey, _analysis_whiskey, _rag_context_whiskey, _tool_calls_whiskey = process_order(
+    response_whiskey, history_after_whiskey, _analysis_whiskey, _rag_context_whiskey, _tool_calls_whiskey, _emotion_state = process_order(
         user_input_text="I'd like a whiskey on the rocks please",
         current_session_history=updated_history,
         llm=llm,
@@ -152,7 +152,7 @@ def test_maya_memvid_full():
     print("\n🗣️  Testing casual follow-up (should use Memvid again)")
     print("-" * 55)
     
-    response3, updated_history3, _analysis_result3, _rag_context3, _tool_calls3 = process_order(
+    response3, updated_history3, _analysis_result3, _rag_context3, _tool_calls3, _emotion_state = process_order(
         user_input_text="You seem wise for a bartender",
         current_session_history=history_after_whiskey,  # Use history from drink order
         llm=llm,

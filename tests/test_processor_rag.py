@@ -37,7 +37,7 @@ def test_rag_short_circuits_when_components_missing(monkeypatch, stub_get_menu):
     user_input = "How's your day going?"
 
     # All RAG components missing -> should skip RAG enhancement
-    response_text, _, _, _, _ = proc.process_order(
+    response_text, _, _, _, _, _ = proc.process_order(
         user_input_text=user_input,
         current_session_history=[],
         llm=llm,
@@ -67,7 +67,7 @@ def test_safe_length_check_with_non_sized_rag_response(monkeypatch, stub_get_men
     llm = DummyLLM("base text")
     user_input = "Just chatting about the weather."
 
-    response_text, _, _, _, _ = proc.process_order(
+    response_text, _, _, _, _, _ = proc.process_order(
         user_input_text=user_input,
         current_session_history=[],
         llm=llm,

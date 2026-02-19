@@ -38,11 +38,15 @@ class MemvidRetriever:
         
         # Verify index is a dict
         if not isinstance(self.index_data, dict):
-            raise ValueError(f"Memvid index must be a JSON object: {self.index_file}")
+            logger.warning(f"Memvid index must be a JSON object: {self.index_file}. Using empty index.")
+            self.index_data = {"chunks": [], "total_frames": 0}
         
         # Verify index has data
         if not self.index_data.get("chunks"):
-            raise ValueError(f"Memvid index invalid or empty: {self.index_file}")
+            logger.warning(f"Memvid index invalid or empty: {self.index_file}")
+            # Do not raise, allow empty index
+            if "chunks" not in self.index_data:
+                self.index_data["chunks"] = []
             
         # Verify video
         self._verify_video()
@@ -51,8 +55,12 @@ class MemvidRetriever:
     
     def _load_index(self) -> Dict[str, Any]:
         """Load index file"""
-        with open(self.index_file, 'r') as f:
-            return json.load(f)
+        try:
+            with open(self.index_file, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Failed to load Memvid index {self.index_file}: {e}. Using empty index.")
+            return {"chunks": [], "total_frames": 0}
     
     def _verify_video(self):
         """Verify video file exists and is accessible"""

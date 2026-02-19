@@ -276,14 +276,16 @@ def serve_maya():
         checks = []
         
         # Check RAG availability (either Memvid or FAISS)
-        rag_available = False
-        if rag_retriever is not None or rag_index is not None:
-            # Check that we have documents
-            if rag_documents and len(rag_documents) > 0:
-                rag_available = True
-        
-        if not rag_available:
-            checks.append("RAG not initialized or no documents available")
+        # Only mandatory if server-side key is provided (non-BYOK for RAG)
+        if google_api_key is not None:
+            rag_available = False
+            if rag_retriever is not None or rag_index is not None:
+                # Check that we have documents
+                if rag_documents and len(rag_documents) > 0:
+                    rag_available = True
+            
+            if not rag_available:
+                checks.append("RAG not initialized or no documents available")
 
         if checks:
             return PlainTextResponse(

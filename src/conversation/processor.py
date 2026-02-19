@@ -70,6 +70,16 @@ def _process_drink_context(drink_context: str) -> str:
     # Fallback to first token if no priority match
     return drink_tokens[0] if drink_tokens else ""
 
+def extract_emotion(text):
+    """Helper to extract emotion state from text."""
+    import re
+    match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
+    if match:
+        emotion = match.group(1).lower()
+        clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
+        return emotion, clean_text
+    return None, text
+
 def process_order(
     user_input_text: str,
     current_session_history: List[Dict[str, str]],
@@ -80,7 +90,7 @@ def process_order(
     api_key: str = None,
     session_id: str = "default",
     app_state: Any = None
-) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
+) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any, str]:
     """
     Process user input using LLM with tool calling, updates state.
     
@@ -94,11 +104,11 @@ def process_order(
         api_key: API key for RAG pipeline (optional)
         
     Returns:
-        Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data)
+        Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data, emotion_state)
     """
     if not user_input_text:
         logger.warning("Received empty user input.")
-        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
+        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None, "neutral"
 
     # Security Scan: Input
     scan_result = scan_input(user_input_text)
@@ -110,7 +120,7 @@ def process_order(
         updated_history.append({'role': 'user', 'content': user_input_text})
         updated_history.append({'role': 'assistant', 'content': blocked_msg})
         
-        return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
+        return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
 
     # Set session context for tools to access
     # This allows payment tools to know which session they're operating on
@@ -169,16 +179,6 @@ def process_order(
         else:
             agent_response_text = "Absolutely! I'll take care of that for you."
             
-        import re
-        
-        # Helper to extract emotion state
-        def extract_emotion(text):
-            match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
-            if match:
-                emotion = match.group(1).lower()
-                clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
-                return emotion, clean_text
-            return None, text
 
         # Parse emotion from response
         emotion_state, agent_response_text = extract_emotion(agent_response_text)
