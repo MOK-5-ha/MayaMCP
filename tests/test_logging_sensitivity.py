@@ -12,9 +12,7 @@ def test_should_log_sensitive():
         assert should_log_sensitive() is False
         
     # Targeted unset of LOG_SENSITIVE_RESPONSES
-    with patch.dict(os.environ):
-        if "LOG_SENSITIVE_RESPONSES" in os.environ:
-            del os.environ["LOG_SENSITIVE_RESPONSES"]
+    with patch.dict(os.environ, {}, clear=True):
         assert should_log_sensitive() is False
 
     # Edge cases
@@ -61,6 +59,10 @@ def test_processor_logging_gated(mock_logger, mock_should_log, mock_get_tools):
         MagicMock(content="", tool_calls=[{"name": "get_menu", "args": {}, "id": "1"}]),
         MagicMock(content="Final response", tool_calls=[])
     ]
+    
+    # Use the real get_menu function
+    from src.llm.tools import get_menu
+    mock_get_tools.return_value = [get_menu]
     
     process_order(
         user_input_text="hello",

@@ -261,7 +261,8 @@ def process_order(
     # Add the latest user input
     messages.append(HumanMessage(content=user_input_text))
 
-    logger.info(f"Processing user input for session: {user_input_text}")
+    if should_log_sensitive():
+        logger.debug(f"Processing user input for session: {user_input_text}")
     
     try:
         # --- LLM Interaction Loop (Handles Tool Calls) ---
@@ -396,7 +397,8 @@ def process_order(
         # --- End of LLM Interaction Loop ---
 
         # Final response text is now set
-        logger.info(f"Final agent response: {agent_response_text}")
+        if should_log_sensitive():
+            logger.debug(f"Final agent response: {agent_response_text}")
 
         # --- Update Conversation State ---
         phase_manager.increment_turn()

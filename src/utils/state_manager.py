@@ -424,49 +424,51 @@ def update_order_state(session_id: Optional[str] = None, store: Optional[Mutable
     """Update order state based on action."""
     session_id, store = _get_store_and_session(session_id, store)
     
-    session_data = _get_session_data(session_id, store)
-    history = session_data['history']
-    current_order = session_data['current_order']
-    
-    if action == "add_item" and item_data:
-        # Add item to current order
-        current_order['order'].append(item_data)
+    lock = get_session_lock(session_id)
+    with lock:
+        session_data = _get_session_data(session_id, store)
+        history = session_data['history']
+        current_order = session_data['current_order']
         
-        # Add to order history
-        history['items'].append(item_data.copy())
-        history['total_cost'] += item_data['price']
-        
-        logger.info(f"Added item to order for {session_id}: {item_data['name']}")
-        
-    elif action == "place_order":
-        # Mark order as finished and clear current order
-        current_order['finished'] = True
-        current_order['order'] = []
-        
-        logger.info(f"Order placed for {session_id}")
-        
-    elif action == "clear_order":
-        # Clear current order
-        current_order['order'] = []
-        current_order['finished'] = False
-        
-        logger.info(f"Order cleared for {session_id}")
-        
-    elif action == "add_tip" and item_data:
-        # Add tip to order history
-        history['tip_amount'] = item_data['amount']
-        history['tip_percentage'] = item_data['percentage']
-        
-        logger.info(f"Tip added for {session_id}: ${item_data['amount']:.2f}")
-        
-    elif action == "pay_bill":
-        # Mark bill as paid
-        history['paid'] = True
-        
-        logger.info(f"Bill paid for {session_id}")
-        
-    # Save changes
-    _save_session_data(session_id, store, session_data)
+        if action == "add_item" and item_data:
+            # Add item to current order
+            current_order['order'].append(item_data)
+            
+            # Add to order history
+            history['items'].append(item_data.copy())
+            history['total_cost'] += item_data['price']
+            
+            logger.info(f"Added item to order for {session_id}: {item_data['name']}")
+            
+        elif action == "place_order":
+            # Mark order as finished and clear current order
+            current_order['finished'] = True
+            current_order['order'] = []
+            
+            logger.info(f"Order placed for {session_id}")
+            
+        elif action == "clear_order":
+            # Clear current order
+            current_order['order'] = []
+            current_order['finished'] = False
+            
+            logger.info(f"Order cleared for {session_id}")
+            
+        elif action == "add_tip" and item_data:
+            # Add tip to order history
+            history['tip_amount'] = item_data['amount']
+            history['tip_percentage'] = item_data['percentage']
+            
+            logger.info(f"Tip added for {session_id}: ${item_data['amount']:.2f}")
+            
+        elif action == "pay_bill":
+            # Mark bill as paid
+            history['paid'] = True
+            
+            logger.info(f"Bill paid for {session_id}")
+            
+        # Save changes
+        _save_session_data(session_id, store, session_data)
 
 def reset_session_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> None:
     """Reset all session state and cleanup session lock."""
@@ -616,29 +618,33 @@ def update_payment_state(session_id: str, store: MutableMapping,
     Raises:
         PaymentStateValidationError: If updates would result in invalid state.
     """
-    data = _get_session_data(session_id, store)
-    current_payment = data['payment']
+    session_id, store = _get_store_and_session(session_id, store)
     
-    # Check status transition validity if status is being updated
-    if 'payment_status' in updates:
-        current_status = current_payment['payment_status']
-        new_status = updates['payment_status']
-        if not is_valid_status_transition(current_status, new_status):
-            raise PaymentStateValidationError(
-                f"Invalid status transition from '{current_status}' to '{new_status}'"
-            )
-    
-    # Create merged state for validation
-    merged_state = current_payment.copy()
-    merged_state.update(updates)
-    
-    # Validate the merged state
-    validate_payment_state(merged_state)
-    
-    # Apply updates
-    current_payment.update(updates)
-    _save_session_data(session_id, store, data)
-    logger.debug(f"Payment state updated for {session_id}: {updates}")
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        current_payment = data['payment']
+        
+        # Check status transition validity if status is being updated
+        if 'payment_status' in updates:
+            current_status = current_payment['payment_status']
+            new_status = updates['payment_status']
+            if not is_valid_status_transition(current_status, new_status):
+                raise PaymentStateValidationError(
+                    f"Invalid status transition from '{current_status}' to '{new_status}'"
+                )
+        
+        # Create merged state for validation
+        merged_state = current_payment.copy()
+        merged_state.update(updates)
+        
+        # Validate the merged state
+        validate_payment_state(merged_state)
+        
+        # Apply updates
+        current_payment.update(updates)
+        _save_session_data(session_id, store, data)
+        logger.debug(f"Payment state updated for {session_id}: {updates}")
 
 
 # Error codes for atomic operations

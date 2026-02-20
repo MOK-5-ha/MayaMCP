@@ -32,8 +32,9 @@ class EncryptionManager:
             with cls._init_lock:
                 # Second check (with lock) to prevent race condition
                 if cls._instance is None:
-                    cls._instance = super(EncryptionManager, cls).__new__(cls)
-                    cls._instance._initialize()
+                    instance = super(EncryptionManager, cls).__new__(cls)
+                    instance._initialize()
+                    cls._instance = instance  # Only assign after successful init
         return cls._instance
     
     def _initialize(self):

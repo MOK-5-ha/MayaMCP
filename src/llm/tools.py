@@ -903,10 +903,7 @@ def place_order() -> str:
     session_id = get_current_session()
     if session_id is None:
         logger.warning("place_order called without session context")
-        return create_tool_error(
-            PaymentError.INVALID_SESSION,
-            "No active session. Please refresh and try again."
-        )
+        return "Error: No active session. Please refresh and try again."
     
     order_list = get_current_order_state()
     
@@ -947,10 +944,7 @@ def clear_order() -> str:
     session_id = get_current_session()
     if session_id is None:
         logger.warning("clear_order called without session context")
-        return create_tool_error(
-            PaymentError.INVALID_SESSION,
-            "No active session. Please refresh and try again."
-        )
+        return "Error: No active session. Please refresh and try again."
     
     update_order_state(session_id, get_global_store(), "clear_order")
     return "Your order has been cleared."
@@ -1001,10 +995,7 @@ def pay_bill() -> str:
     session_id = get_current_session()
     if session_id is None:
         logger.warning("pay_bill called without session context")
-        return create_tool_error(
-            PaymentError.INVALID_SESSION,
-            "No active session. Please refresh and try again."
-        )
+        return "Error: No active session. Please refresh and try again."
     
     order_history = get_order_history()
     
@@ -1041,10 +1032,7 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
     session_id = get_current_session()
     if session_id is None:
         logger.warning("add_tip called without session context")
-        return create_tool_error(
-            PaymentError.INVALID_SESSION,
-            "No active session. Please refresh and try again."
-        )
+        return "Error: No active session. Please refresh and try again."
     
     order_history = get_order_history()
     
