@@ -41,17 +41,34 @@ class EncryptionManager:
             )
             key = Fernet.generate_key()
         else:
+            # Try using the key directly if it's a valid Fernet key
             try:
-                # Ensure key is valid base64url-encoded 32-byte key
-                # If the user provided a raw string passphrase, we might want to derive a key,
-                # but for now we assume they followed the generate_key() instructions.
-                key = master_key.encode() if isinstance(master_key, str) else master_key
-                Fernet(key) # Validate key format
-            except Exception as e:
-                logger.error(f"Invalid MAYA_MASTER_KEY format: {e}. Falling back to temporary key.")
-                key = Fernet.generate_key()
+                key_bytes = master_key.encode() if isinstance(master_key, str) else master_key
+                # Validate if it's already a valid 32-byte base64-encoded key
+                decoded = base64.urlsafe_b64decode(key_bytes)
+                if len(decoded) == 32:
+                    key = key_bytes
+                else:
+                    key = self._derive_key(master_key)
+            except Exception:
+                # If not a valid Fernet key, treat as passphrase and derive
+                key = self._derive_key(master_key)
                 
         self._cipher_suite = Fernet(key)
+
+    def _derive_key(self, passphrase: str) -> bytes:
+        """Derive a 32-byte Fernet key from a passphrase."""
+        # Note: In a production app, the salt should be unique per installation
+        # and stored securely. For MayaMCP, we use a fixed application salt.
+        salt = b'mayamcp_default_salt_2026' 
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key_raw = kdf.derive(passphrase.encode())
+        return base64.urlsafe_b64encode(key_raw)
         
     def encrypt(self, data: str) -> str:
         """
@@ -66,7 +83,7 @@ class EncryptionManager:
         if not data:
             return ""
         if not self._cipher_suite:
-             self._initialize() # Should happen in __new__ but just in case
+            self._initialize() # Should happen in __new__ but just in case
              
         try:
             encrypted_bytes = self._cipher_suite.encrypt(data.encode())
@@ -86,9 +103,9 @@ class EncryptionManager:
             The decrypted plaintext string.
         """
         if not token:
-             return ""
+            return ""
         if not self._cipher_suite:
-             self._initialize()
+            self._initialize()
 
         try:
             decrypted_bytes = self._cipher_suite.decrypt(token.encode())

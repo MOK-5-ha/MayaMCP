@@ -30,6 +30,18 @@ def is_available() -> bool:
         logger.warning(f"Error checking llm-guard availability: {e}")
         return False
 
+# Fallback regex patterns for prompt injection detection.
+# NOTE: These are basic patterns and do not handle advanced techniques like
+# Unicode homoglyphs, zero-width characters, or complex insertions.
+# For stronger protection, consider text normalization before scanning.
+_FALLBACK_INJECTION_PATTERNS = [
+    re.compile(r"\bignore previous instructions\b", re.IGNORECASE),
+    re.compile(r"\byou are now\b", re.IGNORECASE),
+    re.compile(r"\bsystem prompt\b", re.IGNORECASE),
+    re.compile(r"\broleplay as\b", re.IGNORECASE),
+    re.compile(r"\bbypass mode\b", re.IGNORECASE),
+]
+
 def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
     """
     Scan user input for prompt injection and toxicity.
@@ -41,20 +53,12 @@ def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
 
     if not is_available():
         # Fallback: Basic Regex Scanning
-        fallback_patterns = [
-            r"ignore previous instructions",
-            r"you are now",
-            r"system prompt",
-            r"roleplay as",
-            r"bypass mode",
-        ]
-        text_lower = text.lower()
-        for pattern in fallback_patterns:
-            if re.search(pattern, text_lower):
-                logger.warning(f"Blocked by fallback regex scanner: {pattern}")
+        for pattern in _FALLBACK_INJECTION_PATTERNS:
+            if pattern.search(text):
+                logger.warning(f"Blocked by fallback regex scanner: {pattern.pattern}")
                 return ScanResult(
                     is_valid=False, 
-                    sanitized_text=text,
+                    sanitized_text="",
                     blocked_reason=INPUT_BLOCKED_INJECTION,
                     scanner_scores={"fallback_regex": 1.0}
                 )

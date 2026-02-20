@@ -36,4 +36,4 @@ numpy>=1.24.0,<3.0.0
 
 # Security
 llm-guard>=0.3.0
-cryptography>=42.0.0
+cryptography>=46.0.0

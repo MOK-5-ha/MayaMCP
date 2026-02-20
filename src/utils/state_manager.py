@@ -783,6 +783,7 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
 # API Key State Functions (BYOK)
 # =============================================================================
 
+def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     """Get API key state for session (decrypted).
     
     Args:
@@ -797,20 +798,22 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
     
     # Decrypt keys if present
     encryption_manager = get_encryption_manager()
+    
+    # We catch broad exceptions from decryption but log specific details
+    # to avoid crashing on corrupted or key-mismatched data.
     if state.get('gemini_key'):
         try:
             state['gemini_key'] = encryption_manager.decrypt(state['gemini_key'])
-        except Exception:
-             # Fallback if somehow not encrypted or key changed (though decrypt handles this)
-             logger.warning(f"Failed to decrypt gemini_key for {session_id}")
-             state['gemini_key'] = None
+        except Exception as e:
+            logger.warning(f"Failed to decrypt gemini_key for {session_id}: {str(e)}")
+            state['gemini_key'] = None
              
     if state.get('cartesia_key'):
         try:
             state['cartesia_key'] = encryption_manager.decrypt(state['cartesia_key'])
-        except Exception:
-             logger.warning(f"Failed to decrypt cartesia_key for {session_id}")
-             state['cartesia_key'] = None
+        except Exception as e:
+            logger.warning(f"Failed to decrypt cartesia_key for {session_id}: {str(e)}")
+            state['cartesia_key'] = None
              
     return state
 
@@ -836,7 +839,8 @@ def set_api_keys(
         data = _get_session_data(session_id, store)
         
         # Encrypt keys before storage
-        encrypted_gemini = encryption_manager.encrypt(gemini_key.strip()) if gemini_key else None
+        stripped_gemini = gemini_key.strip() if gemini_key else None
+        encrypted_gemini = encryption_manager.encrypt(stripped_gemini) if stripped_gemini else None
         
         encrypted_cartesia = None
         if cartesia_key and cartesia_key.strip():

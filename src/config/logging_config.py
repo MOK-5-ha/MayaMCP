@@ -2,7 +2,29 @@
 
 import logging
 import os
+import re
 from typing import Optional
+
+class RedactingFormatter(logging.Formatter):
+    """Formatter that redacts sensitive information from log records."""
+    
+    def __init__(self, fmt=None, datefmt=None, style='%'):
+        super().__init__(fmt, datefmt, style)
+        self._patterns = [
+            # Google API Keys (AIza...)
+            (re.compile(r'(AIza[0-9A-Za-z-_]{35})'), r'REDACTED_API_KEY'),
+            # Generic Bearer tokens
+            (re.compile(r'Bearer\s+[a-zA-Z0-9\-\._~\+\/]{20,}'), r'Bearer REDACTED_TOKEN'),
+            # Stripe Secret Keys (sk_live_..., sk_test_...)
+            (re.compile(r'(sk_(live|test)_[0-9a-zA-Z]{24,})'), r'REDACTED_STRIPE_KEY'),
+        ]
+
+    def format(self, record):
+        original_msg = super().format(record)
+        redacted_msg = original_msg
+        for pattern, replacement in self._patterns:
+            redacted_msg = pattern.sub(replacement, redacted_msg)
+        return redacted_msg
 
 def setup_logging(
     level: Optional[str] = None,
@@ -29,7 +51,6 @@ def setup_logging(
         format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     
     # Configure logging
-    # Configure logging
     handler = logging.StreamHandler()
     handler.setFormatter(RedactingFormatter(format_string))
     
@@ -42,27 +63,6 @@ def setup_logging(
     # Return logger for the main module
     return logging.getLogger("mayamcp")
 
-class RedactingFormatter(logging.Formatter):
-    """Formatter that redacts sensitive information from log records."""
-    
-    def __init__(self, fmt=None, datefmt=None, style='%'):
-        super().__init__(fmt, datefmt, style)
-        import re
-        self._patterns = [
-            # Google API Keys (AIza...)
-            (re.compile(r'(AIza[0-9A-Za-z-_]{35})'), r'REDACTED_API_KEY'),
-            # Generic Bearer tokens
-            (re.compile(r'Bearer\s+[a-zA-Z0-9\-\._~\+\/]{20,}'), r'Bearer REDACTED_TOKEN'),
-            # Stripe Secret Keys (sk_live_..., sk_test_...)
-            (re.compile(r'(sk_(live|test)_[0-9a-zA-Z]{24,})'), r'REDACTED_STRIPE_KEY'),
-        ]
-
-    def format(self, record):
-        original_msg = super().format(record)
-        redacted_msg = original_msg
-        for pattern, replacement in self._patterns:
-            redacted_msg = pattern.sub(replacement, redacted_msg)
-        return redacted_msg
 
 def get_logger(name: str) -> logging.Logger:
     """
