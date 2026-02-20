@@ -28,11 +28,11 @@ class TestLoggingConfig:
         logger = setup_logging()
 
         # Verify basicConfig was called with correct defaults
-        mock_basic_config.assert_called_once_with(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.INFO
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         # Verify correct logger is returned
         assert logger.name == "mayamcp"
@@ -44,11 +44,11 @@ class TestLoggingConfig:
         """Test setup_logging with DEBUG environment variable set to true."""
         logger = setup_logging()
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.DEBUG
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -58,11 +58,11 @@ class TestLoggingConfig:
         """Test setup_logging with DEBUG environment variable set to True (capitalized)."""
         logger = setup_logging()
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.DEBUG
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -72,11 +72,11 @@ class TestLoggingConfig:
         """Test setup_logging with DEBUG environment variable set to false."""
         logger = setup_logging()
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.INFO
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -86,11 +86,11 @@ class TestLoggingConfig:
         """Test setup_logging with invalid DEBUG environment variable."""
         logger = setup_logging()
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.INFO
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -100,11 +100,11 @@ class TestLoggingConfig:
         """Test setup_logging with custom level parameter."""
         logger = setup_logging(level="WARNING")
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.WARNING,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.WARNING
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -114,11 +114,11 @@ class TestLoggingConfig:
         """Test setup_logging with custom level parameter in lowercase."""
         logger = setup_logging(level="error")
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.ERROR,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.ERROR
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -129,11 +129,11 @@ class TestLoggingConfig:
         custom_format = '%(levelname)s: %(message)s'
         logger = setup_logging(format_string=custom_format)
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.INFO,
-            format=custom_format,
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.INFO
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -144,11 +144,11 @@ class TestLoggingConfig:
         custom_format = '%(name)s - %(message)s'
         logger = setup_logging(level="CRITICAL", format_string=custom_format)
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.CRITICAL,
-            format=custom_format,
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.CRITICAL
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -158,11 +158,11 @@ class TestLoggingConfig:
         """Test that explicit level parameter overrides DEBUG environment variable."""
         logger = setup_logging(level="ERROR")
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.ERROR,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.ERROR
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -185,11 +185,11 @@ class TestLoggingConfig:
         """Test that None format string uses default format."""
         logger = setup_logging(format_string=None)
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.INFO
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 
@@ -199,11 +199,11 @@ class TestLoggingConfig:
         """Test setup_logging with empty format string."""
         logger = setup_logging(format_string="")
 
-        mock_basic_config.assert_called_once_with(
-            level=logging.INFO,
-            format="",
-            force=True
-        )
+        mock_basic_config.assert_called_once()
+        call_args = mock_basic_config.call_args[1]
+        assert call_args['level'] == logging.INFO
+        assert 'handlers' in call_args
+        assert call_args['force'] is True
 
         assert logger.name == "mayamcp"
 

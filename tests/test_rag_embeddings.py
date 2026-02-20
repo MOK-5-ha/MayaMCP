@@ -32,8 +32,8 @@ class TestGetEmbedding:
         call_kwargs = client.models.embed_content.call_args
         assert call_kwargs[1]['model'] == EMBEDDING_MODEL
         assert call_kwargs[1]['contents'] == "test text"
-        # Default task_type should not produce a config
-        assert call_kwargs[1]['config'] is None
+        # Default task_type should produce a config with DEFAULT_TASK_TYPE
+        assert call_kwargs[1]['config'].task_type == 'RETRIEVAL_DOCUMENT'
 
         assert result == [0.1, 0.2, 0.3, 0.4, 0.5]
 

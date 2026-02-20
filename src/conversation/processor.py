@@ -17,7 +17,7 @@ except ImportError:
     def scan_input(text): return type('obj', (object,), {'is_valid': True, 'sanitized_text': text})
     def scan_output(text, prompt=None): return type('obj', (object,), {'is_valid': True, 'sanitized_text': text})
 
-from ..config.logging_config import get_logger
+from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
@@ -334,22 +334,23 @@ def process_order(
                         has_content = False
                         if rag_response is not None:
                             try:
-                                if isinstance(rag_response, (str, list, tuple, dict)) or hasattr(rag_response, "__len__"):
-                                    has_content = len(rag_response) > 0
+                                has_content = len(rag_response) > 0
                             except Exception:
                                 has_content = False
                         
                         if has_content:
-                            # Log original response for comparison
-                            logger.info(f"Original response: {agent_response_text}")
-                            logger.info(f"RAG-enhanced response: {rag_response}")
+                            # Log original response for comparison - gated by config and downgraded to DEBUG
+                            if should_log_sensitive():
+                                logger.debug(f"Original response: {agent_response_text}")
+                                logger.debug(f"RAG-enhanced response: {rag_response}")
                             # Use the RAG-enhanced response
                             agent_response_text = rag_response
 
                 break 
                 
             # --- Tool Call Execution ---
-            logger.info(f"LLM requested tool calls: {tool_calls}")
+            if should_log_sensitive():
+                logger.debug(f"LLM requested tool calls: {tool_calls}")
             tool_messages = []
             
             # Get available tools

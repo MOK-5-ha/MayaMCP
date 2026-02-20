@@ -86,7 +86,7 @@ class EncryptionManager:
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
-            iterations=100000,
+            iterations=600000,
         )
         key_raw = kdf.derive(passphrase.encode())
         return base64.urlsafe_b64encode(key_raw)

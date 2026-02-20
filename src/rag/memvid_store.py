@@ -12,7 +12,7 @@ from ..memvid import MemvidEncoder, MemvidRetriever, get_memvid_config
 logger = get_logger(__name__)
 
 # Default personality documents for Maya (same as before)
-DEFAULT_DOCUMENTS = [
+DEFAULT_DOCUMENTS = (
     "It seems like a pleasant evening.",
     "If there's one thing Bartending teaches you, it's patience.",
     "Oh, it was nothing, really. Just a bit of luck and perhaps a sprinkle of divine intervention... or maybe I just followed the instructions.",
@@ -23,7 +23,7 @@ DEFAULT_DOCUMENTS = [
     "Your concoction, delivered with optimal efficiency and zero judgment.",
     "You've got great taste! The Old Fashioned is a classic for a reason.",
     "If you're looking for something refreshing, our Long Island is always a winner."
-]
+)
 
 def initialize_memvid_store(documents: Optional[List[str]] = None, force_rebuild: bool = False) -> Tuple[MemvidRetriever, List[str]]:
     """
@@ -37,7 +37,10 @@ def initialize_memvid_store(documents: Optional[List[str]] = None, force_rebuild
         Tuple of (MemvidRetriever instance, list of documents)
     """
     if documents is None:
-        documents = DEFAULT_DOCUMENTS
+        documents = list(DEFAULT_DOCUMENTS)
+    else:
+        # Ensure we have a copy if a list was passed
+        documents = list(documents)
     
     # Set up file paths
     assets_dir = Path("assets")

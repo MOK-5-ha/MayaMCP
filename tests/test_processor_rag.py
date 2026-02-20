@@ -41,8 +41,6 @@ def test_rag_short_circuits_when_components_missing(monkeypatch, stub_get_menu):
         user_input_text=user_input,
         current_session_history=[],
         llm=llm,
-        rag_index=None,
-        rag_documents=None,
         rag_retriever=None,
         api_key="dummy-key",
     )
@@ -71,8 +69,6 @@ def test_safe_length_check_with_non_sized_rag_response(monkeypatch, stub_get_men
         user_input_text=user_input,
         current_session_history=[],
         llm=llm,
-        rag_index=object(),
-        rag_documents=["doc1"],
         rag_retriever=None,
         api_key="dummy-key",
     )

@@ -50,7 +50,7 @@ def test_maya_memvid_full():
         # Initialize state management
         print("🔄 Initializing state management...")
         try:
-            initialize_state()
+            initialize_state(None, None)
             print("✅ State management initialized")
         except Exception as e:
             if logger:
@@ -109,8 +109,6 @@ def test_maya_memvid_full():
         user_input_text="I'm feeling philosophical today. What's this place about?",
         current_session_history=session_history,
         llm=llm,
-        rag_index=None,  # No FAISS
-        rag_documents=rag_documents,
         rag_retriever=memvid_retriever,  # Using Memvid
         api_key=api_keys["google_api_key"]
     )
@@ -124,8 +122,6 @@ def test_maya_memvid_full():
         user_input_text="I'd like a whiskey on the rocks please",
         current_session_history=updated_history,
         llm=llm,
-        rag_index=None,
-        rag_documents=rag_documents,
         rag_retriever=memvid_retriever,
         api_key=api_keys["google_api_key"]
     )
@@ -142,7 +138,7 @@ def test_maya_memvid_full():
     assert len(history_after_whiskey) > len(updated_history), "History should continue growing"
     
     # Validate order state was affected (drink order should update state)
-    current_state = get_current_order_state()
+    current_state = get_current_order_state(None, None)
     assert current_state is not None, "Order state should exist after drink order"
     
     print(f"🤖 Maya's response: {response_whiskey}")
@@ -156,8 +152,6 @@ def test_maya_memvid_full():
         user_input_text="You seem wise for a bartender",
         current_session_history=history_after_whiskey,  # Use history from drink order
         llm=llm,
-        rag_index=None,
-        rag_documents=rag_documents,
         rag_retriever=memvid_retriever,
         api_key=api_keys["google_api_key"]
     )
@@ -180,7 +174,7 @@ def test_maya_memvid_full():
     print(f"✅ Follow-up validation passed: {len(response3)} chars, final history: {len(updated_history3)} entries")
     
     print("\n🎉 Full Memvid integration test completed!")
-    print(f"📊 Final order history: {get_order_history()}")
+    print(f"📊 Final order history: {get_order_history(None, None)}")
     
     # Show video memory stats
     assert hasattr(memvid_retriever, 'get_stats'), "Memvid retriever should have get_stats method"
@@ -240,7 +234,7 @@ def test_maya_memvid_full():
     
     # Reset global state to prevent interference with other tests
     try:
-        reset_session_state()
+        reset_session_state(None, None)
     except Exception as cleanup_error:
         print(f"⚠️  Warning: State reset failed: {cleanup_error}")
     

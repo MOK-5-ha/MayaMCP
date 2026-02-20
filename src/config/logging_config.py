@@ -1,4 +1,10 @@
-"""Logging configuration for MayaMCP."""
+"""
+Logging configuration for MayaMCP.
+
+Environment Variables:
+- DEBUG: Set to 'true' to enable DEBUG level logging.
+- LOG_SENSITIVE_RESPONSES: Set to 'true' to enable logging of sensitive user interaction content (e.g., full LLM responses, tool calls).
+"""
 
 import logging
 import os
@@ -75,3 +81,13 @@ def get_logger(name: str) -> logging.Logger:
         Logger instance.
     """
     return logging.getLogger(name)
+
+
+def should_log_sensitive() -> bool:
+    """
+    Check if sensitive interaction content should be logged.
+    
+    Returns:
+        True if LOG_SENSITIVE_RESPONSES is explicitly set to 'true'.
+    """
+    return os.getenv("LOG_SENSITIVE_RESPONSES", "False").lower() == "true"

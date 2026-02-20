@@ -142,9 +142,9 @@ class TestAddToOrder:
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        assert call_args[0] == "add_item"
+        assert call_args[2] == "add_item"
 
-        item = call_args[1]
+        item = call_args[3]
         assert item["name"] == "Martini"
         assert item["price"] == 13.0
         assert item["modifiers"] == "shaken"
@@ -171,7 +171,7 @@ class TestAddToOrder:
         # Verify modifiers were combined
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        item = call_args[1]
+        item = call_args[3]
         assert item["modifiers"] == "on the rocks, with cherry"
 
         # Verify return message
@@ -193,7 +193,7 @@ class TestAddToOrder:
         # Verify quantity and price calculation
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        item = call_args[1]
+        item = call_args[3]
         assert item["quantity"] == 3
         assert item["price"] == 15.0  # 3 * 5.00
 
@@ -216,7 +216,7 @@ class TestAddToOrder:
         # Verify no modifiers
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        item = call_args[1]
+        item = call_args[3]
         assert item["modifiers"] == "no modifiers"
 
         # Verify return message
@@ -371,7 +371,8 @@ class TestPlaceOrder:
         mock_randint.assert_called_once_with(2, 8)
 
         # Verify update_order_state was called
-        mock_update_order_state.assert_called_once_with("place_order")
+        mock_update_order_state.assert_called_once()
+        assert mock_update_order_state.call_args[0][2] == "place_order"
 
         # Verify success message
         assert "Order placed successfully" in result
@@ -404,7 +405,8 @@ class TestClearOrder:
         result = clear_order.invoke({})
 
         # Verify update_order_state was called
-        mock_update_order_state.assert_called_once_with("clear_order")
+        mock_update_order_state.assert_called_once()
+        assert mock_update_order_state.call_args[0][2] == "clear_order"
 
         # Verify success message
         assert "has been cleared" in result
@@ -510,7 +512,8 @@ class TestPayBill:
         result = pay_bill.invoke({})
 
         # Verify update_order_state was called
-        mock_update_order_state.assert_called_once_with("pay_bill")
+        mock_update_order_state.assert_called_once()
+        assert mock_update_order_state.call_args[0][2] == "pay_bill"
 
         # Verify success message
         assert "Thank you for your payment" in result
@@ -563,9 +566,9 @@ class TestAddTip:
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        assert call_args[0] == "add_tip"
+        assert call_args[2] == "add_tip"
 
-        tip_data = call_args[1]
+        tip_data = call_args[3]
         assert tip_data["amount"] == 1.95
         assert tip_data["percentage"] == 15.0
 
@@ -591,7 +594,7 @@ class TestAddTip:
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        tip_data = call_args[1]
+        tip_data = call_args[3]
         assert tip_data["amount"] == 2.0
         assert tip_data["percentage"] == pytest.approx(15.38, abs=0.01)  # 2.0 / 13.0 * 100
 
@@ -641,7 +644,7 @@ class TestAddTip:
         # Verify percentage was used (not amount)
         mock_update_order_state.assert_called_once()
         call_args = mock_update_order_state.call_args[0]
-        tip_data = call_args[1]
+        tip_data = call_args[3]
         assert tip_data["amount"] == 1.95  # 15% of 13.0
         assert tip_data["percentage"] == 15.0
 

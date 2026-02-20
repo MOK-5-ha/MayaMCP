@@ -406,45 +406,21 @@ def get_current_order_state(session_id: Optional[str] = None, store: Optional[Mu
     data = _get_session_data(session_id, store)
     return data['current_order']['order'].copy()
 
-def update_conversation_state(session_id_or_updates: Any = None, store_or_none: Optional[MutableMapping] = None, updates: Optional[Dict[str, Any]] = None) -> None:
-    """
-    Update conversation state.
-    
-    Supports both old API: update_conversation_state(updates)
-    And new API: update_conversation_state(session_id, store, updates)
-    """
-    # Detect which API is being used
-    if isinstance(session_id_or_updates, dict) and updates is None:
-        # Old API: update_conversation_state(updates)
-        updates = session_id_or_updates
-        session_id, store = _get_store_and_session(None, None)
-    else:
-        # New API: update_conversation_state(session_id, store, updates)
-        session_id, store = _get_store_and_session(session_id_or_updates, store_or_none)
+def update_conversation_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None, updates: Optional[Dict[str, Any]] = None) -> None:
+    """Update conversation state."""
+    if updates is None:
+        logger.warning("update_conversation_state called with updates=None")
+        return
+    session_id, store = _get_store_and_session(session_id, store)
     
     data = _get_session_data(session_id, store)
     data['conversation'].update(updates)
     _save_session_data(session_id, store, data)
     logger.debug(f"Conversation state updated for {session_id}: {updates}")
 
-def update_order_state(action_or_session_id: Any, data_or_store: Any = None, action_or_data: Optional[Any] = None, data: Optional[Any] = None) -> None:
-    """
-    Update order state based on action.
-    
-    Supports both old API: update_order_state(action, data)
-    And new API: update_order_state(session_id, store, action, data)
-    """
-    # Detect which API is being used
-    if isinstance(action_or_session_id, str) and action_or_session_id in ("add_item", "place_order", "clear_order", "add_tip", "pay_bill"):
-        # Old API: update_order_state(action, data)
-        action = action_or_session_id
-        item_data = data_or_store
-        session_id, store = _get_store_and_session(None, None)
-    else:
-        # New API: update_order_state(session_id, store, action, data)
-        session_id, store = _get_store_and_session(action_or_session_id, data_or_store)
-        action = action_or_data
-        item_data = data
+def update_order_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None, action: str = "", item_data: Optional[Any] = None) -> None:
+    """Update order state based on action."""
+    session_id, store = _get_store_and_session(session_id, store)
     
     session_data = _get_session_data(session_id, store)
     history = session_data['history']

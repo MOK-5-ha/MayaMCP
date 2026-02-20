@@ -71,8 +71,6 @@ class TestHandleGradioInput:
             current_tip_amount=0.0,
             request=_make_request(),
             tools=[],
-            rag_index=None,
-            rag_documents=None,
             rag_retriever=None,
             rag_api_key="test_rag_key",
             app_state=test_state
@@ -305,8 +303,6 @@ class TestHandleGradioInput:
             current_tip_percentage=None, current_tip_amount=0.0,
             request=_make_request(),
             tools=[],
-            rag_index=Mock(),
-            rag_documents=["doc1", "doc2"],
             rag_retriever=Mock(),
             rag_api_key="test_rag_key",
             app_state=test_state
@@ -314,8 +310,6 @@ class TestHandleGradioInput:
 
         mock_process_order.assert_called_once()
         call_args = mock_process_order.call_args
-        assert call_args[1]['rag_index'] is not None
-        assert call_args[1]['rag_documents'] == ["doc1", "doc2"]
         assert call_args[1]['rag_retriever'] is not None
 
         assert result[0] == ""
