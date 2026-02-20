@@ -108,11 +108,12 @@ class FallbackRetriever:
     def search(self, query: str, top_k: int = 5) -> List[str]:
         """Simple keyword-based search"""
         query_lower = query.lower()
+        query_words = query_lower.split()  # Pre-compute split operation
         scored_docs = []
         
         for doc in self.documents:
             # Simple scoring based on keyword matches
-            score = sum(1 for word in query_lower.split() if word in doc.lower())
+            score = sum(1 for word in query_words if word in doc.lower())
             if score > 0:
                 scored_docs.append((score, doc))
         
