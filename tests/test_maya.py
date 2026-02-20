@@ -16,7 +16,7 @@ repo_root_dir = test_file_dir.parent
 
 from src.config import get_api_keys, setup_logging
 from src.llm import initialize_llm, get_all_tools
-from src.rag import initialize_vector_store
+
 from src.voice import initialize_cartesia_client
 from src.conversation.processor import process_order
 from src.utils.state_manager import initialize_state
@@ -28,8 +28,7 @@ class MayaTestComponents:
     def __init__(self):
         self.logger = None
         self.llm = None
-        self.rag_index = None
-        self.rag_documents = None
+
         self.cartesia_client = None
         self.api_keys = None
 
@@ -102,10 +101,7 @@ def _initialize_components(components: MayaTestComponents) -> None:
     )
     logger.info("✅ LLM client initialized")
 
-    # Vector store
-    logger.info("Initializing vector store...")
-    components.rag_index, components.rag_documents = initialize_vector_store()
-    logger.info(f"✅ Vector store initialized with {len(components.rag_documents)} documents")
+
 
     # Cartesia client
     logger.info("Initializing Cartesia TTS client...")
@@ -125,7 +121,6 @@ def _cleanup_components(components: MayaTestComponents) -> None:
     # Cleanup clients with close methods
     for client_name, client in [
         ("Cartesia client", components.cartesia_client),
-        ("Vector store", components.rag_index),
         ("LLM client", components.llm)
     ]:
         if client and hasattr(client, 'close'):
@@ -190,8 +185,6 @@ def test_maya_interaction() -> bool:
             user_input_text="I would like a whiskey on the rocks please",
             current_session_history=session_history,
             llm=components.llm,
-            rag_index=components.rag_index,
-            rag_documents=components.rag_documents,
             api_key=components.api_keys["google_api_key"]
         )
 
@@ -207,8 +200,6 @@ def test_maya_interaction() -> bool:
             user_input_text="What's in my order?",
             current_session_history=history1,
             llm=components.llm,
-            rag_index=components.rag_index,
-            rag_documents=components.rag_documents,
             api_key=components.api_keys["google_api_key"]
         )
 
@@ -221,8 +212,6 @@ def test_maya_interaction() -> bool:
             user_input_text="What's my bill?",
             current_session_history=history2,
             llm=components.llm,
-            rag_index=components.rag_index,
-            rag_documents=components.rag_documents,
             api_key=components.api_keys["google_api_key"]
         )
 

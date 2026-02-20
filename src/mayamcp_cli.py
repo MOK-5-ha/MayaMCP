@@ -16,7 +16,7 @@ from config import (
 from config.logging_config import get_logger
 from llm import get_all_tools
 from config.model_config import get_model_config, is_valid_gemini_model
-from rag import initialize_vector_store, initialize_memvid_store
+from rag import initialize_memvid_store
 from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
 from ui.api_key_modal import handle_key_submission
 from utils import initialize_state
@@ -55,9 +55,7 @@ def main():
         tools = get_all_tools()
         logger.info(f"Loaded {len(tools)} tool definitions")
 
-        # Initialize RAG system - try Memvid first, fallback to FAISS
-        rag_index = None
-        rag_documents = None
+        # Initialize RAG system - Memvid only
         rag_retriever = None
 
         if google_api_key:
@@ -66,12 +64,7 @@ def main():
                 rag_retriever, rag_documents = initialize_memvid_store()
                 logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
             except Exception as e:
-                logger.warning(f"Memvid initialization failed: {e}. Falling back to FAISS...")
-                try:
-                    rag_index, rag_documents = initialize_vector_store()
-                    logger.info(f"FAISS RAG system initialized with {len(rag_documents)} documents")
-                except Exception as e2:
-                    logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
+                logger.warning(f"Memvid initialization failed: {e}. Continuing without RAG.")
         else:
             logger.info("Skipping RAG initialization (no server-side Gemini key)")
         
@@ -86,8 +79,6 @@ def main():
         handle_input_with_deps = partial(
             handle_gradio_input,
             tools=tools,
-            rag_index=rag_index,
-            rag_documents=rag_documents,
             rag_retriever=rag_retriever,
             rag_api_key=google_api_key,
             app_state=app_state

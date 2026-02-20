@@ -18,7 +18,6 @@ gradio>=5.0.0,<6.0.0
 cartesia>=2.0.0,<3.0.0
 
 # Visualization
-matplotlib>=3.0.0
 pillow>=12.1.1,<13.0.0
 
 # Testing dependencies
@@ -30,8 +29,7 @@ pytest>=8.0.0,<9.0.0
 qrcode[pil]
 opencv-python>=4.11.0
 
-# Legacy FAISS (keeping for fallback compatibility)
-faiss-cpu>=1.10.0
+# Numpy is required by Memvid
 numpy>=1.24.0,<3.0.0
 
 # Security

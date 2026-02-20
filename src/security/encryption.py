@@ -59,20 +59,24 @@ class EncryptionManager:
     def _derive_key(self, passphrase: str) -> bytes:
         """Derive a 32-byte Fernet key from a passphrase."""
         # Generate and persist a unique salt per installation
-        salt_file = os.getenv("MAYA_SALT_FILE", ".maya_salt")
+        default_salt_path = os.path.join(os.path.expanduser("~"), ".maya_salt")
+        salt_file = os.getenv("MAYA_SALT_FILE", default_salt_path)
         try:
             if os.path.exists(salt_file):
                 with open(salt_file, "rb") as f:
                     salt = f.read()
+                    if len(salt) != 16:
+                        raise ValueError(f"Salt file corrupted: expected 16 bytes, got {len(salt)}")
             else:
                 salt = os.urandom(16)
                 with open(salt_file, "wb") as f:
                     f.write(salt)
-                # Secure the salt file
-                os.chmod(salt_file, 0o600)
         except Exception as e:
-            logger.warning(f"Failed to persist salt file, falling back to default: {e}")
-            salt = b'mayamcp_default_salt_2026'
+            logger.error(f"Failed to read/write salt file '{salt_file}': {e}")
+            raise RuntimeError(
+                f"Cannot initialize encryption: salt file '{salt_file}' is inaccessible. "
+                "Set MAYA_SALT_FILE to a writable path or fix permissions."
+            ) from e
             
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),

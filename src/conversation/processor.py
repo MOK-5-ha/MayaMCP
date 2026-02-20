@@ -11,11 +11,6 @@ except ImportError:
     memvid_rag_pipeline = None
 
 try:
-    from ..rag.pipeline import rag_pipeline
-except ImportError:
-    rag_pipeline = None
-
-try:
     from ..security import scan_input, scan_output
 except ImportError:
     # Graceful fallback if security module is missing or broken
@@ -84,8 +79,6 @@ def process_order(
     user_input_text: str,
     current_session_history: List[Dict[str, str]],
     llm,
-    rag_index=None,
-    rag_documents: List[str] = None,
     rag_retriever=None,
     api_key: str = None,
     session_id: str = "default",
@@ -98,8 +91,6 @@ def process_order(
         user_input_text: User's input
         current_session_history: Session history for Gradio
         llm: Initialized LLM instance
-        rag_index: FAISS index for RAG (optional)
-        rag_documents: Documents for RAG (optional)
         rag_retriever: Memvid retriever for video-based RAG (optional)
         api_key: API key for RAG pipeline (optional)
         
@@ -325,45 +316,20 @@ def process_order(
                 # If this appears to be casual conversation and RAG is available, try enhancing with RAG
                 if should_use_rag and api_key is not None:
                     # Early validation of RAG components before any heavy processing/try
-                    rag_available = False
-                    if rag_retriever is not None and memvid_rag_pipeline is not None:
-                        rag_available = True
-                    elif rag_index is not None and rag_documents is not None and rag_pipeline is not None:
-                        # Ensure rag_documents is a non-empty sized collection
-                        try:
-                            if isinstance(rag_documents, (list, tuple)) or hasattr(rag_documents, "__len__"):
-                                rag_available = len(rag_documents) > 0
-                        except Exception:
-                            rag_available = False
-                    if not rag_available:
+                    if rag_retriever is None or memvid_rag_pipeline is None:
                         logger.debug("Skipping RAG enhancement: required components not initialized/available")
                     else:
                         try:
-                            # Try Memvid first, then FAISS with improved error handling
-                            rag_response = None
-                            if rag_retriever is not None and memvid_rag_pipeline is not None:
-                                logger.info("Enhancing response with Memvid RAG for casual conversation")
-                                try:
-                                    rag_response = memvid_rag_pipeline(
-                                        query_text=user_input_text,
-                                        memvid_retriever=rag_retriever,
-                                        api_key=api_key
-                                    )
-                                except Exception as memvid_error:
-                                    logger.warning(f"Memvid RAG failed: {memvid_error}")
-                            elif rag_index is not None and rag_documents is not None and rag_pipeline is not None:
-                                logger.info("Enhancing response with FAISS RAG for casual conversation")
-                                try:
-                                    rag_response = rag_pipeline(
-                                        query_text=user_input_text,
-                                        index=rag_index,
-                                        documents=rag_documents,
-                                        api_key=api_key
-                                    )
-                                except Exception as faiss_error:
-                                    logger.warning(f"FAISS RAG failed: {faiss_error}")
-                            else:
-                                logger.debug("No RAG system available or imports failed")
+                            logger.info("Enhancing response with Memvid RAG for casual conversation")
+                            try:
+                                rag_response = memvid_rag_pipeline(
+                                    query_text=user_input_text,
+                                    memvid_retriever=rag_retriever,
+                                    api_key=api_key
+                                )
+                            except Exception as memvid_error:
+                                logger.warning(f"Memvid RAG failed: {memvid_error}")
+                                rag_response = None
 
                             # Safely use rag_response only if it's a sized, non-empty value
                             has_content = False

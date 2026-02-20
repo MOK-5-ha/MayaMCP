@@ -55,11 +55,16 @@ htmlcov/
 .tox/
 .nox/
 .pytest_cache/
+.benchmarks/
 nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
+
+# Linting and Type Checking
+.mypy_cache/
+.ruff_cache/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -89,6 +94,11 @@ cascade_chat_logs/
 
 # MayaMCP specific files
 .maya_salt
+.kilocode/
+.kiro/
+.qoder/
+.zencoder/
+.gradio/
 maya_output.log
 maya_memvid_output.log
 *.log

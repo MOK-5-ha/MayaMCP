@@ -12,8 +12,7 @@ import pytest
 
 import src.llm.client as llm_client
 import src.rag.memvid_pipeline as memvid_pipeline
-import src.rag.pipeline as rag_pipeline
-
+import src.rag.memvid_pipeline as memvid_pipeline
 
 class _FakeModels:
     """Fake models attribute for a mock genai.Client."""
@@ -47,7 +46,7 @@ def mock_genai_client(monkeypatch):
         return client
 
     monkeypatch.setattr('src.llm.client.get_genai_client', fake_get_genai_client)
-    monkeypatch.setattr('src.rag.pipeline.get_genai_client', fake_get_genai_client)
+
     monkeypatch.setattr('src.rag.memvid_pipeline.get_genai_client', fake_get_genai_client)
 
     return {'data': mock_data, 'models': fake_models}
@@ -82,55 +81,7 @@ def test_call_gemini_api_uses_genai_client(mock_genai_client, monkeypatch):
         cfg['max_output_tokens']
 
 
-def test_rag_pipeline_generate_augmented_response(mock_genai_client):
-    # Act
-    out = rag_pipeline.generate_augmented_response(
-        query_text="Hi",
-        retrieved_documents=["doc1", "doc2"],
-        api_key='abc',
-        model_version='gemini-3.0-flash'
-    )
 
-    # Assert
-    assert out == "OK"
-    assert mock_genai_client['data']['key'] == 'abc'
-    models = mock_genai_client['models']
-    assert models.call_count == 1, "Expected exactly one API call"
-    assert models.last_call['model'] == 'gemini-3.0-flash'
-
-    # Verify prompt structure and document formatting
-    prompt_contents = models.last_call['contents']
-    assert isinstance(prompt_contents, str), f"Prompt contents should be string, got {type(prompt_contents)}"
-
-    # Check that both documents are present and properly formatted
-    assert 'doc1' in prompt_contents, "Document 'doc1' should be present in prompt"
-    assert 'doc2' in prompt_contents, "Document 'doc2' should be present in prompt"
-
-    # Verify document joining format (regular RAG uses space separation)
-    ref_start = prompt_contents.find("Reference passage:")
-    question_start = prompt_contents.find("Question:")
-    assert ref_start != -1 and question_start != -1, "Required sections not found in prompt"
-    reference_passage_section = prompt_contents[ref_start:question_start]
-    assert "doc1 doc2" in reference_passage_section, "Documents should be space-separated in regular RAG pipeline"
-
-    # Ensure documents are distinct and not merged incorrectly
-    doc_occurrences = prompt_contents.count('doc1')
-    assert doc_occurrences == 1, f"Document 'doc1' should appear exactly once, found {doc_occurrences} times"
-    doc2_occurrences = prompt_contents.count('doc2')
-    assert doc2_occurrences == 1, f"Document 'doc2' should appear exactly once, found {doc2_occurrences} times"
-
-    # Verify expected prompt structure elements are present
-    assert "Reference passage:" in prompt_contents, "Prompt should contain 'Reference passage:' section header"
-    assert "Question:" in prompt_contents, "Prompt should contain 'Question:' section header"
-    assert "Answer:" in prompt_contents, "Prompt should contain 'Answer:' section header"
-    assert "Maya" in prompt_contents, "Prompt should contain bartender name 'Maya'"
-    assert "MOK 5-ha" in prompt_contents, "Prompt should contain bar name 'MOK 5-ha'"
-
-    # Verify proper ordering of prompt sections
-    ref_pos = prompt_contents.find("Reference passage:")
-    question_pos = prompt_contents.find("Question:")
-    answer_pos = prompt_contents.find("Answer:")
-    assert ref_pos < question_pos < answer_pos, "Prompt sections should be in correct order: Reference -> Question -> Answer"
 
 
 def test_memvid_pipeline_generate_response(mock_genai_client):
