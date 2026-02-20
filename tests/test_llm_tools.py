@@ -352,12 +352,14 @@ class TestConfirmOrder:
 class TestPlaceOrder:
     """Test cases for place_order function."""
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_current_order_state')
     @patch('src.llm.tools.update_order_state')
     @patch('src.llm.tools.random.randint')
-    def test_place_order_successful(self, mock_randint, mock_update_order_state, mock_get_current_order_state):
+    def test_place_order_successful(self, mock_randint, mock_update_order_state, mock_get_current_order_state, mock_get_current_session):
         """Test successful order placement."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_current_order_state.return_value = [
             {"name": "Martini", "price": 13.0, "modifiers": "shaken", "quantity": 1},
             {"name": "Beer", "price": 5.0, "modifiers": "no modifiers", "quantity": 1}
@@ -381,10 +383,12 @@ class TestPlaceOrder:
         assert "totalling $18.00" in result
         assert "5 minutes" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_current_order_state')
-    def test_place_order_empty(self, mock_get_current_order_state):
+    def test_place_order_empty(self, mock_get_current_order_state, mock_get_current_session):
         """Test placing empty order."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_current_order_state.return_value = []
 
         # Execute function
@@ -398,9 +402,13 @@ class TestPlaceOrder:
 class TestClearOrder:
     """Test cases for clear_order function."""
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.update_order_state')
-    def test_clear_order_success(self, mock_update_order_state):
+    def test_clear_order_success(self, mock_update_order_state, mock_get_current_session):
         """Test successful order clearing."""
+        # Setup mock
+        mock_get_current_session.return_value = "test_session_123"
+        
         # Execute function using invoke
         result = clear_order.invoke({})
 
@@ -496,11 +504,13 @@ class TestGetBill:
 class TestPayBill:
     """Test cases for pay_bill function."""
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
     @patch('src.llm.tools.update_order_state')
-    def test_pay_bill_successful(self, mock_update_order_state, mock_get_order_history):
+    def test_pay_bill_successful(self, mock_update_order_state, mock_get_order_history, mock_get_current_session):
         """Test successful bill payment."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {
             "items": [{"name": "Martini", "price": 13.0, "modifiers": "shaken", "quantity": 1}],
             "total_cost": 13.0,
@@ -520,10 +530,12 @@ class TestPayBill:
         assert "$15.00" in result
         assert "$2.00 tip" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
-    def test_pay_bill_empty_order(self, mock_get_order_history):
+    def test_pay_bill_empty_order(self, mock_get_order_history, mock_get_current_session):
         """Test paying bill for empty order."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {"items": [], "total_cost": 0.0, "paid": False}
 
         # Execute function using invoke
@@ -532,10 +544,12 @@ class TestPayBill:
         # Verify error message
         assert "haven't ordered anything" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
-    def test_pay_bill_already_paid(self, mock_get_order_history):
+    def test_pay_bill_already_paid(self, mock_get_order_history, mock_get_current_session):
         """Test paying already paid bill."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {"items": [{"name": "Martini", "price": 13.0}], "paid": True}
 
         # Execute function using invoke
@@ -549,11 +563,13 @@ class TestPayBill:
 class TestAddTip:
     """Test cases for add_tip function."""
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
     @patch('src.llm.tools.update_order_state')
-    def test_add_tip_percentage(self, mock_update_order_state, mock_get_order_history):
+    def test_add_tip_percentage(self, mock_update_order_state, mock_get_order_history, mock_get_current_session):
         """Test adding tip as percentage."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {
             "items": [{"name": "Martini", "price": 13.0}],
             "total_cost": 13.0,
@@ -577,11 +593,13 @@ class TestAddTip:
         assert "$1.95" in result
         assert "New total: $14.95" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
     @patch('src.llm.tools.update_order_state')
-    def test_add_tip_amount(self, mock_update_order_state, mock_get_order_history):
+    def test_add_tip_amount(self, mock_update_order_state, mock_get_order_history, mock_get_current_session):
         """Test adding tip as fixed amount."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {
             "items": [{"name": "Martini", "price": 13.0}],
             "total_cost": 13.0,
@@ -602,10 +620,12 @@ class TestAddTip:
         assert "$2.00 tip" in result
         assert "New total: $15.00" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
-    def test_add_tip_empty_order(self, mock_get_order_history):
+    def test_add_tip_empty_order(self, mock_get_order_history, mock_get_current_session):
         """Test adding tip to empty order."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {"items": [], "total_cost": 0.0, "paid": False}
 
         # Execute function using invoke
@@ -615,10 +635,12 @@ class TestAddTip:
         assert "haven't ordered anything" in result
         assert "nothing to tip on" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
-    def test_add_tip_already_paid(self, mock_get_order_history):
+    def test_add_tip_already_paid(self, mock_get_order_history, mock_get_current_session):
         """Test adding tip to already paid bill."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {"items": [{"name": "Martini", "price": 13.0}], "paid": True}
 
         # Execute function using invoke
@@ -627,11 +649,13 @@ class TestAddTip:
         # Verify error message
         assert "already been paid" in result
 
+    @patch('src.llm.tools.get_current_session')
     @patch('src.llm.tools.get_order_history')
     @patch('src.llm.tools.update_order_state')
-    def test_add_tip_both_percentage_and_amount(self, mock_update_order_state, mock_get_order_history):
+    def test_add_tip_both_percentage_and_amount(self, mock_update_order_state, mock_get_order_history, mock_get_current_session):
         """Test that percentage takes precedence when both are provided."""
         # Setup mocks
+        mock_get_current_session.return_value = "test_session_123"
         mock_get_order_history.return_value = {
             "items": [{"name": "Martini", "price": 13.0}],
             "total_cost": 13.0,

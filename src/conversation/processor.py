@@ -373,7 +373,8 @@ def process_order(
                         try:
                             # Execute the tool function with its arguments
                             tool_output = selected_tool.invoke(tool_args)
-                            logger.info(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
+                            if should_log_sensitive():
+                                logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
                         except TypeError as te:
                             logger.warning(f"Invalid parameters for tool '{tool_name}': {te}")
                             tool_output = f"Error: Invalid parameters for tool {tool_name}."

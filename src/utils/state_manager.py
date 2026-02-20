@@ -413,9 +413,11 @@ def update_conversation_state(session_id: Optional[str] = None, store: Optional[
         return
     session_id, store = _get_store_and_session(session_id, store)
     
-    data = _get_session_data(session_id, store)
-    data['conversation'].update(updates)
-    _save_session_data(session_id, store, data)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        data['conversation'].update(updates)
+        _save_session_data(session_id, store, data)
     logger.debug(f"Conversation state updated for {session_id}: {updates}")
 
 def update_order_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None, action: str = "", item_data: Optional[Any] = None) -> None:

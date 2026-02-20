@@ -3,7 +3,7 @@
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
-from src.rag.embeddings import EMBEDDING_MODEL, get_embedding, get_embeddings_batch
+from src.rag.embeddings import DEFAULT_TASK_TYPE, EMBEDDING_MODEL, get_embedding, get_embeddings_batch
 
 
 def _make_mock_client(embed_return=None, embed_side_effect=None):
@@ -33,7 +33,7 @@ class TestGetEmbedding:
         assert call_kwargs[1]['model'] == EMBEDDING_MODEL
         assert call_kwargs[1]['contents'] == "test text"
         # Default task_type should produce a config with DEFAULT_TASK_TYPE
-        assert call_kwargs[1]['config'].task_type == 'RETRIEVAL_DOCUMENT'
+        assert call_kwargs[1]['config'].task_type == DEFAULT_TASK_TYPE
 
         assert result == [0.1, 0.2, 0.3, 0.4, 0.5]
 
@@ -109,6 +109,7 @@ class TestGetEmbeddingsBatch:
         call_kwargs = client.models.embed_content.call_args
         assert call_kwargs[1]['model'] == EMBEDDING_MODEL
         assert call_kwargs[1]['contents'] == ["text1", "text2", "text3"]
+        assert call_kwargs[1]['config'].task_type == DEFAULT_TASK_TYPE
 
         expected = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
         assert result == expected

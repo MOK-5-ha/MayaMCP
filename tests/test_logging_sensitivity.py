@@ -11,7 +11,20 @@ def test_should_log_sensitive():
     with patch.dict(os.environ, {"LOG_SENSITIVE_RESPONSES": "false"}):
         assert should_log_sensitive() is False
         
-    with patch.dict(os.environ, {}, clear=True):
+    # Targeted unset of LOG_SENSITIVE_RESPONSES
+    with patch.dict(os.environ):
+        if "LOG_SENSITIVE_RESPONSES" in os.environ:
+            del os.environ["LOG_SENSITIVE_RESPONSES"]
+        assert should_log_sensitive() is False
+
+    # Edge cases
+    with patch.dict(os.environ, {"LOG_SENSITIVE_RESPONSES": "TRUE"}):
+        assert should_log_sensitive() is True
+        
+    with patch.dict(os.environ, {"LOG_SENSITIVE_RESPONSES": "1"}):
+        assert should_log_sensitive() is False
+        
+    with patch.dict(os.environ, {"LOG_SENSITIVE_RESPONSES": "not_a_bool"}):
         assert should_log_sensitive() is False
 
 @patch("src.conversation.processor.get_all_tools")
@@ -37,8 +50,10 @@ def test_processor_logging_gated(mock_logger, mock_should_log, mock_get_tools):
         assert "Original response" not in msg
         assert "RAG-enhanced response" not in msg
         assert "LLM requested tool calls" not in msg
+        assert "Executed tool" not in msg
 
     # Enable sensitive log
+    mock_logger.debug.reset_mock()
     mock_should_log.return_value = True
     
     # Configure LLM to return a tool call followed by a final response to prevent infinite loop
@@ -56,3 +71,4 @@ def test_processor_logging_gated(mock_logger, mock_should_log, mock_get_tools):
     # Verify sensitive logs WERE called in debug
     debug_messages = [call[0][0] for call in mock_logger.debug.call_args_list]
     assert any("LLM requested tool calls" in m for m in debug_messages)
+    assert any("Executed tool" in m for m in debug_messages)

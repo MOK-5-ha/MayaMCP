@@ -5,6 +5,7 @@ Uses Fernet (symmetric encryption) from the cryptography library.
 """
 import os
 import base64
+import threading
 from typing import Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -22,11 +23,17 @@ class EncryptionManager:
     
     _instance = None
     _cipher_suite: Optional[Fernet] = None
+    _init_lock = threading.Lock()
     
     def __new__(cls):
+        # First check (no lock) for performance
         if cls._instance is None:
-            cls._instance = super(EncryptionManager, cls).__new__(cls)
-            cls._instance._initialize()
+            # Acquire lock for thread safety
+            with cls._init_lock:
+                # Second check (with lock) to prevent race condition
+                if cls._instance is None:
+                    cls._instance = super(EncryptionManager, cls).__new__(cls)
+                    cls._instance._initialize()
         return cls._instance
     
     def _initialize(self):

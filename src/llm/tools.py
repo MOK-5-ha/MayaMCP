@@ -899,6 +899,15 @@ def confirm_order() -> str:
 @tool
 def place_order() -> str:
     """Finalizes and places the customer's confirmed order."""
+    # Get session context and validate
+    session_id = get_current_session()
+    if session_id is None:
+        logger.warning("place_order called without session context")
+        return create_tool_error(
+            PaymentError.INVALID_SESSION,
+            "No active session. Please refresh and try again."
+        )
+    
     order_list = get_current_order_state()
     
     if not order_list:
@@ -927,14 +936,23 @@ def place_order() -> str:
     logger.info(f"Tool: Placing order: [{order_text}], Total: ${total:.2f}, ETA: {prep_time} minutes")
     
     # Update order state to place the order
-    update_order_state(get_current_session(), get_global_store(), "place_order")
+    update_order_state(session_id, get_global_store(), "place_order")
 
     return f"Order placed successfully! Your items ({order_text}) totalling ${total:.2f} will be ready in approximately {prep_time} minutes."
 
 @tool
 def clear_order() -> str:
     """Removes all items from the user's order."""
-    update_order_state(get_current_session(), get_global_store(), "clear_order")
+    # Get session context and validate
+    session_id = get_current_session()
+    if session_id is None:
+        logger.warning("clear_order called without session context")
+        return create_tool_error(
+            PaymentError.INVALID_SESSION,
+            "No active session. Please refresh and try again."
+        )
+    
+    update_order_state(session_id, get_global_store(), "clear_order")
     return "Your order has been cleared."
 
 @tool
@@ -979,6 +997,15 @@ def get_bill() -> str:
 @tool
 def pay_bill() -> str:
     """Mark the customer's bill as paid."""
+    # Get session context and validate
+    session_id = get_current_session()
+    if session_id is None:
+        logger.warning("pay_bill called without session context")
+        return create_tool_error(
+            PaymentError.INVALID_SESSION,
+            "No active session. Please refresh and try again."
+        )
+    
     order_history = get_order_history()
     
     if not order_history['items']:
@@ -992,7 +1019,7 @@ def pay_bill() -> str:
     total = subtotal + tip
     
     # Update order state to mark as paid
-    update_order_state(get_current_session(), get_global_store(), "pay_bill")
+    update_order_state(session_id, get_global_store(), "pay_bill")
     
     if tip > 0:
         return f"Thank you for your payment of ${total:.2f} (including ${tip:.2f} tip)! We hope you enjoyed your drinks at MOK 5-ha."
@@ -1010,6 +1037,15 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
     Returns:
         Confirmation message with the updated bill total including tip
     """
+    # Get session context and validate
+    session_id = get_current_session()
+    if session_id is None:
+        logger.warning("add_tip called without session context")
+        return create_tool_error(
+            PaymentError.INVALID_SESSION,
+            "No active session. Please refresh and try again."
+        )
+    
     order_history = get_order_history()
     
     if not order_history['items']:
@@ -1033,7 +1069,7 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
     tip_amount = round(tip_amount, 2)
     
     # Update order state with tip
-    update_order_state(get_current_session(), get_global_store(), "add_tip", {"amount": tip_amount, "percentage": tip_percentage})
+    update_order_state(session_id, get_global_store(), "add_tip", {"amount": tip_amount, "percentage": tip_percentage})
     
     # Calculate the new total
     subtotal = order_history['total_cost']

@@ -23,7 +23,6 @@ def test_maya_memvid_full():
     api_keys = None
     llm = None
     memvid_retriever = None
-    rag_documents = None
     
     try:
         # Setup logging
@@ -63,7 +62,8 @@ def test_maya_memvid_full():
             tools = get_all_tools()
             print(f"✅ Loaded {len(tools)} LLM tools")
         except Exception as e:
-            logger.error(f"Tools loading failed: {e}", exc_info=True) if logger else None
+            if logger:
+                logger.error(f"Tools loading failed: {e}", exc_info=True)
             raise AssertionError(f"Failed to load LLM tools: {e}") from e
         
         # Initialize LLM
@@ -72,7 +72,8 @@ def test_maya_memvid_full():
             llm = initialize_llm(api_key=api_keys["google_api_key"], tools=tools)
             print("✅ LLM client initialized")
         except Exception as e:
-            logger.error(f"LLM initialization failed: {e}", exc_info=True) if logger else None
+            if logger:
+                logger.error(f"LLM initialization failed: {e}", exc_info=True)
             if "api" in str(e).lower() or "auth" in str(e).lower() or "key" in str(e).lower():
                 pytest.skip(f"LLM API issue - skipping test: {e}")
             raise AssertionError(f"Failed to initialize LLM: {e}") from e
@@ -80,10 +81,11 @@ def test_maya_memvid_full():
         # Initialize Memvid store
         print("📹 Initializing Memvid store...")
         try:
-            memvid_retriever, rag_documents = initialize_memvid_store()
-            print(f"✅ Memvid store initialized with {len(rag_documents)} documents")
+            memvid_retriever, _ = initialize_memvid_store()
+            print("✅ Memvid store initialized")
         except Exception as e:
-            logger.error(f"Memvid initialization failed: {e}", exc_info=True) if logger else None
+            if logger:
+                logger.error(f"Memvid initialization failed: {e}", exc_info=True)
             raise AssertionError(f"Failed to initialize Memvid store: {e}") from e
         
         print("✅ All components initialized with Memvid RAG")
@@ -184,7 +186,8 @@ def test_maya_memvid_full():
         stats = memvid_retriever.get_stats()
         print(f"📹 Memvid stats: {stats}")
     except Exception as e:
-        logger.error(f"Failed to get Memvid stats: {e}", exc_info=True) if logger else None
+        if logger:
+            logger.error(f"Failed to get Memvid stats: {e}", exc_info=True)
         pytest.fail(f"memvid_retriever.get_stats() failed: {e}")
     
     # Best-effort cleanup of resources
@@ -222,15 +225,6 @@ def test_maya_memvid_full():
                     logger.removeHandler(handler)
         except Exception as cleanup_error:
             print(f"⚠️  Warning: Logger cleanup failed: {cleanup_error}")
-    
-    # Clear large objects to help with memory cleanup
-    if rag_documents is not None:
-        try:
-            if hasattr(rag_documents, 'clear'):
-                rag_documents.clear()
-            del rag_documents
-        except Exception as cleanup_error:
-            print(f"⚠️  Warning: RAG documents cleanup failed: {cleanup_error}")
     
     # Reset global state to prevent interference with other tests
     try:
