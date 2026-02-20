@@ -7,8 +7,8 @@ This document provides a detailed analysis of performance bottlenecks, latency i
 ## 1. Synchronous LLM and Sequential TTS Generation (Highest Impact)
 
 **Location:** 
-- [src/conversation/processor.py](file:///Users/pretermodernist/MayaMCP/src/conversation/processor.py) inside [process_order()](file:///Users/pretermodernist/MayaMCP/src/conversation/processor.py#83-481) (Line 280): `ai_response = llm.invoke(messages)`
-- [src/ui/handlers.py](file:///Users/pretermodernist/MayaMCP/src/ui/handlers.py) inside [handle_gradio_input()](file:///Users/pretermodernist/MayaMCP/src/ui/handlers.py#71-230) (Line 195): `audio_data = get_voice_audio(response_text, ...)`
+- `src/conversation/processor.py` inside `process_order()` (Line 280): `ai_response = llm.invoke(messages)`
+- `src/ui/handlers.py` inside `handle_gradio_input()` (Line 195): `audio_data = get_voice_audio(response_text, ...)`
 
 **Nature of Bottleneck:** 
 Synchronous blocking operations. The application waits for the large language model (LLM) to completely generate the full text response before returning to [handle_gradio_input](file:///Users/pretermodernist/MayaMCP/src/ui/handlers.py#71-230). Only after the text is fully available does it pass the entire response to Cartesia TTS. 

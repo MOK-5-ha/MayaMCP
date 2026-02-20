@@ -314,40 +314,37 @@ def process_order(
                 should_use_rag = phase_manager.should_use_rag(user_input_text)
                 
                 # If this appears to be casual conversation and RAG is available, try enhancing with RAG
-                if should_use_rag and api_key is not None:
+                if should_use_rag and api_key:
                     # Early validation of RAG components before any heavy processing/try
                     if rag_retriever is None or memvid_rag_pipeline is None:
                         logger.debug("Skipping RAG enhancement: required components not initialized/available")
                     else:
+                        logger.info("Enhancing response with Memvid RAG for casual conversation")
                         try:
-                            logger.info("Enhancing response with Memvid RAG for casual conversation")
-                            try:
-                                rag_response = memvid_rag_pipeline(
-                                    query_text=user_input_text,
-                                    memvid_retriever=rag_retriever,
-                                    api_key=api_key
-                                )
-                            except Exception as memvid_error:
-                                logger.warning(f"Memvid RAG failed: {memvid_error}")
-                                rag_response = None
+                            rag_response = memvid_rag_pipeline(
+                                query_text=user_input_text,
+                                memvid_retriever=rag_retriever,
+                                api_key=api_key
+                            )
+                        except Exception as memvid_error:
+                            logger.warning(f"Memvid RAG failed: {memvid_error}")
+                            rag_response = None
 
-                            # Safely use rag_response only if it's a sized, non-empty value
-                            has_content = False
-                            if rag_response is not None:
-                                try:
-                                    if isinstance(rag_response, (str, list, tuple, dict)) or hasattr(rag_response, "__len__"):
-                                        has_content = len(rag_response) > 0
-                                except Exception:
-                                    has_content = False
-                            if has_content:
-                                # Log original response for comparison
-                                logger.info(f"Original response: {agent_response_text}")
-                                logger.info(f"RAG-enhanced response: {rag_response}")
-                                # Use the RAG-enhanced response
-                                agent_response_text = rag_response
-                        except Exception as rag_error:
-                            # If RAG fails, just use the original response
-                            logger.warning(f"RAG enhancement failed: {rag_error}. Using original response.")
+                        # Safely use rag_response only if it's a sized, non-empty value
+                        has_content = False
+                        if rag_response is not None:
+                            try:
+                                if isinstance(rag_response, (str, list, tuple, dict)) or hasattr(rag_response, "__len__"):
+                                    has_content = len(rag_response) > 0
+                            except Exception:
+                                has_content = False
+                        
+                        if has_content:
+                            # Log original response for comparison
+                            logger.info(f"Original response: {agent_response_text}")
+                            logger.info(f"RAG-enhanced response: {rag_response}")
+                            # Use the RAG-enhanced response
+                            agent_response_text = rag_response
 
                 break 
                 

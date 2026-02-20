@@ -30,7 +30,7 @@ qrcode[pil]
 opencv-python>=4.11.0
 
 # Numpy is required by Memvid
-numpy>=1.24.0,<3.0.0
+numpy>=2.0.0,<2.3.0
 
 # Security
 llm-guard>=0.3.0

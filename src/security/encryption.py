@@ -69,8 +69,12 @@ class EncryptionManager:
                         raise ValueError(f"Salt file corrupted: expected 16 bytes, got {len(salt)}")
             else:
                 salt = os.urandom(16)
-                with open(salt_file, "wb") as f:
-                    f.write(salt)
+                # Create file with restrictive permissions (owner read/write only)
+                fd = os.open(salt_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                try:
+                    os.write(fd, salt)
+                finally:
+                    os.close(fd)
         except Exception as e:
             logger.error(f"Failed to read/write salt file '{salt_file}': {e}")
             raise RuntimeError(
