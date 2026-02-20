@@ -25,7 +25,7 @@ I improved the security scanner to work even if the heavy `llm-guard` dependency
 - **File**: `src/security/scanner.py`
 - **What it does**: Adds a regex-based fallback scanner that catches common prompt injection patterns (e.g., "Ignore previous instructions", "System prompt") when the main scanner is unavailable.
 
-## verification Results
+## Verification Results
 
 I created and ran a test suite `tests/security/test_security.py` to verify these measures.
 

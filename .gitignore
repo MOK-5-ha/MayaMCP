@@ -88,6 +88,7 @@ chat_logs/
 cascade_chat_logs/
 
 # MayaMCP specific files
+.maya_salt
 maya_output.log
 maya_memvid_output.log
 *.log

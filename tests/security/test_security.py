@@ -37,13 +37,11 @@ def tearDownModule():
 
 class TestSecurityHardening(unittest.TestCase):
 
-    def setUp(self):
-        # Ensure a clean singleton state for each test
-        EncryptionManager._instance = None
-
     def tearDown(self):
         # Reset singleton to prevent state leakage to other tests
         EncryptionManager._instance = None
+        # Restore the module-level test key to ensure test isolation
+        os.environ["MAYA_MASTER_KEY"] = TEST_MASTER_KEY
 
     def test_encryption_roundtrip(self):
         """Verify that data can be encrypted and decrypted correctly."""

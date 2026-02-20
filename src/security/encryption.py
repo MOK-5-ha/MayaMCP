@@ -58,9 +58,22 @@ class EncryptionManager:
 
     def _derive_key(self, passphrase: str) -> bytes:
         """Derive a 32-byte Fernet key from a passphrase."""
-        # Note: In a production app, the salt should be unique per installation
-        # and stored securely. For MayaMCP, we use a fixed application salt.
-        salt = b'mayamcp_default_salt_2026' 
+        # Generate and persist a unique salt per installation
+        salt_file = os.getenv("MAYA_SALT_FILE", ".maya_salt")
+        try:
+            if os.path.exists(salt_file):
+                with open(salt_file, "rb") as f:
+                    salt = f.read()
+            else:
+                salt = os.urandom(16)
+                with open(salt_file, "wb") as f:
+                    f.write(salt)
+                # Secure the salt file
+                os.chmod(salt_file, 0o600)
+        except Exception as e:
+            logger.warning(f"Failed to persist salt file, falling back to default: {e}")
+            salt = b'mayamcp_default_salt_2026'
+            
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,

@@ -793,28 +793,30 @@ def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     Returns:
         Copy of the API key state dictionary with decrypted keys.
     """
-    data = _get_session_data(session_id, store)
-    state = data['api_keys'].copy()
-    
-    # Decrypt keys if present
+    lock = get_session_lock(session_id)
     encryption_manager = get_encryption_manager()
     
-    # We catch broad exceptions from decryption but log specific details
-    # to avoid crashing on corrupted or key-mismatched data.
-    if state.get('gemini_key'):
-        try:
-            state['gemini_key'] = encryption_manager.decrypt(state['gemini_key'])
-        except Exception as e:
-            logger.warning(f"Failed to decrypt gemini_key for {session_id}: {str(e)}")
-            state['gemini_key'] = None
-             
-    if state.get('cartesia_key'):
-        try:
-            state['cartesia_key'] = encryption_manager.decrypt(state['cartesia_key'])
-        except Exception as e:
-            logger.warning(f"Failed to decrypt cartesia_key for {session_id}: {str(e)}")
-            state['cartesia_key'] = None
-             
+    with lock:
+        data = _get_session_data(session_id, store)
+        state = data['api_keys'].copy()
+        
+        # Decrypt keys if present
+        # We catch broad exceptions from decryption but log specific details
+        # to avoid crashing on corrupted or key-mismatched data.
+        if state.get('gemini_key'):
+            try:
+                state['gemini_key'] = encryption_manager.decrypt(state['gemini_key'])
+            except Exception as e:
+                logger.warning(f"Failed to decrypt gemini_key for {session_id}: {str(e)}")
+                state['gemini_key'] = None
+                 
+        if state.get('cartesia_key'):
+            try:
+                state['cartesia_key'] = encryption_manager.decrypt(state['cartesia_key'])
+            except Exception as e:
+                logger.warning(f"Failed to decrypt cartesia_key for {session_id}: {str(e)}")
+                state['cartesia_key'] = None
+                 
     return state
 
 
