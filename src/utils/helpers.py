@@ -54,11 +54,11 @@ def detect_order_inquiry(user_input: str) -> Dict[str, any]:
         for pattern in patterns:
             pattern_words.update(pattern.split())
         
-        # Count matching words (pre-compute split operation)
-        user_words = user_text.split()
-        matching_words = sum(1 for word in pattern_words if word in user_words)
+        # Count matching words (pre-compute split operation with set for O(1) lookups)
+        user_words_set = set(user_text.split())
+        matching_words = sum(1 for word in pattern_words if word in user_words_set)
         if matching_words > 0:
-            score = matching_words / len(user_words)
+            score = matching_words / len(user_words_set)
             if score > highest_score:
                 highest_score = score
                 matched_intent = intent

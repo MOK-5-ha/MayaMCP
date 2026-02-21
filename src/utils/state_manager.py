@@ -10,6 +10,17 @@ from ..security.encryption import get_encryption_manager
 
 logger = get_logger(__name__)
 
+# Import batch state cache for performance optimization
+try:
+    from .batch_state import get_current_batch_cache, is_in_batch_context
+except ImportError:
+    # Fallback if batch_state module is not available
+    def get_current_batch_cache():
+        return None
+    
+    def is_in_batch_context():
+        return False
+
 
 # =============================================================================
 # Payment State Types and Validation
@@ -320,6 +331,13 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     Returns:
         The session data dictionary.
     """
+    # Check if we are in a batch context and can use cached data
+    if is_in_batch_context():
+        batch_cache = get_current_batch_cache()
+        if batch_cache and batch_cache.session_id == session_id and batch_cache._cached_data is not None:
+            logger.debug(f"Using cached session data for {session_id}")
+            return batch_cache._cached_data
+
     if session_id not in store:
         logger.info(f"Initializing new session state for {session_id}")
         store[session_id] = _deep_copy_defaults()
@@ -371,6 +389,17 @@ def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, A
         store: Mutable mapping to update.
         data: The full session data object.
     """
+    # Check if we are in a batch context to avoid immediate remote writes
+    if is_in_batch_context():
+        batch_cache = get_current_batch_cache()
+        if batch_cache and batch_cache.session_id == session_id:
+            # Update the batch cache instead of immediate write
+            batch_cache._cached_data = data
+            batch_cache._dirty = True
+            logger.debug(f"Saved session data to batch cache for {session_id}")
+            return
+    
+    # Fall back to immediate write if not in batch context
     store[session_id] = data
 
 

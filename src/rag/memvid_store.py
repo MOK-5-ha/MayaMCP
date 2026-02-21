@@ -113,7 +113,8 @@ class FallbackRetriever:
         
         for doc in self.documents:
             # Simple scoring based on keyword matches
-            score = sum(1 for word in query_words if word in doc.lower())
+            doc_lower = doc.lower()  # Pre-compute lowercase once per document
+            score = sum(1 for word in query_words if word in doc_lower)
             if score > 0:
                 scored_docs.append((score, doc))
         
