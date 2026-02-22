@@ -226,8 +226,8 @@ The streaming implementation delivers significant user experience improvements:
 
 ### Latency Reduction
 - **Before**: 3-8 seconds total wait time (LLM + TTS)
-- **After**: Near-instant text display, audio starts within 1-2 seconds
-- **Improvement**: ~70% reduction in perceived response time
+- **After**: Text <1 second, audio starts 1-2 seconds
+- **Improvement**: ~67-75% reduction in perceived response time
 
 ### User Experience
 - **Real-time Feedback**: See Maya's thoughts as they form
@@ -241,7 +241,8 @@ The streaming implementation delivers significant user experience improvements:
 - **Security Maintained**: All input/output scanning preserved
 
 ### Cartesia Free Tier Considerations
-Streaming improves responsiveness but doesn't extend the ~15 minute monthly free tier limit. The same character count applies whether streaming or traditional.
+
+See the [Cartesia Free Tier Limitations](#cartesia-free-tier-limitations) section above for details about streaming impact on free tier usage.
 
 #### Ordering
 

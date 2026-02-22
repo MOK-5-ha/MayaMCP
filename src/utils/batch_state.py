@@ -81,6 +81,40 @@ class BatchStateCache:
         with self._lock:
             return self._cached_data.copy() if self._cached_data is not None else None
 
+    def set_cached_data(self, data: Dict[str, Any], dirty: bool = True) -> None:
+        """
+        Set the cached data and optionally mark as dirty.
+
+        Args:
+            data: The session data to cache
+            dirty: Whether to mark the cache as having unsaved changes
+        """
+        with self._lock:
+            self._cached_data = data.copy()
+            self._dirty = dirty
+            logger.debug(f"Set cached data for {self.session_id}, dirty={dirty}")
+
+    def set_dirty(self, dirty: bool = True) -> None:
+        """
+        Mark the cache as having unsaved changes.
+
+        Args:
+            dirty: Whether the cache has unsaved changes
+        """
+        with self._lock:
+            self._dirty = dirty
+            logger.debug(f"Marked cache for {self.session_id} as dirty={dirty}")
+
+    def is_dirty(self) -> bool:
+        """
+        Check if the cache has unsaved changes.
+
+        Returns:
+            True if cache has unsaved changes, False otherwise
+        """
+        with self._lock:
+            return self._dirty
+
     def get_section(self, section_name: str) -> Dict[str, Any]:
         """
         Get a specific section of session data.

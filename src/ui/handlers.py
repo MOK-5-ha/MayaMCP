@@ -6,7 +6,6 @@ import gradio as gr
 from ..config.logging_config import get_logger
 from ..conversation.processor import process_order, process_order_stream
 from ..voice.tts import get_voice_audio
-from ..voice.streaming_tts import create_pipelined_tts_generator
 from ..llm.session_registry import get_session_llm, get_session_tts
 from ..utils.state_manager import (
     reset_session_state,
@@ -287,10 +286,15 @@ def handle_gradio_input_stream(
 
     session_id = request.session_hash if request else "default"
 
+    # Get API keys
+    api_key_state = get_api_key_state(session_id, app_state)
+    gemini_key = api_key_state['gemini_key']
+    cartesia_key = api_key_state.get('cartesia_key')
+
     # Get session-specific clients
     try:
-        llm = get_session_llm(session_id, app_state)
-        cartesia_client = get_session_tts(session_id, app_state)
+        llm = get_session_llm(session_id, gemini_key, tools)
+        cartesia_client = get_session_tts(session_id, cartesia_key)
     except Exception as e:
         logger.error(f"Failed to get session clients: {e}")
         yield {
@@ -303,119 +307,150 @@ def handle_gradio_input_stream(
 
     # Get current payment state for overlay
     payment_state = get_payment_state(session_id, app_state)
-    current_tab = payment_state['tab_total']
-    current_balance = payment_state['balance']
-    current_tip_percentage = payment_state['tip_percentage']
-    current_tip_amount = payment_state['tip_amount']
+    new_tab = payment_state['tab_total']
+    new_balance = payment_state['balance']
+    new_tip_percentage = payment_state['tip_percentage']
+    new_tip_amount = payment_state['tip_amount']
 
     # Start streaming processing
     try:
-        response_stream = process_order_stream(
-            user_input, session_history_state, llm,
-            rag_retriever, rag_api_key, session_id, app_state
-        )
-        
-        accumulated_text = ""
-        updated_history = session_history_state[:]
-        
-        for event in response_stream:
-            if event['type'] == 'text_chunk':
-                # Yield text chunk for immediate display
-                accumulated_text += event['content']
-                yield {
-                    'type': 'text_chunk',
-                    'content': event['content'],
-                    'partial': event['partial']
-                }
+        # Use the user's gemini key for RAG if no dedicated RAG key was provided
+        effective_rag_key = rag_api_key or gemini_key
+
+        # Start streaming processing
+        try:
+            response_stream = process_order_stream(
+                user_input, session_history_state, llm,
+                rag_retriever, effective_rag_key, session_id, app_state
+            )
+            
+            accumulated_text = ""
+            updated_history = session_history_state[:]
+            
+            for event in response_stream:
+                if event['type'] == 'text_chunk':
+                    # Yield text chunk for immediate display
+                    accumulated_text += event['content']
+                    yield {
+                        'type': 'text_chunk',
+                        'content': event['content'],
+                        'partial': event['partial']
+                    }
                 
-            elif event['type'] == 'sentence':
-                # Generate audio for complete sentence
-                if cartesia_client:
-                    try:
-                        audio_data = get_voice_audio(
-                            event['content'], cartesia_client
-                        )
-                        if audio_data:
-                            yield {
-                                'type': 'audio_chunk',
-                                'content': audio_data,
-                                'sentence': event['content']
-                            }
-                    except Exception as tts_err:
-                        logger.warning(f"TTS generation failed: {tts_err}")
-                        
-            elif event['type'] == 'complete':
-                # Final response ready
-                final_text = event['content']
-                emotion_state = event['emotion_state']
-                
-                # Update history
-                updated_history.append({'role': 'user', 'content': user_input})
-                updated_history.append({'role': 'assistant', 'content': final_text})
+                elif event['type'] == 'sentence':
+                    # Generate audio for complete sentence
+                    if cartesia_client:
+                        try:
+                            audio_data = get_voice_audio(
+                                event['content'], cartesia_client
+                            )
+                            if audio_data:
+                                yield {
+                                    'type': 'audio_chunk',
+                                    'content': audio_data,
+                                    'sentence': event['content']
+                                }
+                        except Exception as tts_err:
+                            logger.warning(f"TTS generation failed: {tts_err}")
+                            
+                elif event['type'] == 'complete':
+                    # Final response ready
+                    final_text = event['content']
+                    emotion_state = event['emotion_state']
+                    
+                    # Update history
+                    updated_history.append({'role': 'user', 'content': user_input})
+                    updated_history.append({'role': 'assistant', 'content': final_text})
                 
                 # Get final payment state
-                final_payment_state = get_payment_state(session_id, app_state)
-                new_tab = final_payment_state['tab_total']
-                new_balance = final_payment_state['balance']
-                new_tip_percentage = final_payment_state['tip_percentage']
-                new_tip_amount = final_payment_state['tip_amount']
-                
-                # Resolve final avatar
-                final_avatar_path = resolve_avatar_path(
-                    emotion_state, avatar_path, logger
-                )
-                
-                # Create overlay HTML
-                overlay_html = create_tab_overlay_html(
-                    tab_amount=new_tab,
-                    balance=new_balance,
-                    prev_tab=current_tab,
-                    prev_balance=current_balance,
-                    avatar_path=final_avatar_path,
+                    final_payment_state = get_payment_state(session_id, app_state)
+                    new_tab = final_payment_state['tab_total']
+                    new_balance = final_payment_state['balance']
+                    new_tip_percentage = final_payment_state['tip_percentage']
+                    new_tip_amount = final_payment_state['tip_amount']
+                    
+                    # Resolve final avatar
+                    final_avatar_path = resolve_avatar_path(
+                        emotion_state, avatar_path, logger
+                    )
+                    
+                    # Create overlay HTML
+                    overlay_html = create_tab_overlay_html(
+                        tab_amount=new_tab,
+                        balance=new_balance,
+                        prev_tab=current_tab,
+                        prev_balance=current_balance,
+                        avatar_path=final_avatar_path,
                     tip_percentage=new_tip_percentage,
-                    tip_amount=new_tip_amount
-                )
-                
-                # Yield completion event
-                yield {
-                    'type': 'complete',
-                    'content': final_text,
-                    'history': updated_history,
-                    'order': get_current_order_state(session_id, app_state),
+                        tip_amount=new_tip_amount
+                    )
+                    
+                    # Yield completion event
+                    yield {
+                        'type': 'complete',
+                        'content': final_text,
+                        'history': updated_history,
+                        'order': get_current_order_state(session_id, app_state),
                     'overlay_html': overlay_html,
-                    'emotion_state': emotion_state,
-                    'avatar_path': final_avatar_path
-                }
-                
-            elif event['type'] == 'error':
-                # Handle errors
-                error_text = event['content']
-                emotion_state = event.get('emotion_state', 'neutral')
-                
-                updated_history.append({'role': 'user', 'content': user_input})
-                updated_history.append({'role': 'assistant', 'content': error_text})
-                
-                yield {
-                    'type': 'error',
-                    'content': error_text,
-                    'history': updated_history,
-                    'emotion_state': emotion_state
-                }
+                        'emotion_state': emotion_state,
+                        'avatar_path': final_avatar_path
+                    }
+                    
+                elif event['type'] == 'error':
+                    # Handle errors
+                    error_text = event['content']
+                    emotion_state = event.get('emotion_state', 'neutral')
+                    
+                    updated_history.append({'role': 'user', 'content': user_input})
+                    updated_history.append({'role': 'assistant', 'content': error_text})
+                    
+                    yield {
+                        'type': 'error',
+                        'content': error_text,
+                        'history': updated_history,
+                        'emotion_state': emotion_state
+                    }
+
+        except Exception as inner_e:
+            logger.exception(f"Error in streaming processing: {inner_e}")
+            error_message = "I'm sorry, an error occurred during streaming. Please try again."
+            
+            error_history = session_history_state[:]
+            error_history.append({'role': 'user', 'content': user_input})
+            error_history.append({'role': 'assistant', 'content': error_message})
+            
+            yield {
+                'type': 'error',
+                'content': error_message,
+                'history': error_history,
+                'emotion_state': 'neutral'
+            }
 
     except Exception as e:
-        logger.exception(f"Critical error in handle_gradio_input_stream: {e}")
-        error_message = "I'm sorry, an unexpected error occurred. Please try again."
+        if _is_quota_error(e):
+            quota_error_html = create_quota_error_html()
+            error_message = "It looks like your API key has hit its rate limit. Please check the popup for details."
+        else:
+            logger.exception(f"Critical error in handle_gradio_input_stream: {e}")
+            error_message = "I'm sorry, an unexpected error occurred. Please try again."
+            quota_error_html = None
         
         error_history = session_history_state[:]
         error_history.append({'role': 'user', 'content': user_input})
         error_history.append({'role': 'assistant', 'content': error_message})
         
-        yield {
+        error_payload = {
             'type': 'error',
             'content': error_message,
             'history': error_history,
             'emotion_state': 'neutral'
         }
+        
+        # Add quota error HTML if applicable
+        if quota_error_html:
+            error_payload['quota_error_html'] = quota_error_html
+        
+        yield error_payload
 
 
 def handle_gradio_streaming_input(

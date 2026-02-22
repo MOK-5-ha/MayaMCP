@@ -19,7 +19,22 @@ class SentenceBuffer:
 
     def __init__(self):
         self.buffer = ""
-        self.sentence_endings = re.compile(r'[.!?]+')
+        # More robust sentence boundary regex that avoids splitting on:
+        # - Common abbreviations (Mr., Mrs., Dr., Prof., etc.)
+        # - Decimal numbers (3.14, 0.5, etc.)
+        # - URLs and emails (www.example.com, user@domain.com)
+        # - Time formats (3:30 PM, etc.)
+        self.sentence_endings = re.compile(
+            r'''
+            (?<!\w\.\w)          # Not after abbreviation like "Mr." or "Dr."
+            (?<!\d\.\d)          # Not after decimal like "3.14"
+            (?<!\w@\w)           # Not after email like "user@domain"
+            (?<!\w://\w)         # Not after URL like "http://"
+            [.!?]+               # One or more sentence-ending punctuation
+            (?=\s|$)             # Followed by whitespace or end of string
+            ''', 
+            re.VERBOSE | re.IGNORECASE
+        )
 
     def add_text(self, text_chunk: str) -> List[str]:
         """
@@ -58,11 +73,9 @@ class SentenceBuffer:
         Returns:
             List of remaining text chunks
         """
-        if self.buffer.strip():
-            remaining = self.buffer.strip()
-            self.buffer = ""
-            return [remaining] if remaining else []
-        return []
+        remaining = self.buffer.strip()
+        self.buffer = ""
+        return [remaining] if remaining else []
 
     def get_partial(self) -> str:
         """Get current partial text (incomplete sentence)."""
@@ -82,7 +95,7 @@ def create_streaming_response_generator(
 
     Yields:
         Dict with keys:
-        - 'type': 'text_chunk', 'sentence', or 'complete'
+        - 'type': 'text_chunk', 'sentence', 'complete', or 'error'
         - 'content': The text content
         - 'partial': Current partial text (for text_chunk type)
     """
@@ -131,7 +144,7 @@ def create_streaming_response_generator(
         }
 
     except Exception as e:
-        logger.error(f"Error in streaming response generator: {e}")
+        logger.error("Error in streaming response generator: %s", e, exc_info=True)
         # Yield error state
         yield {
             'type': 'error',

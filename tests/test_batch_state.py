@@ -184,11 +184,17 @@ class TestBatchStateCommits:
         """Test that context manager clears cache and propagates exceptions."""
         store = Mock()
         
+        # Mock the store's __setitem__ to track if flush writes to store
+        store.__setitem__ = Mock()
+        
         with pytest.raises(ValueError):
             with batch_state_commits("test_session", store) as cache:
                 # Should be in context inside the block
                 assert is_in_batch_context() is True
                 assert get_current_batch_cache() is cache
+                
+                # Make some changes to ensure there's something to flush
+                cache.update_session_data({"test_key": "test_value"})
                 
                 # Raise an exception to test cleanup
                 raise ValueError("Test exception")
@@ -196,6 +202,11 @@ class TestBatchStateCommits:
         # Context should be cleared after exception
         assert is_in_batch_context() is False
         assert get_current_batch_cache() is None
+        
+        # Flush should still be called even on exception when cache is dirty
+        store.__setitem__.assert_called_once_with(
+            "test_session", cache._cached_data
+        )
 
 
 if __name__ == "__main__":

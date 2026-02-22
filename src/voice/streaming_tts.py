@@ -15,7 +15,8 @@ def generate_streaming_audio(
     sentence_generator: Generator[str, None, None],
     cartesia_client,
     voice_id: Optional[str] = None,
-    on_audio_ready: Optional[Callable[[bytes], None]] = None
+    on_audio_ready: Optional[Callable[[bytes], None]] = None,
+    heartbeat_interval_seconds: float = 1.0
 ) -> Generator[dict, None, None]:
     """
     Generate streaming audio from sentence generator.
@@ -24,18 +25,28 @@ def generate_streaming_audio(
         sentence_generator: Generator yielding complete sentences
         cartesia_client: Initialized Cartesia client
         voice_id: Voice ID to use
-        on_audio_ready: Callback for when audio chunks are ready
+        on_audio_ready: Optional callback for when audio chunks are ready. 
+                        NOTE: This callback is invoked from a background worker thread and must be thread-safe.
+                        Callers should marshal to the main/UI thread for GUI updates and use thread-safe
+                        mechanisms for shared state.
+        heartbeat_interval_seconds: Interval between heartbeat messages (default: 1.0s)
         
     Yields:
         Dict with audio generation status and data
     """
     audio_queue = queue.Queue()
     generation_complete = threading.Event()
+    stop_requested = threading.Event()
     
     def audio_worker():
         """Background thread to generate audio from sentences."""
         try:
             for sentence in sentence_generator:
+                # Check for cancellation before processing each sentence
+                if stop_requested.is_set():
+                    logger.debug("Audio worker stopping due to cancellation request")
+                    break
+                    
                 if not sentence or not sentence.strip():
                     continue
                     
@@ -43,6 +54,11 @@ def generate_streaming_audio(
                 
                 # Generate audio for this sentence
                 audio_data = get_voice_audio(sentence, cartesia_client, voice_id)
+                
+                # Check for cancellation immediately after blocking TTS call
+                if stop_requested.is_set():
+                    logger.debug("Audio worker stopping due to cancellation request after TTS call")
+                    break
                 
                 if audio_data:
                     audio_chunk = {
@@ -64,8 +80,12 @@ def generate_streaming_audio(
                         'sentence': sentence
                     })
             
-            # Signal completion
-            audio_queue.put({'type': 'generation_complete', 'content': None})
+            # Signal completion (unless stopped early)
+            if not stop_requested.is_set():
+                audio_queue.put({'type': 'generation_complete', 'content': None})
+            else:
+                # Signal cancellation
+                audio_queue.put({'type': 'generation_cancelled', 'content': None})
             
         except Exception as e:
             logger.error(f"Error in audio worker thread: {e}")
@@ -83,22 +103,31 @@ def generate_streaming_audio(
     
     # Yield results as they become available
     try:
+        last_heartbeat_time = time.time()
+        
         while not generation_complete.is_set() or not audio_queue.empty():
             try:
                 # Wait for audio chunk with timeout
                 chunk = audio_queue.get(timeout=0.1)
                 yield chunk
                 
-                if chunk['type'] == 'generation_complete':
+                if chunk['type'] in ('generation_complete', 'generation_cancelled'):
                     break
                     
             except queue.Empty:
-                # No chunk available, yield heartbeat to keep connection alive
-                yield {'type': 'heartbeat', 'content': None}
+                # Check if enough time has passed to emit a heartbeat
+                current_time = time.time()
+                if current_time - last_heartbeat_time >= heartbeat_interval_seconds:
+                    yield {'type': 'heartbeat', 'content': None}
+                    last_heartbeat_time = current_time
+                # Otherwise, just continue waiting without yielding
                 
     except Exception as e:
         logger.error(f"Error in streaming audio generator: {e}")
         yield {'type': 'generator_error', 'content': str(e)}
+    finally:
+        # Signal worker to stop on cleanup
+        stop_requested.set()
     
     # Wait for worker thread to complete
     worker_thread.join(timeout=5.0)

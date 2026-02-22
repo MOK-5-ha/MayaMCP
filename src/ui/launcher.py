@@ -1,7 +1,7 @@
 """Gradio interface launcher."""
 
 import gradio as gr
-from typing import Optional, Callable, List, Dict, Any
+from typing import Optional, Callable, List, Dict, Any, MutableMapping
 from ..config.logging_config import get_logger
 from .components import setup_avatar, create_streaming_components, create_streaming_toggle
 from .tab_overlay import create_tab_overlay_html
@@ -199,12 +199,11 @@ def launch_bartender_interface(
 
         # Avatar state validation to ensure persistence
         avatar_state = gr.State(effective_avatar_path)
-        streaming_state = gr.State(True)
 
         # --- Chat Input Submission ---
         submit_inputs = [
             msg_input, history_state, tab_state, balance_state,
-            tip_percentage_state, tip_amount_state, avatar_state, streaming_state
+            tip_percentage_state, tip_amount_state, avatar_state, streaming_toggle
         ]
         submit_outputs = [
             msg_input, chatbot_display, history_state, order_state,
@@ -217,7 +216,9 @@ def launch_bartender_interface(
         def handle_input_wrapper(
             user_input: str, history: List[Dict[str, str]], 
             tab: float, balance: float, tip_pct: Optional[int], tip_amt: float,
-            avatar: str, streaming_enabled: bool, request: gr.Request
+            avatar: str, streaming_enabled: bool, request: gr.Request,
+            tools=None, rag_retriever=None, rag_api_key: Optional[str] = None,
+            app_state: Optional[MutableMapping] = None
         ):
             """Wrapper that chooses streaming or traditional handler based on toggle."""
             if handle_streaming_input_fn:
@@ -255,7 +256,8 @@ def launch_bartender_interface(
             chatbot_display, history_state, order_state, agent_audio_output,
             avatar_overlay, tab_state, balance_state, prev_tab_state,
             prev_balance_state, tip_percentage_state, tip_amount_state,
-            avatar_state
+            avatar_state, streaming_text_display, streaming_audio_player,
+            quota_error_display
         ]
         
         def clear_with_overlay(request: gr.Request):
@@ -281,7 +283,10 @@ def launch_bartender_interface(
                 DEFAULT_PAYMENT_STATE['balance'],
                 DEFAULT_PAYMENT_STATE['tip_percentage'],
                 DEFAULT_PAYMENT_STATE['tip_amount'],
-                effective_avatar_path
+                effective_avatar_path,
+                "",  # streaming_text_display (empty)
+                None,  # streaming_audio_player (empty)
+                ""   # quota_error_display (empty)
             )
         
         clear_btn.click(clear_with_overlay, [], clear_outputs)

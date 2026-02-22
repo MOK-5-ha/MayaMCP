@@ -394,8 +394,7 @@ def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, A
         batch_cache = get_current_batch_cache()
         if batch_cache and batch_cache.session_id == session_id:
             # Update the batch cache instead of immediate write
-            batch_cache._cached_data = data
-            batch_cache._dirty = True
+            batch_cache.set_cached_data(data, dirty=True)
             logger.debug(f"Saved session data to batch cache for {session_id}")
             return
     

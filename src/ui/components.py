@@ -3,7 +3,7 @@
 import requests
 import io
 from PIL import Image
-from typing import Optional
+from typing import Optional, Tuple
 import gradio as gr
 from ..config.logging_config import get_logger
 
@@ -57,7 +57,8 @@ def setup_avatar(
         return "assets/bartender_avatar.jpg"
 
 
-def create_streaming_components():
+def create_streaming_components(
+) -> Tuple[gr.Chatbot, gr.Audio, gr.Textbox, gr.Textbox, gr.Audio]:
     """
     Create Gradio components for streaming interface.
     

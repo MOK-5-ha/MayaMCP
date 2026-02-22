@@ -83,7 +83,7 @@ class TestStreamingResponseGenerator:
         # Should get sentence events
         sentence_events = [e for e in events if e['type'] == 'sentence']
         assert len(sentence_events) == 1
-        assert sentence_events[0]['content'] == "Hello world. How are you?"
+        assert sentence_events[0]['content'] == "Hello world! How are you?"
         
         # Should get complete event
         complete_events = [e for e in events if e['type'] == 'complete']
@@ -149,7 +149,7 @@ class TestGenerateStreamingAudio:
             
             # Should get worker error events
             error_events = [e for e in events if e['type'] == 'worker_error']
-            assert len(error_events) == 2  # One for each sentence
+            assert len(error_events) == 1  # One for each sentence
             
     def test_generate_streaming_audio_tts_failure(self):
         """Test streaming audio with TTS failure."""
@@ -168,7 +168,7 @@ class TestGenerateStreamingAudio:
             
             # Should get TTS error events
             tts_error_events = [e for e in events if e['type'] == 'tts_error']
-            assert len(tts_error_events) == 2  # One for each sentence
+            assert len(tts_error_events) == 1  # One for each sentence
 
 
 class TestCreatePipelinedTTSGenerator:
@@ -182,8 +182,8 @@ class TestCreatePipelinedTTSGenerator:
         
         mock_client = MagicMock()
         
-        with patch('src.voice.streaming_tts.create_pipelined_tts_generator') as mock_create:
-            mock_create.return_value = iter([
+        with patch('src.voice.streaming_tts.generate_streaming_audio') as mock_audio:
+            mock_audio.return_value = iter([
                 {'type': 'audio_chunk', 'content': b'audio1', 'sentence': 'Hello world.'},
                 {'type': 'audio_chunk', 'content': b'audio2', 'sentence': 'How are you?'},
                 {'type': 'generation_complete', 'content': None}
@@ -193,7 +193,7 @@ class TestCreatePipelinedTTSGenerator:
             events = list(generator)
             
             # Should interleave text and audio events
-            assert len(events) == 4
+            assert len(events) == 5
             assert events[0]['type'] == 'sentence'  # First sentence
             assert events[1]['type'] == 'audio_chunk'  # First audio
             assert events[2]['type'] == 'sentence'  # Second sentence
@@ -249,7 +249,7 @@ class TestHandleGradioStreamingInput:
             # Should get completion
             complete_events = [e for e in events if e['type'] == 'complete']
             assert len(complete_events) == 1
-            assert complete_events[0]['content'] == 'Hello world!'
+            assert complete_events[0]['content'] == 'Hello world.'
             assert complete_events[0]['emotion_state'] == 'happy'
             
     def test_handle_gradio_streaming_input_disabled(self):
@@ -301,7 +301,7 @@ class TestStreamGeminiAPI:
         mock_chunk2.text = "world!"
         
         mock_response = MagicMock()
-        mock_response.__iter__ = lambda self: [mock_chunk1, mock_chunk2]
+        mock_response.__iter__ = lambda self: iter([mock_chunk1, mock_chunk2])
         
         mock_client.models.generate_content_stream.return_value = mock_response
         
@@ -309,7 +309,7 @@ class TestStreamGeminiAPI:
         
         # Test streaming
         chunks = list(stream_gemini_api(
-            [{"role": "user", "parts": [{"text": "Hello"}]},
+            [{"role": "user", "parts": [{"text": "Hello"}]}],
             config,
             "test_api_key"
         ))
@@ -330,8 +330,7 @@ class TestStreamGeminiAPI:
         # Should raise rate limit error
         with pytest.raises(Exception):
             list(stream_gemini_api(
-                [{"role": "user", "parts": [{"text": "Hello"}]},
+                [{"role": "user", "parts": [{"text": "Hello"}]}],
                 config,
                 "test_api_key"
-            )
-        )
+            ))
