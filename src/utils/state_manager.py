@@ -334,9 +334,9 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     # Check if we are in a batch context and can use cached data
     if is_in_batch_context():
         batch_cache = get_current_batch_cache()
-        if batch_cache and batch_cache.session_id == session_id and batch_cache._cached_data is not None:
+        if batch_cache and batch_cache.session_id == session_id and batch_cache.has_cached_data():
             logger.debug(f"Using cached session data for {session_id}")
-            return batch_cache._cached_data
+            return batch_cache.get_cached_data()
 
     if session_id not in store:
         logger.info(f"Initializing new session state for {session_id}")

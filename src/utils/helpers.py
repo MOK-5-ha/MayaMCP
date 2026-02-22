@@ -6,7 +6,7 @@ from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-def detect_order_inquiry(user_input: str) -> Dict[str, any]:
+def detect_order_inquiry(user_input: str) -> Dict[str, Any]:
     """
     Detect if the user is asking about their order or bill in conversational ways.
     
@@ -43,6 +43,11 @@ def detect_order_inquiry(user_input: str) -> Dict[str, any]:
     matched_intent = None
     highest_score = 0
     
+    # Pre-compute user words set once, handling whitespace-only input
+    user_words_set = set(user_text.strip().split())
+    if not user_words_set:
+        return {'intent': None, 'confidence': 0}
+    
     for intent, patterns in intent_patterns.items():
         for pattern in patterns:
             if pattern in user_text:
@@ -55,7 +60,6 @@ def detect_order_inquiry(user_input: str) -> Dict[str, any]:
             pattern_words.update(pattern.split())
         
         # Count matching words (pre-compute split operation with set for O(1) lookups)
-        user_words_set = set(user_text.split())
         matching_words = sum(1 for word in pattern_words if word in user_words_set)
         if matching_words > 0:
             score = matching_words / len(user_words_set)

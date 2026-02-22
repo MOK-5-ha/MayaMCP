@@ -142,91 +142,90 @@ def handle_gradio_input(
     emotion_state = None
     quota_error_html = ""
     try:
-            # Use batch state commits to optimize remote dictionary operations
-            with batch_state_commits(session_id, app_state):
-        
-                response_text, updated_history, updated_history_for_gradio, updated_order, _, emotion_state = process_order(
-                    user_input_text=user_input,
-                    current_session_history=session_history_state,
-                    llm=llm,
-                    rag_retriever=rag_retriever,
-                    api_key=effective_rag_key,
-                    session_id=session_id,
-                    app_state=app_state
-                )
-        
-                # Check for the quota-error sentinel returned by the processor
-                if response_text == QUOTA_ERROR_SENTINEL:
-                    quota_error_html = create_quota_error_html()
-                    response_text = "It looks like your API key has hit its rate limit. Please check the popup for details."
-                    updated_history = session_history_state[:]
-                    updated_history.append({'role': 'user', 'content': user_input})
-                    updated_history.append({'role': 'assistant', 'content': response_text})
-                    updated_history_for_gradio = updated_history
-        
-            except Exception as e:
-                if _is_quota_error(e):
-                    quota_error_html = create_quota_error_html()
-                    friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."
-                else:
-                    logger.exception(f"Error during process_order: {e}")
-                    friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
-        
-                safe_history = session_history_state[:]
-                safe_history.append({'role': 'user', 'content': user_input})
-                safe_history.append({'role': 'assistant', 'content': friendly})
-                overlay_html = create_tab_overlay_html(
-                    tab_amount=current_tab, balance=current_balance,
-                    prev_tab=current_tab, prev_balance=current_balance,
-                    avatar_path=avatar_path,
-                    tip_percentage=current_tip_percentage, tip_amount=current_tip_amount
-                )
-                return (
-                    "", safe_history, safe_history,
-                    get_current_order_state(session_id, app_state), None,
-                    overlay_html, current_tab, current_balance, current_tab, current_balance,
-                    current_tip_percentage, current_tip_amount, avatar_path, quota_error_html
-                )
-        
-            # --- Get Voice Audio ---
-            audio_data = None
-            if cartesia_client and response_text and response_text.strip():
-                try:
-                    audio_data = get_voice_audio(response_text, cartesia_client)
-                except Exception as tts_err:
-                    logger.warning(f"TTS generation failed: {tts_err}")
-                    audio_data = None
-                if audio_data is None:
-                    logger.warning("Failed to get audio data from get_voice_audio.")
-            else:
-                logger.info("No response text generated or TTS not available, skipping TTS.")
-        
-            # Get updated payment state for overlay
-            payment_state = get_payment_state(session_id, app_state)
-            new_tab = payment_state['tab_total']
-            new_balance = payment_state['balance']
-            new_tip_percentage = payment_state['tip_percentage']
-            new_tip_amount = payment_state['tip_amount']
-        
-            # Resolve Avatar based on Emotion State
-            final_avatar_path = resolve_avatar_path(emotion_state, avatar_path, logger)
-        
-            # Create overlay HTML with animation from previous to new values
-            overlay_html = create_tab_overlay_html(
-                tab_amount=new_tab,
-                balance=new_balance,
-                prev_tab=current_tab,
-                prev_balance=current_balance,
-                avatar_path=final_avatar_path,
-                tip_percentage=new_tip_percentage,
-                tip_amount=new_tip_amount
+        # Use batch state commits to optimize remote dictionary operations
+        with batch_state_commits(session_id, app_state):
+            response_text, updated_history, updated_history_for_gradio, updated_order, _, emotion_state = process_order(
+                user_input_text=user_input,
+                current_session_history=session_history_state,
+                llm=llm,
+                rag_retriever=rag_retriever,
+                api_key=effective_rag_key,
+                session_id=session_id,
+                app_state=app_state
             )
-        
-            return (
-                "", updated_history, updated_history_for_gradio, updated_order, audio_data,
-                overlay_html, new_tab, new_balance, current_tab, current_balance,
-                new_tip_percentage, new_tip_amount, final_avatar_path, quota_error_html
-            )
+
+            # Check for the quota-error sentinel returned by the processor
+            if response_text == QUOTA_ERROR_SENTINEL:
+                quota_error_html = create_quota_error_html()
+                response_text = "It looks like your API key has hit its rate limit. Please check the popup for details."
+                updated_history = session_history_state[:]
+                updated_history.append({'role': 'user', 'content': user_input})
+                updated_history.append({'role': 'assistant', 'content': response_text})
+                updated_history_for_gradio = updated_history
+
+        # --- Get Voice Audio ---
+        audio_data = None
+        if cartesia_client and response_text and response_text.strip():
+            try:
+                audio_data = get_voice_audio(response_text, cartesia_client)
+            except Exception as tts_err:
+                logger.warning(f"TTS generation failed: {tts_err}")
+                audio_data = None
+            if audio_data is None:
+                logger.warning("Failed to get audio data from get_voice_audio.")
+        else:
+            logger.info("No response text generated or TTS not available, skipping TTS.")
+
+        # Get updated payment state for overlay
+        payment_state = get_payment_state(session_id, app_state)
+        new_tab = payment_state['tab_total']
+        new_balance = payment_state['balance']
+        new_tip_percentage = payment_state['tip_percentage']
+        new_tip_amount = payment_state['tip_amount']
+
+        # Resolve Avatar based on Emotion State
+        final_avatar_path = resolve_avatar_path(emotion_state, avatar_path, logger)
+
+        # Create overlay HTML with animation from previous to new values
+        overlay_html = create_tab_overlay_html(
+            tab_amount=new_tab,
+            balance=new_balance,
+            prev_tab=current_tab,
+            prev_balance=current_balance,
+            avatar_path=final_avatar_path,
+            tip_percentage=new_tip_percentage,
+            tip_amount=new_tip_amount
+        )
+
+        return (
+            "", updated_history, updated_history_for_gradio, updated_order, audio_data,
+            overlay_html, new_tab, new_balance, current_tab, current_balance,
+            new_tip_percentage, new_tip_amount, final_avatar_path, quota_error_html
+        )
+
+    except Exception as e:
+        if _is_quota_error(e):
+            quota_error_html = create_quota_error_html()
+            friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."
+        else:
+            logger.exception(f"Error during process_order: {e}")
+            friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
+
+        safe_history = session_history_state[:]
+        safe_history.append({'role': 'user', 'content': user_input})
+        safe_history.append({'role': 'assistant', 'content': friendly})
+        overlay_html = create_tab_overlay_html(
+            tab_amount=current_tab, balance=current_balance,
+            prev_tab=current_tab, prev_balance=current_balance,
+            avatar_path=avatar_path,
+            tip_percentage=current_tip_percentage, tip_amount=current_tip_amount
+        )
+        return (
+            "", safe_history, safe_history,
+            get_current_order_state(session_id, app_state), None,
+            overlay_html, current_tab, current_balance, current_tab, current_balance,
+            current_tip_percentage, current_tip_amount, avatar_path, quota_error_html
+        )
 
 def clear_chat_state(
     request: gr.Request,

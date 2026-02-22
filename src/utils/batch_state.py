@@ -61,6 +61,26 @@ class BatchStateCache:
         with self._lock:
             return self._load_data().copy()
 
+    def has_cached_data(self) -> bool:
+        """
+        Check if the cache has loaded data.
+
+        Returns:
+            True if cached data exists, False otherwise
+        """
+        with self._lock:
+            return self._cached_data is not None
+
+    def get_cached_data(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the currently cached data without loading from store.
+
+        Returns:
+            Cached data dictionary or None if not loaded
+        """
+        with self._lock:
+            return self._cached_data.copy() if self._cached_data is not None else None
+
     def get_section(self, section_name: str) -> Dict[str, Any]:
         """
         Get a specific section of session data.
@@ -76,6 +96,8 @@ class BatchStateCache:
             data = self._load_data()
             if section_name not in data:
                 raise KeyError(f"Section '{section_name}' not found in session data")
+            if not isinstance(data[section_name], dict):
+                raise TypeError(f"Section '{section_name}' is not a dictionary")
             return data[section_name].copy()
 
     def update_session_data(self, updates: Dict[str, Any]) -> None:
@@ -106,6 +128,8 @@ class BatchStateCache:
             data = self._load_data()
             if section_name not in data:
                 raise KeyError(f"Section '{section_name}' not found in session data")
+            if not isinstance(data[section_name], dict):
+                raise TypeError(f"Section '{section_name}' is not a dictionary")
             data[section_name].update(updates)
             self._dirty = True
             logger.debug(
@@ -151,9 +175,9 @@ def batch_state_commits(session_id: str, store: MutableMapping):
         BatchStateCache instance for the request
     """
     if hasattr(_batch_context, 'cache'):
-        logger.warning(
+        raise RuntimeError(
             "Nested batch_state_commits context detected - "
-            "using innermost context"
+            "nesting is not supported"
         )
 
     cache = BatchStateCache(session_id, store)

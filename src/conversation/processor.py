@@ -190,7 +190,7 @@ def process_order(
         
         # Clear session context before returning
         clear_current_session()
-        # Return emotion_state as the last element (modifying return signature implicity, caller must adapt)
+        # Return documented 6-tuple including emotion_state
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
     # Fallback to traditional intent detection
@@ -266,9 +266,8 @@ def process_order(
         logger.debug(f"Processing user input for session: {user_input_text}")
     
     # Use batch state commits to optimize remote dictionary operations
-            with batch_state_commits(session_id, app_state):
-        
-            try:
+    with batch_state_commits(session_id, app_state):
+        try:
                 # --- LLM Interaction Loop (Handles Tool Calls) ---
                 while True:
                     # Invoke the LLM with current messages
@@ -340,7 +339,7 @@ def process_order(
                                 if rag_response is not None:
                                     try:
                                         has_content = len(rag_response) > 0
-                                    except Exception:
+                                    except TypeError:
                                         has_content = False
                                 
                                 if has_content:

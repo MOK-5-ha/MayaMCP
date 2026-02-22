@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from typing import Dict, Any
 
 from src.utils.batch_state import BatchStateCache, batch_state_commits, get_current_batch_cache, is_in_batch_context
 
@@ -23,7 +22,6 @@ class TestBatchStateCache:
     def test_load_data_initializes_from_store(self):
         """Test that _load_data initializes from store when cache is empty."""
         store = Mock()
-        store.__contains__ = Mock(return_value=False)
         
         with patch('src.utils.batch_state._get_session_data') as mock_get_data:
             mock_get_data.return_value = {"test": "data"}
@@ -180,6 +178,23 @@ class TestBatchStateCommits:
             assert get_current_batch_cache() is outer_cache
         
         # Should be cleared after outer exits
+        assert get_current_batch_cache() is None
+
+    def test_context_manager_clears_on_exception(self):
+        """Test that context manager clears cache and propagates exceptions."""
+        store = Mock()
+        
+        with pytest.raises(ValueError):
+            with batch_state_commits("test_session", store) as cache:
+                # Should be in context inside the block
+                assert is_in_batch_context() is True
+                assert get_current_batch_cache() is cache
+                
+                # Raise an exception to test cleanup
+                raise ValueError("Test exception")
+        
+        # Context should be cleared after exception
+        assert is_in_batch_context() is False
         assert get_current_batch_cache() is None
 
 
