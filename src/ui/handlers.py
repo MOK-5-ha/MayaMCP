@@ -4,8 +4,9 @@ from typing import List, Dict, Tuple, Any, MutableMapping, Optional
 import os
 import gradio as gr
 from ..config.logging_config import get_logger
-from ..conversation.processor import process_order
+from ..conversation.processor import process_order, process_order_stream
 from ..voice.tts import get_voice_audio
+from ..voice.streaming_tts import create_pipelined_tts_generator
 from ..llm.session_registry import get_session_llm, get_session_tts
 from ..utils.state_manager import (
     reset_session_state,
@@ -255,3 +256,203 @@ def clear_chat_state(
         return [], [], [], None
 
     return [], [], [], None
+
+
+def handle_gradio_input_stream(
+    user_input: str,
+    session_history_state: List[Dict[str, str]],
+    current_tab: float,
+    current_balance: float,
+    current_tip_percentage: Optional[int],
+    current_tip_amount: float,
+    request: gr.Request,
+    tools=None,
+    rag_retriever=None,
+    rag_api_key: Optional[str] = None,
+    app_state: Optional[MutableMapping] = None,
+    avatar_path: str = "assets/bartender_avatar.jpg"
+):
+    """
+    Streaming Gradio callback for real-time text and audio generation.
+    
+    Args:
+        Same as handle_gradio_input
+        
+    Yields:
+        Streaming updates for Gradio interface
+    """
+    if app_state is None:
+        logger.warning("app_state not provided, using a temporary local dict")
+        app_state = {}
+
+    session_id = request.session_hash if request else "default"
+
+    # Get session-specific clients
+    try:
+        llm = get_session_llm(session_id, app_state)
+        cartesia_client = get_session_tts(session_id, app_state)
+    except Exception as e:
+        logger.error(f"Failed to get session clients: {e}")
+        yield {
+            'type': 'error',
+            'content': "Failed to initialize session. Please refresh.",
+            'history': session_history_state,
+            'audio': None
+        }
+        return
+
+    # Get current payment state for overlay
+    payment_state = get_payment_state(session_id, app_state)
+    current_tab = payment_state['tab_total']
+    current_balance = payment_state['balance']
+    current_tip_percentage = payment_state['tip_percentage']
+    current_tip_amount = payment_state['tip_amount']
+
+    # Start streaming processing
+    try:
+        response_stream = process_order_stream(
+            user_input, session_history_state, llm,
+            rag_retriever, rag_api_key, session_id, app_state
+        )
+        
+        accumulated_text = ""
+        updated_history = session_history_state[:]
+        
+        for event in response_stream:
+            if event['type'] == 'text_chunk':
+                # Yield text chunk for immediate display
+                accumulated_text += event['content']
+                yield {
+                    'type': 'text_chunk',
+                    'content': event['content'],
+                    'partial': event['partial']
+                }
+                
+            elif event['type'] == 'sentence':
+                # Generate audio for complete sentence
+                if cartesia_client:
+                    try:
+                        audio_data = get_voice_audio(
+                            event['content'], cartesia_client
+                        )
+                        if audio_data:
+                            yield {
+                                'type': 'audio_chunk',
+                                'content': audio_data,
+                                'sentence': event['content']
+                            }
+                    except Exception as tts_err:
+                        logger.warning(f"TTS generation failed: {tts_err}")
+                        
+            elif event['type'] == 'complete':
+                # Final response ready
+                final_text = event['content']
+                emotion_state = event['emotion_state']
+                
+                # Update history
+                updated_history.append({'role': 'user', 'content': user_input})
+                updated_history.append({'role': 'assistant', 'content': final_text})
+                
+                # Get final payment state
+                final_payment_state = get_payment_state(session_id, app_state)
+                new_tab = final_payment_state['tab_total']
+                new_balance = final_payment_state['balance']
+                new_tip_percentage = final_payment_state['tip_percentage']
+                new_tip_amount = final_payment_state['tip_amount']
+                
+                # Resolve final avatar
+                final_avatar_path = resolve_avatar_path(
+                    emotion_state, avatar_path, logger
+                )
+                
+                # Create overlay HTML
+                overlay_html = create_tab_overlay_html(
+                    tab_amount=new_tab,
+                    balance=new_balance,
+                    prev_tab=current_tab,
+                    prev_balance=current_balance,
+                    avatar_path=final_avatar_path,
+                    tip_percentage=new_tip_percentage,
+                    tip_amount=new_tip_amount
+                )
+                
+                # Yield completion event
+                yield {
+                    'type': 'complete',
+                    'content': final_text,
+                    'history': updated_history,
+                    'order': get_current_order_state(session_id, app_state),
+                    'overlay_html': overlay_html,
+                    'emotion_state': emotion_state,
+                    'avatar_path': final_avatar_path
+                }
+                
+            elif event['type'] == 'error':
+                # Handle errors
+                error_text = event['content']
+                emotion_state = event.get('emotion_state', 'neutral')
+                
+                updated_history.append({'role': 'user', 'content': user_input})
+                updated_history.append({'role': 'assistant', 'content': error_text})
+                
+                yield {
+                    'type': 'error',
+                    'content': error_text,
+                    'history': updated_history,
+                    'emotion_state': emotion_state
+                }
+
+    except Exception as e:
+        logger.exception(f"Critical error in handle_gradio_input_stream: {e}")
+        error_message = "I'm sorry, an unexpected error occurred. Please try again."
+        
+        error_history = session_history_state[:]
+        error_history.append({'role': 'user', 'content': user_input})
+        error_history.append({'role': 'assistant', 'content': error_message})
+        
+        yield {
+            'type': 'error',
+            'content': error_message,
+            'history': error_history,
+            'emotion_state': 'neutral'
+        }
+
+
+def handle_gradio_streaming_input(
+    user_input: str,
+    session_history_state: List[Dict[str, str]],
+    current_tab: float,
+    current_balance: float,
+    current_tip_percentage: Optional[int],
+    current_tip_amount: float,
+    streaming_enabled: bool,
+    request: gr.Request,
+    tools=None,
+    rag_retriever=None,
+    rag_api_key: Optional[str] = None,
+    app_state: Optional[MutableMapping] = None,
+    avatar_path: str = "assets/bartender_avatar.jpg"
+):
+    """
+    Handle Gradio input with streaming support.
+    
+    Args:
+        streaming_enabled: Whether to use streaming or traditional mode
+        
+    Returns:
+        Updates for Gradio interface components
+    """
+    if streaming_enabled:
+        # Use streaming handler
+        return handle_gradio_input_stream(
+            user_input, session_history_state, current_tab, current_balance,
+            current_tip_percentage, current_tip_amount, request, tools,
+            rag_retriever, rag_api_key, app_state, avatar_path
+        )
+    else:
+        # Use traditional handler
+        return handle_gradio_input(
+            user_input, session_history_state, current_tab, current_balance,
+            current_tip_percentage, current_tip_amount, request, tools,
+            rag_retriever, rag_api_key, app_state, avatar_path
+        )

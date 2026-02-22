@@ -1,6 +1,6 @@
 """Main conversation processing logic."""
 
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Generator
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 import re
 
@@ -20,9 +20,11 @@ except ImportError:
 from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
+from ..llm.client import stream_gemini_api
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
 from ..utils.state_manager import is_order_finished, get_current_order_state
 from ..utils.batch_state import batch_state_commits
+from ..utils.streaming import SentenceBuffer, create_streaming_response_generator
 from .phase_manager import ConversationPhaseManager
 
 logger = get_logger(__name__)
@@ -448,3 +450,147 @@ def process_order(
         # Always clear session context after processing completes
         # This ensures the session context is cleaned up even if an error occurs
         clear_current_session()
+
+
+def process_order_stream(
+    user_input_text: str,
+    current_session_history: List[Dict[str, str]],
+    llm,
+    rag_retriever=None,
+    api_key: str = None,
+    session_id: str = "default",
+    app_state: Any = None
+) -> Generator[dict, None, None]:
+    """
+    Process user input using streaming LLM with tool calling.
+    
+    Args:
+        user_input_text: User's input
+        current_session_history: Session history for Gradio
+        llm: Initialized LLM instance
+        rag_retriever: Memvid retriever for video-based RAG (optional)
+        api_key: API key for RAG pipeline (optional)
+        session_id: Session identifier for state management
+        app_state: Application state for session management
+        
+    Yields:
+        Dict with streaming response data
+    """
+    # Initialize phase manager for conversation flow
+    phase_manager = ConversationPhaseManager()
+    
+    # Security Scan: Input
+    input_scan_result = scan_input(user_input_text)
+    if not input_scan_result.is_valid:
+        logger.warning("Input blocked by security scanner")
+        yield {
+            'type': 'error',
+            'content': input_scan_result.sanitized_text,
+            'emotion_state': 'neutral'
+        }
+        return
+    
+    # Use sanitized input for processing
+    sanitized_input = input_scan_result.sanitized_text
+    
+    # Convert Gradio history to LangChain format
+    messages = []
+    for msg in current_session_history:
+        if msg['role'] == 'user':
+            messages.append(HumanMessage(content=msg['content']))
+        elif msg['role'] == 'assistant':
+            # Remove emotion state markers from history
+            clean_content = msg['content']
+            clean_content = re.sub(r'\[STATE:\s*\w+\]', '', clean_content, flags=re.IGNORECASE).strip()
+            messages.append(AIMessage(content=clean_content))
+
+    # Add latest user input
+    messages.append(HumanMessage(content=sanitized_input))
+
+    if should_log_sensitive():
+        logger.debug(f"Processing user input for session: {sanitized_input}")
+
+    # Use batch state commits to optimize remote dictionary operations
+    with batch_state_commits(session_id, app_state):
+        try:
+            # Set current session for tool calls
+            set_current_session(session_id, app_state)
+
+            # Get generation config
+            from ..llm.client import get_model_config
+            config = get_model_config()
+
+            # Convert LangChain messages to Gemini format
+            gemini_messages = []
+            for msg in messages:
+                if isinstance(msg, HumanMessage):
+                    gemini_messages.append({"role": "user", "parts": [{"text": msg.content}]})
+                elif isinstance(msg, AIMessage):
+                    gemini_messages.append({"role": "model", "parts": [{"text": msg.content}]})
+
+            # Start streaming response
+            text_stream = stream_gemini_api(gemini_messages, config, api_key)
+            
+            # Create sentence buffer for TTS pipelining
+            sentence_buffer = SentenceBuffer()
+            accumulated_text = ""
+            
+            for chunk in text_stream:
+                if hasattr(chunk, 'text') and chunk.text:
+                    text_chunk = chunk.text
+                    accumulated_text += text_chunk
+                    
+                    # Check for complete sentences
+                    sentences = sentence_buffer.add_text(text_chunk)
+                    
+                    # Yield text chunk for immediate UI update
+                    yield {
+                        'type': 'text_chunk',
+                        'content': text_chunk,
+                        'partial': sentence_buffer.get_partial()
+                    }
+                    
+                    # Yield complete sentences for TTS
+                    for sentence in sentences:
+                        yield {
+                            'type': 'sentence',
+                            'content': sentence
+                        }
+            
+            # Flush remaining content
+            remaining_sentences = sentence_buffer.flush()
+            for sentence in remaining_sentences:
+                yield {
+                    'type': 'sentence',
+                    'content': sentence
+                }
+            
+            # Extract emotion from final response
+            emotion_state, clean_response = extract_emotion(accumulated_text)
+            
+            # Security Scan: Output
+            output_scan_result = scan_output(clean_response, prompt=user_input_text)
+            if not output_scan_result.is_valid:
+                logger.warning("Output blocked by security scanner")
+                clean_response = output_scan_result.sanitized_text
+                emotion_state = "neutral"
+            
+            # Signal completion with final data
+            yield {
+                'type': 'complete',
+                'content': clean_response,
+                'emotion_state': emotion_state,
+                'full_response': clean_response
+            }
+
+        except Exception as e:
+            logger.exception(f"Critical error in process_order_stream: {str(e)}")
+            error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
+            yield {
+                'type': 'error',
+                'content': error_message,
+                'emotion_state': 'neutral'
+            }
+        finally:
+            # Always clear session context after processing completes
+            clear_current_session()

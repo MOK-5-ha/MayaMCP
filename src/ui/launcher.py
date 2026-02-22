@@ -3,7 +3,7 @@
 import gradio as gr
 from typing import Optional, Callable, List, Dict, Any
 from ..config.logging_config import get_logger
-from .components import setup_avatar
+from .components import setup_avatar, create_streaming_components, create_streaming_toggle
 from .tab_overlay import create_tab_overlay_html
 from .api_key_modal import create_help_instructions_md, handle_key_submission
 from ..utils.state_manager import DEFAULT_PAYMENT_STATE
@@ -51,6 +51,7 @@ def launch_bartender_interface(
     handle_input_fn: Callable,
     clear_state_fn: Callable,
     handle_key_submission_fn: Optional[Callable] = None,
+    handle_streaming_input_fn: Optional[Callable] = None,
     avatar_path: Optional[str] = None
 ) -> gr.Blocks:
     """
@@ -142,6 +143,9 @@ def launch_bartender_interface(
             # Quota error overlay (initially empty, populated on 429 errors)
             quota_error_display = gr.HTML(value="", visible=True)
 
+            # Streaming mode toggle
+            streaming_toggle = create_streaming_toggle()
+
             # --- Main Row with 2 Columns (Equal Scaling) ---
             with gr.Row():
 
@@ -164,26 +168,11 @@ def launch_bartender_interface(
                     )
 
                 # --- Column 2: Chat Interface ---
-                with gr.Column(scale=1): 
-                    chatbot_display = gr.Chatbot(
-                        [],
-                        elem_id="chatbot",
-                        label="Conversation",
-                        height=489, 
-                        type="messages"
-                    )
-                    agent_audio_output = gr.Audio(
-                        label="Agent Voice",
-                        autoplay=True,
-                        streaming=False,
-                        format="wav",
-                        show_label=True,
-                        interactive=False
-                    )
-                    msg_input = gr.Textbox(
-                        label="Your Order / Message",
-                        placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')"
-                    )
+                with gr.Column(scale=1):
+                    # Get streaming components
+                    (chatbot_display, agent_audio_output, msg_input,
+                     streaming_text_display, streaming_audio_player) = create_streaming_components()
+
                     # Hidden textbox to receive tip button clicks from JavaScript
                     tip_click_input = gr.Textbox(
                         value="",
@@ -210,21 +199,40 @@ def launch_bartender_interface(
 
         # Avatar state validation to ensure persistence
         avatar_state = gr.State(effective_avatar_path)
+        streaming_state = gr.State(True)
 
         # --- Chat Input Submission ---
         submit_inputs = [
             msg_input, history_state, tab_state, balance_state,
-            tip_percentage_state, tip_amount_state, avatar_state
+            tip_percentage_state, tip_amount_state, avatar_state, streaming_state
         ]
         submit_outputs = [
             msg_input, chatbot_display, history_state, order_state,
             agent_audio_output, avatar_overlay, tab_state, balance_state,
             prev_tab_state, prev_balance_state, tip_percentage_state,
-            tip_amount_state, avatar_state, quota_error_display
+            tip_amount_state, avatar_state, quota_error_display,
+            streaming_text_display, streaming_audio_player
         ]
         
-        msg_input.submit(handle_input_fn, submit_inputs, submit_outputs)
-        submit_btn.click(handle_input_fn, submit_inputs, submit_outputs)
+        def handle_input_wrapper(
+            user_input: str, history: List[Dict[str, str]], 
+            tab: float, balance: float, tip_pct: Optional[int], tip_amt: float,
+            avatar: str, streaming_enabled: bool, request: gr.Request
+        ):
+            """Wrapper that chooses streaming or traditional handler based on toggle."""
+            if handle_streaming_input_fn:
+                return handle_streaming_input_fn(
+                    user_input, history, tab, balance, tip_pct, tip_amt,
+                    streaming_enabled, request, tools, rag_retriever, rag_api_key, app_state, avatar
+                )
+            else:
+                return handle_input_fn(
+                    user_input, history, tab, balance, tip_pct, tip_amt,
+                    request, tools, rag_retriever, rag_api_key, app_state, avatar
+                )
+        
+        msg_input.submit(handle_input_wrapper, submit_inputs, submit_outputs)
+        submit_btn.click(handle_input_wrapper, submit_inputs, submit_outputs)
         
         # --- Tip Button JavaScript Callback ---
         tip_button_js = """

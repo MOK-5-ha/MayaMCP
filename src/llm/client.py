@@ -214,3 +214,92 @@ def call_gemini_api(
 
     logger.debug("Gemini API call successful.")
     return response
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True
+)
+def stream_gemini_api(
+    prompt_content: List[Dict],
+    config: Dict,
+    api_key: str
+):
+    """
+    Stream Gemini API responses with retry logic.
+
+    Args:
+        prompt_content: List of message dictionaries
+        config: Generation configuration
+        api_key: Google API key
+
+    Yields:
+        Streaming response chunks
+    """
+    logger.debug("Starting Gemini API stream...")
+
+    # Get singleton client
+    client = get_genai_client(api_key)
+
+    # Get model name from shared config
+    model_name = get_model_name()
+
+    # Map our config dict to GenerateContentConfig
+    gen_config = build_generate_config(config)
+
+    # Call API via client with streaming
+    try:
+        response_stream = client.models.generate_content_stream(
+            model=model_name,
+            contents=prompt_content,
+            config=gen_config,
+        )
+
+        yield from response_stream
+
+    except GenaiRateLimitError as e:
+        logger.warning(f"Rate limit hit calling Gemini stream: {e}")
+        raise
+    except (GenaiAuthError, GenaiPermissionDeniedError,
+            GenaiUnauthenticatedError) as e:
+        logger.error(f"Authentication/authorization error calling Gemini stream: {e}")
+        raise
+    except GenaiTimeoutError as e:
+        logger.warning(f"Timeout from Gemini API stream: {e}")
+        raise
+    except Exception as e:
+        # Fallback classification using attributes to avoid brittle string matching
+        code = getattr(e, "status_code", None)
+        error_code = getattr(e, "error_code", None)
+
+        # Detect timeouts via common exception types
+        # Check for built-in timeout
+        is_timeout = isinstance(e, TimeoutError)
+        if not is_timeout and httpx is not None:
+            httpx_timeout_types = tuple(
+                t for t in [
+                    getattr(httpx, "TimeoutException", None),
+                    getattr(httpx, "ReadTimeout", None),
+                    getattr(httpx, "WriteTimeout", None),
+                    getattr(httpx, "ConnectTimeout", None),
+                ] if isinstance(t, type)
+            )
+            if httpx_timeout_types and isinstance(e, httpx_timeout_types):
+                is_timeout = True
+
+        if is_timeout:
+            logger.warning(f"Timeout from Gemini API stream: {e}")
+        elif code == 429 or error_code == 429:
+            logger.warning(f"Rate limit hit calling Gemini stream: {e}")
+        elif code in (401, 403) or error_code in (401, 403):
+            logger.error(f"Authentication/authorization error calling Gemini stream: {e}")
+        else:
+            # Fall back to shared string-based classifier to keep consistency
+            classify_and_log_genai_error(
+                e, logger, context="calling Gemini API stream"
+            )
+        raise
+
+    logger.debug("Gemini API stream completed.")

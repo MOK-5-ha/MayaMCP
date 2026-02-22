@@ -17,7 +17,7 @@ from config.logging_config import get_logger
 from llm import get_all_tools
 from config.model_config import get_model_config, is_valid_gemini_model
 from rag import initialize_memvid_store
-from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state
+from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state, handle_gradio_streaming_input
 from ui.api_key_modal import handle_key_submission
 from utils import initialize_state
 
@@ -84,6 +84,14 @@ def main():
             app_state=app_state
         )
 
+        handle_streaming_input_with_deps = partial(
+            handle_gradio_streaming_input,
+            tools=tools,
+            rag_retriever=rag_retriever,
+            rag_api_key=google_api_key,
+            app_state=app_state
+        )
+
         clear_state_with_deps = partial(
             clear_chat_state,
             app_state=app_state
@@ -99,6 +107,7 @@ def main():
         try:
             interface = launch_bartender_interface(
                 handle_input_fn=handle_input_with_deps,
+                handle_streaming_input_fn=handle_streaming_input_with_deps,
                 clear_state_fn=clear_state_with_deps,
                 handle_key_submission_fn=handle_keys_with_deps,
             )
