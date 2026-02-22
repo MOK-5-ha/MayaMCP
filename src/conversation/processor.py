@@ -327,33 +327,19 @@ def process_order(
                                     memvid_retriever=rag_retriever,
                                     api_key=api_key
                                 )
+                                # Add RAG context to user input for consistency with streaming path
+                                if rag_response and rag_response.strip():
+                                    rag_context = f"\n\nRelevant context: {rag_response.strip()}"
+                                    user_input_text += rag_context
+                                    # Re-process with RAG-enhanced input
+                                    # This will cause the LLM to regenerate with RAG context
+                                    continue  # Restart processing loop with enhanced input
                             except Exception as memvid_error:
                                 logger.warning(f"Memvid RAG failed: {memvid_error}")
-                                rag_response = None
-    
-                            # Safely use rag_response only if it's a sized, non-empty value
-                            has_content = False
-                            if rag_response is not None:
-                                try:
-                                    has_content = len(rag_response) > 0
-                                except TypeError:
-                                    has_content = False
-                            
-                            if has_content:
-                                # Log original response for comparison - gated by config and downgraded to DEBUG
-                                if should_log_sensitive():
-                                    logger.debug(f"Original response: {agent_response_text}")
-                                    logger.debug(f"RAG-enhanced response: {rag_response}")
-                                # Use the RAG-enhanced response
-                                agent_response_text = rag_response
-    
-                    break 
-                    
-                # --- Tool Call Execution ---
-                if should_log_sensitive():
-                    logger.debug(f"LLM requested tool calls: {tool_calls}")
-                tool_messages = []
                 
+                break 
+                    
+            # --- Tool Call Execution ---
                 # Get available tools
                 tools = get_all_tools()
                 tool_map = {tool.name: tool for tool in tools}
@@ -501,11 +487,31 @@ def process_order_stream(
             clean_content = re.sub(r'\[STATE:\s*\w+\]', '', clean_content, flags=re.IGNORECASE).strip()
             messages.append(AIMessage(content=clean_content))
 
+    # Determine if this is a casual conversation vs. an order/menu-related interaction
+    should_use_rag = phase_manager.should_use_rag(sanitized_input)
+    
+    # If this appears to be casual conversation and RAG is available, try enhancing with RAG
+    if should_use_rag and api_key:
+        # Early validation of RAG components before any heavy processing/try
+        if rag_retriever is None or memvid_rag_pipeline is None:
+            logger.debug("Skipping RAG enhancement: required components not initialized/available")
+        else:
+            logger.info("Enhancing response with Memvid RAG for casual conversation")
+            try:
+                rag_response = memvid_rag_pipeline(
+                    query_text=sanitized_input,
+                    memvid_retriever=rag_retriever,
+                    api_key=api_key
+                )
+                # Add RAG context to the user input
+                if rag_response and rag_response.strip():
+                    rag_context = f"\n\nRelevant context: {rag_response.strip()}"
+                    sanitized_input += rag_context
+            except Exception as memvid_error:
+                logger.warning(f"Memvid RAG failed: {memvid_error}")
+
     # Add latest user input
     messages.append(HumanMessage(content=sanitized_input))
-
-    if should_log_sensitive():
-        logger.debug(f"Processing user input for session: {sanitized_input}")
 
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
@@ -516,29 +522,6 @@ def process_order_stream(
             # Get generation config
             from ..llm.client import get_model_config
             config = get_model_config()
-
-            # Determine if this is casual conversation vs. an order/menu-related interaction
-            should_use_rag = phase_manager.should_use_rag(sanitized_input)
-            
-            # If this appears to be casual conversation and RAG is available, try enhancing with RAG
-            if should_use_rag and api_key:
-                # Early validation of RAG components before any heavy processing/try
-                if rag_retriever is None or memvid_rag_pipeline is None:
-                    logger.debug("Skipping RAG enhancement: required components not initialized/available")
-                else:
-                    logger.info("Enhancing response with Memvid RAG for casual conversation")
-                    try:
-                        rag_response = memvid_rag_pipeline(
-                            query_text=sanitized_input,
-                            memvid_retriever=rag_retriever,
-                            api_key=api_key
-                        )
-                        # Add RAG context to the user input
-                        if rag_response and rag_response.strip():
-                            rag_context = f"\n\nRelevant context: {rag_response.strip()}"
-                            sanitized_input += rag_context
-                    except Exception as memvid_error:
-                        logger.warning(f"Memvid RAG enhancement failed: {memvid_error}")
 
             # Get current phase and create appropriate prompt
             current_phase = phase_manager.get_current_phase()

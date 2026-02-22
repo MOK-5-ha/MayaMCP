@@ -19,22 +19,47 @@ class SentenceBuffer:
 
     def __init__(self):
         self.buffer = ""
-        # More robust sentence boundary regex that avoids splitting on:
-        # - Common abbreviations (Mr., Mrs., Dr., Prof., etc.)
-        # - Decimal numbers (3.14, 0.5, etc.)
-        # - URLs and emails (www.example.com, user@domain.com)
-        # - Time formats (3:30 PM, etc.)
-        self.sentence_endings = re.compile(
-            r'''
-            (?<!\w\.\w)          # Not after abbreviation like "Mr." or "Dr."
-            (?<!\d\.\d)          # Not after decimal like "3.14"
-            (?<!\w@\w)           # Not after email like "user@domain"
-            (?<!\w://\w)         # Not after URL like "http://"
-            [.!?]+               # One or more sentence-ending punctuation
-            (?=\s|$)             # Followed by whitespace or end of string
-            ''', 
-            re.VERBOSE | re.IGNORECASE
-        )
+        # Simple sentence boundary regex - will be filtered with _is_false_boundary
+        self.sentence_endings = re.compile(r'[.!?]+(?=\s|$)')
+        
+        # Common abbreviations that should not be treated as sentence boundaries
+        self._abbreviations = {
+            'Mr', 'Mrs', 'Dr', 'Prof', 'St', 'Mt', 'vs', 'etc', 'eg', 'ie',
+            'approx', 'lit', 'fig', 'vol', 'no', 'jr', 'sr', 'inc', 'ltd'
+        }
+    
+    def _is_false_boundary(self, match_end: int, text_before: str, text_after: str) -> bool:
+        """
+        Check if a sentence boundary match is a false positive.
+        
+        Args:
+            match_end: End position of the match
+            text_before: Text before the match
+            text_after: Text after the match
+            
+        Returns:
+            True if this should be rejected as a false boundary
+        """
+        # Check for common abbreviations followed by period
+        if text_after and text_after[0] == ' ':
+            # Get the word before the period
+            words_before = text_before.strip().split()
+            if len(words_before) > 0:
+                last_word = words_before[-1].lower()
+                if last_word in self._abbreviations:
+                    return True
+        
+        # Check for decimal numbers (digit.period.digit)
+        if text_after and len(text_after) >= 3 and text_after[0] == ' ':
+            # Look for pattern like "3.14" 
+            period_pos = text_before.rfind('.')
+            if period_pos > 0:
+                char_before = text_before[period_pos - 1]
+                char_after = text_after[1] if len(text_after) > 1 else ''
+                if (char_before.isdigit() and char_after.isdigit()):
+                    return True
+        
+        return False
 
     def add_text(self, text_chunk: str) -> List[str]:
         """
@@ -58,8 +83,13 @@ class SentenceBuffer:
             # Extract sentence up to and including the ending punctuation
             end_idx = match.end()
             sentence = self.buffer[:end_idx].strip()
-            if sentence:
-                sentences.append(sentence)
+            
+            # Check if this is a false boundary before accepting
+            text_before = self.buffer[:end_idx]
+            text_after = self.buffer[end_idx:]
+            if not self._is_false_boundary(end_idx, text_before, text_after):
+                if sentence:
+                    sentences.append(sentence)
 
             # Remove the processed sentence from buffer
             self.buffer = self.buffer[end_idx:].strip()

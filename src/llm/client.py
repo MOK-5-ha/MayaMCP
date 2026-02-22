@@ -275,8 +275,6 @@ def stream_gemini_api(
     # Main streaming loop with mid-stream retry handling
     attempt = 0
     max_attempts = 3
-    last_processed_content = ""
-    
     while attempt < max_attempts:
         try:
             # Open fresh stream
@@ -284,8 +282,7 @@ def stream_gemini_api(
             
             # Iterate through stream with error handling
             for chunk in response_stream:
-                if hasattr(chunk, 'text') and chunk.text:
-                    last_processed_content += chunk.text
+                yield chunk
                 yield chunk
                 
             # Stream completed successfully
