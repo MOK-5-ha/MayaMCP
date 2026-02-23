@@ -283,7 +283,6 @@ def stream_gemini_api(
             # Iterate through stream with error handling
             for chunk in response_stream:
                 yield chunk
-                yield chunk
                 
             # Stream completed successfully
             break

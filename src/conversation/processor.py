@@ -3,6 +3,7 @@
 from typing import List, Dict, Tuple, Any, Generator
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 import re
+import concurrent.futures
 
 # RAG pipeline imports moved to top for performance
 try:
@@ -24,10 +25,13 @@ from ..llm.client import stream_gemini_api
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
 from ..utils.state_manager import is_order_finished, get_current_order_state
 from ..utils.batch_state import batch_state_commits
-from ..utils.streaming import SentenceBuffer, create_streaming_response_generator
+from ..utils.streaming import SentenceBuffer
 from .phase_manager import ConversationPhaseManager
 
 logger = get_logger(__name__)
+
+# Timeout for RAG pipeline calls to prevent indefinite blocking
+RAG_TIMEOUT = 10.0  # seconds
 
 def _process_drink_context(drink_context: str) -> str:
     """
@@ -267,6 +271,7 @@ def process_order(
     with batch_state_commits(session_id, app_state):
         try:
             # --- LLM Interaction Loop (Handles Tool Calls) ---
+            rag_applied = False  # Guard flag to prevent RAG re-application
             while True:
                 # Invoke the LLM with current messages
                 try:
@@ -315,7 +320,7 @@ def process_order(
                     should_use_rag = phase_manager.should_use_rag(user_input_text)
                     
                     # If this appears to be casual conversation and RAG is available, try enhancing with RAG
-                    if should_use_rag and api_key:
+                    if should_use_rag and api_key and not rag_applied:
                         # Early validation of RAG components before any heavy processing/try
                         if rag_retriever is None or memvid_rag_pipeline is None:
                             logger.debug("Skipping RAG enhancement: required components not initialized/available")
@@ -331,6 +336,9 @@ def process_order(
                                 if rag_response and rag_response.strip():
                                     rag_context = f"\n\nRelevant context: {rag_response.strip()}"
                                     user_input_text += rag_context
+                                    # Update the messages list with RAG-enhanced input
+                                    messages[-1] = HumanMessage(content=user_input_text)
+                                    rag_applied = True  # Set guard flag
                                     # Re-process with RAG-enhanced input
                                     # This will cause the LLM to regenerate with RAG context
                                     continue  # Restart processing loop with enhanced input
@@ -343,6 +351,7 @@ def process_order(
                 # Get available tools
                 tools = get_all_tools()
                 tool_map = {tool.name: tool for tool in tools}
+                tool_messages = []  # Initialize tool_messages list
                 
                 for tool_call in tool_calls:
                     tool_name = tool_call.get("name")
@@ -498,17 +507,28 @@ def process_order_stream(
         else:
             logger.info("Enhancing response with Memvid RAG for casual conversation")
             try:
-                rag_response = memvid_rag_pipeline(
-                    query_text=sanitized_input,
-                    memvid_retriever=rag_retriever,
-                    api_key=api_key
-                )
+                # Execute RAG pipeline with timeout to prevent indefinite blocking
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        memvid_rag_pipeline,
+                        query_text=sanitized_input,
+                        memvid_retriever=rag_retriever,
+                        api_key=api_key
+                    )
+                    try:
+                        rag_response = future.result(timeout=RAG_TIMEOUT)
+                    except concurrent.futures.TimeoutError:
+                        logger.warning(f"RAG pipeline timed out after {RAG_TIMEOUT} seconds")
+                        rag_response = None
                 # Add RAG context to the user input
                 if rag_response and rag_response.strip():
                     rag_context = f"\n\nRelevant context: {rag_response.strip()}"
                     sanitized_input += rag_context
-            except Exception as memvid_error:
-                logger.warning(f"Memvid RAG failed: {memvid_error}")
+            except (concurrent.futures.TimeoutError, Exception) as memvid_error:
+                if isinstance(memvid_error, concurrent.futures.TimeoutError):
+                    logger.warning(f"RAG pipeline timed out after {RAG_TIMEOUT} seconds")
+                else:
+                    logger.warning(f"Memvid RAG failed: {memvid_error}")
 
     # Add latest user input
     messages.append(HumanMessage(content=sanitized_input))
