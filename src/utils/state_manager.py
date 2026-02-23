@@ -215,6 +215,11 @@ _session_last_access: Dict[str, float] = {}
 # Default session expiry time (1 hour)
 SESSION_EXPIRY_SECONDS = 3600
 
+# Background cleanup thread
+_cleanup_thread: Optional[threading.Thread] = None
+_cleanup_stop_event = threading.Event()
+_CLEANUP_INTERVAL_SECONDS = 300  # 5 minutes
+
 
 def get_session_lock(session_id: str) -> threading.Lock:
     """
@@ -246,12 +251,98 @@ def cleanup_session_lock(session_id: str) -> None:
     Safe to call even if lock doesn't exist.
     
     Args:
-        session_id: Unique identifier for the user session.
+        session_id: Unique identifier for user session.
     """
     with _session_locks_mutex:
         _session_locks.pop(session_id, None)
         _session_last_access.pop(session_id, None)
     logger.debug(f"Session lock cleaned up for {session_id}")
+
+
+def _cleanup_expired_sessions() -> None:
+    """
+    Background task to cleanup expired sessions and their resources.
+    
+    Runs every CLEANUP_INTERVAL_SECONDS to remove sessions that haven't
+    been accessed for SESSION_EXPIRY_SECONDS.
+    """
+    while not _cleanup_stop_event.is_set():
+        try:
+            current_time = time.time()
+            expired_sessions = []
+            
+            with _session_locks_mutex:
+                # Find expired sessions
+                for session_id, last_access in _session_last_access.items():
+                    if current_time - last_access > SESSION_EXPIRY_SECONDS:
+                        expired_sessions.append(session_id)
+                
+                # Clean up expired sessions
+                for session_id in expired_sessions:
+                    _session_locks.pop(session_id, None)
+                    _session_last_access.pop(session_id, None)
+                    logger.info(f"Cleaned up expired session: {session_id}")
+            
+            # Clean up session registry clients for expired sessions
+            if expired_sessions:
+                try:
+                    from ..llm.session_registry import _session_clients, _registry_lock
+                    with _registry_lock:
+                        for session_id in expired_sessions:
+                            entry = _session_clients.pop(session_id, None)
+                            if entry:
+                                # Close TTS client if it exists
+                                tts = entry.get("tts")
+                                if tts and hasattr(tts, "close"):
+                                    try:
+                                        tts.close()
+                                    except Exception:
+                                        logger.exception(
+                                            f"Failed to close TTS client for expired session {session_id}"
+                                        )
+                                logger.info(f"Cleaned up LLM/TTS clients for expired session: {session_id}")
+                except ImportError:
+                    logger.warning("Could not import session registry for cleanup")
+                except Exception as e:
+                    logger.error(f"Error during session registry cleanup: {e}")
+            
+        except Exception as e:
+            logger.error(f"Error in session cleanup task: {e}")
+        
+        # Wait for next cleanup interval or stop event
+        _cleanup_stop_event.wait(_CLEANUP_INTERVAL_SECONDS)
+
+
+def start_session_cleanup() -> None:
+    """
+    Start the background session cleanup thread.
+    
+    Should be called during application initialization.
+    """
+    global _cleanup_thread
+    
+    if _cleanup_thread is None or not _cleanup_thread.is_alive():
+        _cleanup_thread = threading.Thread(
+            target=_cleanup_expired_sessions,
+            name="session-cleanup",
+            daemon=True
+        )
+        _cleanup_thread.start()
+        logger.info("Started session cleanup background thread")
+
+
+def stop_session_cleanup() -> None:
+    """
+    Stop the background session cleanup thread.
+    
+    Should be called during application shutdown.
+    """
+    global _cleanup_thread
+    
+    if _cleanup_thread and _cleanup_thread.is_alive():
+        _cleanup_stop_event.set()
+        _cleanup_thread.join(timeout=10)
+        logger.info("Stopped session cleanup background thread")
 
 
 # Default State Templates

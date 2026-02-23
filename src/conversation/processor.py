@@ -24,6 +24,7 @@ from ..llm.tools import get_all_tools, set_current_session, clear_current_sessio
 from ..llm.client import stream_gemini_api
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
 from ..utils.state_manager import is_order_finished, get_current_order_state
+from ..utils.rate_limiter import check_rate_limits
 from ..utils.batch_state import batch_state_commits
 from ..utils.streaming import SentenceBuffer
 from .phase_manager import ConversationPhaseManager
@@ -484,6 +485,17 @@ def process_order_stream(
     # Use sanitized input for processing
     sanitized_input = input_scan_result.sanitized_text
     
+    # Rate limiting check
+    rate_allowed, rate_reason = check_rate_limits(session_id)
+    if not rate_allowed:
+        logger.warning(f"Rate limit exceeded: {rate_reason}")
+        yield {
+            'type': 'error',
+            'content': f"Rate limit exceeded: {rate_reason}",
+            'emotion_state': 'neutral'
+        }
+        return
+    
     # Convert Gradio history to LangChain format with same window as non-streaming
     history_limit = 10
     truncated_history = current_session_history[-history_limit:]
@@ -569,32 +581,57 @@ def process_order_stream(
             # Create sentence buffer for TTS pipelining
             sentence_buffer = SentenceBuffer()
             accumulated_text = ""
+            security_buffer = ""  # Buffer for security scanning
             
             for chunk in text_stream:
                 if hasattr(chunk, 'text') and chunk.text:
                     text_chunk = chunk.text
                     accumulated_text += text_chunk
+                    security_buffer += text_chunk
+                    
+                    # Security scan each chunk before yielding
+                    chunk_scan_result = scan_output(security_buffer, prompt=user_input_text)
+                    if not chunk_scan_result.is_valid:
+                        logger.warning("Streaming content blocked by security scanner")
+                        # Yield error and stop streaming
+                        yield {
+                            'type': 'error',
+                            'content': chunk_scan_result.sanitized_text,
+                            'emotion_state': 'neutral'
+                        }
+                        return
                     
                     # Check for complete sentences
                     sentences = sentence_buffer.add_text(text_chunk)
                     
-                    # Yield text chunk for immediate UI update
+                    # Yield text chunk for immediate UI update (after security check)
                     yield {
                         'type': 'text_chunk',
                         'content': text_chunk,
                         'partial': sentence_buffer.get_partial()
                     }
                     
-                    # Yield complete sentences for TTS
+                    # Yield complete sentences for TTS (after security check)
                     for sentence in sentences:
                         yield {
                             'type': 'sentence',
                             'content': sentence
                         }
             
-            # Flush remaining content
+            # Flush remaining content with security check
             remaining_sentences = sentence_buffer.flush()
             for sentence in remaining_sentences:
+                # Final security check on remaining content
+                final_scan_result = scan_output(accumulated_text, prompt=user_input_text)
+                if not final_scan_result.is_valid:
+                    logger.warning("Final streaming content blocked by security scanner")
+                    yield {
+                        'type': 'error',
+                        'content': final_scan_result.sanitized_text,
+                        'emotion_state': 'neutral'
+                    }
+                    return
+                
                 yield {
                     'type': 'sentence',
                     'content': sentence
@@ -603,10 +640,10 @@ def process_order_stream(
             # Extract emotion from final response
             emotion_state, clean_response = extract_emotion(accumulated_text)
             
-            # Security Scan: Output
+            # Final Security Scan: Output (additional verification)
             output_scan_result = scan_output(clean_response, prompt=user_input_text)
             if not output_scan_result.is_valid:
-                logger.warning("Output blocked by security scanner")
+                logger.warning("Final output blocked by security scanner")
                 clean_response = output_scan_result.sanitized_text
                 emotion_state = "neutral"
             

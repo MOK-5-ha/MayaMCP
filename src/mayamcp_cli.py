@@ -20,6 +20,8 @@ from rag import initialize_memvid_store
 from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state, handle_gradio_streaming_input
 from ui.api_key_modal import handle_key_submission
 from utils import initialize_state
+from utils.state_manager import start_session_cleanup, stop_session_cleanup
+from utils.rate_limiter import get_rate_limiter
 
 def main():
     """Main application entry point."""
@@ -50,6 +52,11 @@ def main():
         # Initialize application state
         initialize_state()
         logger.info("Application state initialized")
+        
+        # Start security services
+        start_session_cleanup()
+        rate_limiter = get_rate_limiter()
+        logger.info("Security services initialized: session cleanup, rate limiting")
 
         # Get tool definitions (static, shared across all sessions)
         tools = get_all_tools()
@@ -124,9 +131,17 @@ def main():
         
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
+        # Cleanup security services
+        stop_session_cleanup()
+        logger.info("Security services stopped")
         sys.exit(0)
     except Exception as e:
         logger.exception(f"Critical error starting application: {e}")
+        # Cleanup security services on error
+        try:
+            stop_session_cleanup()
+        except Exception as cleanup_error:
+            logger.error(f"Error during cleanup: {cleanup_error}")
         sys.exit(1)
 
 if __name__ == "__main__":

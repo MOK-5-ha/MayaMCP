@@ -1,6 +1,7 @@
 """Thread-safe per-session cache for LLM and TTS client instances."""
 
 import hashlib
+import os
 import threading
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +12,10 @@ logger = get_logger(__name__)
 # Registry: session_id -> {"llm": instance, "tts": instance, "gemini_hash": str, "cartesia_hash": str}
 _session_clients: Dict[str, Dict[str, Any]] = {}
 _registry_lock = threading.Lock()
+
+# Resource limits
+MAX_CONCURRENT_SESSIONS = int(os.getenv("MAYA_MAX_SESSIONS", "1000"))
+MAX_SESSION_MEMORY_MB = int(os.getenv("MAYA_MAX_SESSION_MEMORY_MB", "100"))
 
 
 def _key_hash(api_key: str) -> str:
@@ -31,6 +36,12 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     Returns:
         Initialized ``ChatGoogleGenerativeAI`` instance with tools bound.
     """
+    # Check resource limits
+    with _registry_lock:
+        if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
+            logger.warning(f"Maximum concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
+            raise ResourceWarning(f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}")
+    
     key_hash = _key_hash(api_key)
 
     with _registry_lock:
