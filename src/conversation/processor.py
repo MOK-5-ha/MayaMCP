@@ -336,8 +336,9 @@ def process_order(
                                 if rag_response and rag_response.strip():
                                     rag_context = f"\n\nRelevant context: {rag_response.strip()}"
                                     user_input_text += rag_context
-                                    # Update the messages list with RAG-enhanced input
-                                    messages[-1] = HumanMessage(content=user_input_text)
+                                    # Remove AI response and update user message with RAG-enhanced input
+                                    messages.pop()  # Remove ai_response
+                                    messages[-1] = HumanMessage(content=user_input_text)  # Now this is the user message
                                     rag_applied = True  # Set guard flag
                                     # Re-process with RAG-enhanced input
                                     # This will cause the LLM to regenerate with RAG context
@@ -524,11 +525,8 @@ def process_order_stream(
                 if rag_response and rag_response.strip():
                     rag_context = f"\n\nRelevant context: {rag_response.strip()}"
                     sanitized_input += rag_context
-            except (concurrent.futures.TimeoutError, Exception) as memvid_error:
-                if isinstance(memvid_error, concurrent.futures.TimeoutError):
-                    logger.warning(f"RAG pipeline timed out after {RAG_TIMEOUT} seconds")
-                else:
-                    logger.warning(f"Memvid RAG failed: {memvid_error}")
+            except Exception as memvid_error:
+                logger.warning(f"Memvid RAG failed: {memvid_error}")
 
     # Add latest user input
     messages.append(HumanMessage(content=sanitized_input))

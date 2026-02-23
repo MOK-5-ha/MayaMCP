@@ -40,6 +40,10 @@ class SentenceBuffer:
             True if this should be rejected as a false boundary
         """
         # Check for common abbreviations followed by period
+        # At end of buffer - defer decision until more text arrives
+        if not text_after:
+            return True
+        
         if text_after and text_after[0] == ' ':
             # Get the word before the period from text_before
             # text_before ends with punctuation, so we need to find the last word
@@ -69,12 +73,12 @@ class SentenceBuffer:
         # Find all complete sentences
         search_start = 0
         while True:
-            match = self.sentence_endings.search(self.buffer[search_start:])
+            match = self.sentence_endings.search(self.buffer, search_start)
             if not match:
                 break
 
             # Calculate actual position in buffer
-            actual_end = search_start + match.end()
+            actual_end = match.end()
             
             # Extract sentence up to and including the ending punctuation
             sentence = self.buffer[:actual_end].strip()
