@@ -2,15 +2,28 @@
 
 <cite>
 **Referenced Files in This Document**
-- [api_keys.py](file://src/config/api_keys.py)
+- [api_key_modal.py](file://src/ui/api_key_modal.py)
+- [key_validator.py](file://src/llm/key_validator.py)
+- [session_registry.py](file://src/llm/session_registry.py)
+- [state_manager.py](file://src/utils/state_manager.py)
+- [handlers.py](file://src/ui/handlers.py)
+- [processor.py](file://src/conversation/processor.py)
+- [client.py](file://src/llm/client.py)
 - [test_api_keys.py](file://tests/test_api_keys.py)
 - [.env.example](file://.env.example)
 - [.env](file://.env)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py)
-- [deploy.py](file://deploy.py)
-- [embeddings.py](file://src/rag/embeddings.py)
-- [model_config.py](file://src/config/model_config.py)
+- [launcher.py](file://src/ui/launcher.py)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Updated architecture overview to reflect BYOK (Bring Your Own Key) authentication system
+- Added comprehensive documentation for per-session key validation and storage
+- Documented new lightweight Gemini key validation system
+- Added thread-safe session registry with client caching
+- Updated quota error handling and modal-based key input interface
+- Revised security considerations for session-based key storage
+- Added new troubleshooting section for quota limits and rate limiting
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -24,360 +37,425 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains MayaMCP’s API key management system with a focus on secure credential handling and environment-based configuration. It covers how the application validates required credentials (GEMINI_API_KEY and CARTESIA_API_KEY) at startup, how environment variables are loaded, the naming conventions and validation patterns used, and the security considerations around storage, rotation, and error handling. It also provides practical guidance for configuring .env files, formatting keys, and troubleshooting common credential issues across development, test, and production environments.
+This document explains MayaMCP's modern API key management system with a focus on secure BYOK (Bring Your Own Key) authentication and per-session credential handling. The system has evolved from server-side key management to a distributed approach where each user session manages its own credentials independently. It covers how the application validates required credentials (GEMINI_API_KEY) through a lightweight validation process, stores keys per session, manages concurrent access with thread-safe patterns, and handles quota errors gracefully through modal interfaces.
 
 ## Project Structure
-The API key management spans several modules:
-- Configuration loader and validator: src/config/api_keys.py
-- Application startup and validation: src/mayamcp_cli.py
-- Deployment-time validation and legacy key support: deploy.py
-- Embeddings service that lazily configures the Google AI SDK: src/rag/embeddings.py
-- Example and real-world .env files: .env.example and .env
-- Model configuration utilities: src/config/model_config.py
+The BYOK API key management spans several modules with a focus on session-scoped credential handling:
+- Modal-based key input and validation: src/ui/api_key_modal.py
+- Lightweight Gemini key validation: src/llm/key_validator.py
+- Per-session client registry: src/llm/session_registry.py
+- Thread-safe session state management: src/utils/state_manager.py
+- UI event handlers with session awareness: src/ui/handlers.py
+- Conversation processing with quota error handling: src/conversation/processor.py
+- LLM client initialization and API calls: src/llm/client.py
+- Legacy environment-based configuration: .env.example and .env
 
 ```mermaid
 graph TB
-subgraph "Configuration"
-A["src/config/api_keys.py"]
-B[".env.example"]
-C[".env"]
-D["src/config/model_config.py"]
+subgraph "BYOK Authentication Layer"
+A["src/ui/api_key_modal.py"]
+B["src/llm/key_validator.py"]
+C["src/utils/state_manager.py"]
+D["src/llm/session_registry.py"]
 end
-subgraph "Runtime"
-E["src/mayamcp_cli.py"]
-F["src/rag/embeddings.py"]
-G["deploy.py"]
+subgraph "UI Integration"
+E["src/ui/handlers.py"]
+F["src/ui/launcher.py"]
 end
-A --> E
-A --> F
-A --> G
-B --> A
-C --> A
-D --> E
+subgraph "Conversation Processing"
+G["src/conversation/processor.py"]
+H["src/llm/client.py"]
+end
+A --> B
+A --> C
+B --> D
+C --> D
+E --> C
+E --> D
+F --> A
+G --> E
+H --> D
 ```
 
 **Diagram sources**
-- [api_keys.py](file://src/config/api_keys.py#L1-L51)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L25-L40)
-- [deploy.py](file://deploy.py#L140-L157)
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
-- [.env.example](file://.env.example#L1-L33)
-- [.env](file://.env#L1-L12)
-- [model_config.py](file://src/config/model_config.py#L31-L44)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L83-L136)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
+- [state_manager.py](file://src/utils/state_manager.py#L840-L894)
+- [session_registry.py](file://src/llm/session_registry.py#L21-L107)
+- [handlers.py](file://src/ui/handlers.py#L41-L214)
+- [launcher.py](file://src/ui/launcher.py#L90-L212)
+- [processor.py](file://src/conversation/processor.py#L73-L468)
+- [client.py](file://src/llm/client.py#L96-L217)
 
 **Section sources**
-- [api_keys.py](file://src/config/api_keys.py#L1-L51)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L25-L40)
-- [deploy.py](file://deploy.py#L140-L157)
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
-- [.env.example](file://.env.example#L1-L33)
-- [.env](file://.env#L1-L12)
-- [model_config.py](file://src/config/model_config.py#L31-L44)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L1-L137)
+- [key_validator.py](file://src/llm/key_validator.py#L1-L87)
+- [state_manager.py](file://src/utils/state_manager.py#L1-L894)
+- [session_registry.py](file://src/llm/session_registry.py#L1-L107)
+- [handlers.py](file://src/ui/handlers.py#L1-L387)
+- [launcher.py](file://src/ui/launcher.py#L90-L212)
+- [processor.py](file://src/conversation/processor.py#L1-L468)
+- [client.py](file://src/llm/client.py#L1-L217)
 
 ## Core Components
-- Environment variable loader and API key accessor: src/config/api_keys.py
-- Startup validation and graceful failure: src/mayamcp_cli.py
-- Deployment-time validation with legacy key support: deploy.py
-- Lazy configuration of Google AI SDK with key rotation support: src/rag/embeddings.py
-- Example and real-world .env templates: .env.example and .env
+- **Modal-based Key Input**: src/ui/api_key_modal.py - Provides interactive key entry with validation and error handling
+- **Lightweight Validation**: src/llm/key_validator.py - Validates Gemini keys with minimal API calls
+- **Per-Session Storage**: src/utils/state_manager.py - Manages session-scoped API key state with thread safety
+- **Client Registry**: src/llm/session_registry.py - Caches and manages LLM/TTS clients per session
+- **UI Integration**: src/ui/handlers.py - Coordinates session-aware processing and error handling
+- **Quota Error Handling**: src/conversation/processor.py - Detects and handles rate limit/quota errors
+- **Legacy Support**: .env.example and .env - Maintains backward compatibility for server-side configuration
 
 Key responsibilities:
-- Load environment variables from .env at import time
-- Expose normalized API keys (stripped whitespace) under consistent internal names
-- Validate presence of required keys at startup
-- Support legacy key names for backward compatibility in deployments
-- Enable safe key rotation without restarting the process
+- Validate user-provided Gemini API keys without exposing server credentials
+- Store keys per session with automatic cleanup and expiration
+- Manage concurrent access through thread-safe session locks
+- Cache and reuse LLM/TTS clients to minimize initialization overhead
+- Handle quota limits and rate limiting with user-friendly modal interfaces
+- Support graceful degradation when keys are missing or invalid
 
 **Section sources**
-- [api_keys.py](file://src/config/api_keys.py#L7-L22)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L31-L39)
-- [deploy.py](file://deploy.py#L142-L157)
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L83-L136)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
+- [state_manager.py](file://src/utils/state_manager.py#L840-L894)
+- [session_registry.py](file://src/llm/session_registry.py#L21-L107)
+- [handlers.py](file://src/ui/handlers.py#L41-L214)
+- [processor.py](file://src/conversation/processor.py#L28-L159)
 
 ## Architecture Overview
-The API key system follows a layered approach:
-- Layer 1: Environment loading (.env) and normalization
-- Layer 2: Centralized accessors and validators
-- Layer 3: Startup-time enforcement and runtime lazy configuration
-- Layer 4: Deployment-time compatibility and health checks
+The BYOK system follows a distributed architecture where each user session manages its own credentials independently:
+- **Session Initialization**: Users enter keys through modal interface
+- **Lightweight Validation**: Keys are validated using minimal API calls
+- **Session Storage**: Keys are stored per-session with thread-safe access
+- **Client Caching**: LLM/TTS clients are cached per session for performance
+- **Error Handling**: Quota limits trigger modal popups with resolution steps
+- **Resource Cleanup**: Automatic cleanup of expired sessions and cached clients
 
 ```mermaid
 sequenceDiagram
-participant Env as ".env"
-participant Loader as "api_keys.py"
-participant CLI as "mayamcp_cli.py"
-participant Embed as "embeddings.py"
-participant Deploy as "deploy.py"
-Env-->>Loader : "Load variables"
-CLI->>Loader : "get_api_keys()"
-CLI->>Loader : "validate_api_keys()"
-CLI-->>CLI : "Exit on failure"
-Embed->>Loader : "get_google_api_key()"
-Embed->>Embed : "_ensure_genai_configured()"
-Deploy->>Loader : "_require_any(GEMINI_API_KEY, GOOGLE_API_KEY)"
-Deploy-->>Deploy : "Initialize services"
+participant User as "User Browser"
+participant Modal as "api_key_modal.py"
+participant Validator as "key_validator.py"
+participant State as "state_manager.py"
+participant Registry as "session_registry.py"
+participant Handler as "handlers.py"
+User->>Modal : "Enter API keys"
+Modal->>Validator : "validate_gemini_key()"
+Validator->>Validator : "models.list() call"
+Validator-->>Modal : "Validation result"
+Modal->>State : "set_api_keys(session_id, keys)"
+State->>Registry : "Cache LLM/TTS clients"
+Modal-->>User : "Success/Failure feedback"
+User->>Handler : "Send message"
+Handler->>State : "get_api_key_state()"
+Handler->>Registry : "get_session_llm()"
+Handler->>Handler : "Process with validated keys"
 ```
 
 **Diagram sources**
-- [api_keys.py](file://src/config/api_keys.py#L7-L22)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L31-L39)
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
-- [deploy.py](file://deploy.py#L142-L157)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L83-L136)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
+- [state_manager.py](file://src/utils/state_manager.py#L854-L879)
+- [session_registry.py](file://src/llm/session_registry.py#L21-L53)
+- [handlers.py](file://src/ui/handlers.py#L41-L160)
 
 ## Detailed Component Analysis
 
-### Environment Variable Loading and Normalization
-- The module loads environment variables from .env at import time using a library designed for dotenv files.
-- It retrieves two environment variables and returns them under normalized internal keys with whitespace stripped.
-- The normalized keys are used consistently across the application.
+### Modal-Based Key Input and Validation
+The system provides an interactive modal interface for users to enter their API keys:
+- **Required Fields**: Gemini API key is mandatory; Cartesia key is optional
+- **Real-time Validation**: Keys are validated using lightweight API calls
+- **Error Handling**: Comprehensive error messages for authentication, rate limits, and connectivity issues
+- **Session Storage**: Validated keys are stored per-session with automatic cleanup
 
 ```mermaid
 flowchart TD
-Start(["Import api_keys"]) --> LoadEnv["Load .env variables"]
-LoadEnv --> GetGoogle["os.getenv('GEMINI_API_KEY')"]
-LoadEnv --> GetCartesia["os.getenv('CARTESIA_API_KEY')"]
-GetGoogle --> NormalizeGoogle["Strip whitespace"]
-GetCartesia --> NormalizeCartesia["Strip whitespace"]
-NormalizeGoogle --> ReturnMap["Return {google_api_key, cartesia_api_key}"]
-NormalizeCartesia --> ReturnMap
+Start(["User opens modal"]) --> Input["User enters keys"]
+Input --> Validate["validate_gemini_key()"]
+Validate --> CheckEmpty{"Key empty?"}
+CheckEmpty --> |Yes| ShowError["Show 'Please enter key' error"]
+CheckEmpty --> |No| CheckValid{"Valid key?"}
+CheckValid --> |No| ShowAuthError["Show authentication error"]
+CheckValid --> |Yes| Store["set_api_keys()"]
+Store --> Success["Hide modal, show chat"]
+ShowError --> Input
+ShowAuthError --> Input
 ```
 
 **Diagram sources**
-- [api_keys.py](file://src/config/api_keys.py#L7-L22)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L83-L136)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
+- [state_manager.py](file://src/utils/state_manager.py#L854-L879)
 
 **Section sources**
-- [api_keys.py](file://src/config/api_keys.py#L7-L22)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L83-L136)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
+- [state_manager.py](file://src/utils/state_manager.py#L854-L879)
 
-### API Key Validation
-- The validator checks whether required keys are present and non-empty.
-- By default, it requires both keys; callers can customize the required subset.
-- Empty strings and whitespace-only strings are treated as missing.
+### Lightweight Gemini Key Validation
+The validation system performs minimal API calls to verify key authenticity:
+- **Minimal Cost**: Uses `models.list()` which consumes zero tokens
+- **Thread Safety**: Uses locks to prevent concurrent validation conflicts
+- **Error Classification**: Distinguishes between authentication, rate limit, and network errors
+- **Graceful Degradation**: Handles missing SDK gracefully with meaningful error messages
 
 ```mermaid
 flowchart TD
-Start(["validate_api_keys"]) --> DefaultCheck{"required_keys is None?"}
-DefaultCheck --> |Yes| UseDefaults["required_keys = ['google_api_key','cartesia_api_key']"]
-DefaultCheck --> |No| UseProvided["Use provided list"]
-UseDefaults --> Fetch["get_api_keys()"]
-UseProvided --> Fetch
-Fetch --> Loop["For each key in required list"]
-Loop --> Check{"api_keys[key] is truthy?"}
-Check --> |No| Fail["Return False"]
-Check --> |Yes| Next["Next key"]
-Next --> Done{"More keys?"}
-Done --> |Yes| Loop
-Done --> |No| Success["Return True"]
+Validate(["validate_gemini_key()"]) --> CheckInput{"Valid input?"}
+CheckInput --> |No| ReturnInvalid["Return False, 'Please enter key'"]
+CheckInput --> |Yes| CheckSDK{"SDK available?"}
+CheckSDK --> |No| ReturnSDKError["Return False, SDK error"]
+CheckSDK --> |Yes| MakeCall["client.models.list()"]
+MakeCall --> HandleSuccess{"Success?"}
+HandleSuccess --> |Yes| ReturnValid["Return True, ''"]
+HandleSuccess --> |No| ClassifyError["Classify error type"]
+ClassifyError --> AuthError["Return False, auth error"]
+ClassifyError --> RateLimit["Return False, rate limit error"]
+ClassifyError --> NetworkError["Return False, network error"]
+ClassifyError --> UnknownError["Return False, unknown error"]
 ```
 
 **Diagram sources**
-- [api_keys.py](file://src/config/api_keys.py#L24-L43)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
 
 **Section sources**
-- [api_keys.py](file://src/config/api_keys.py#L24-L43)
+- [key_validator.py](file://src/llm/key_validator.py#L20-L86)
 
-### Startup-Time Validation in Application Entry Point
-- The CLI loads logging, validates API keys, logs errors, and exits with a non-zero status if validation fails.
-- It logs a clear message listing the required keys.
-
-```mermaid
-sequenceDiagram
-participant User as "User"
-participant CLI as "mayamcp_cli.main()"
-participant Config as "api_keys.get_api_keys/validate_api_keys"
-participant Log as "Logger"
-User->>CLI : "Run application"
-CLI->>Log : "setup_logging()"
-CLI->>Config : "get_api_keys()"
-CLI->>Config : "validate_api_keys()"
-alt Validation fails
-CLI->>Log : "error('Required API keys not found')"
-CLI-->>User : "exit(1)"
-else Validation passes
-CLI->>CLI : "Continue initialization"
-end
-```
-
-**Diagram sources**
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L25-L39)
-
-**Section sources**
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L31-L39)
-
-### Deployment-Time Validation and Legacy Key Support
-- The deployment script defines a helper that accepts multiple environment variable names and raises a clear error if none are set.
-- It prefers the modern key name for Google AI and supports a legacy key name for backward compatibility.
-- It also validates Cartesia key presence.
+### Thread-Safe Session Registry and Client Caching
+The system maintains separate client instances for each session with automatic caching:
+- **Hash Comparison**: Uses SHA-256 hashes to detect key changes
+- **Concurrent Access**: Thread-safe registry with mutex protection
+- **Automatic Cleanup**: Removes cached clients when sessions expire
+- **Key Rotation**: Recreates clients when users change their keys
 
 ```mermaid
 flowchart TD
-Start(["deploy.py"]) --> RequireAny["_require_any(GEMINI_API_KEY, GOOGLE_API_KEY)"]
-RequireAny --> Found{"Found a non-empty value?"}
-Found --> |Yes| UseKey["Use the first valid key"]
-Found --> |No| RaiseErr["Raise RuntimeError with names list"]
-UseKey --> InitLLM["Initialize LLM with api_key"]
-InitLLM --> InitTTS["Initialize Cartesia client"]
+GetLLM(["get_session_llm()"]) --> HashKey["hash(api_key)"]
+HashKey --> CheckCache{"Entry exists & hash matches?"}
+CheckCache --> |Yes| ReturnCached["Return cached LLM"]
+CheckCache --> |No| CreateLLM["initialize_llm()"]
+CreateLLM --> CacheLLM["Store in registry"]
+CacheLLM --> ReturnNew["Return new LLM"]
 ```
 
 **Diagram sources**
-- [deploy.py](file://deploy.py#L142-L157)
+- [session_registry.py](file://src/llm/session_registry.py#L21-L53)
+- [state_manager.py](file://src/utils/state_manager.py#L207-L242)
 
 **Section sources**
-- [deploy.py](file://deploy.py#L142-L157)
+- [session_registry.py](file://src/llm/session_registry.py#L1-L107)
+- [state_manager.py](file://src/utils/state_manager.py#L190-L283)
 
-### Lazy Configuration and Key Rotation Support
-- The embeddings module lazily configures the Google AI SDK and caches the last configured key.
-- If the key changes, it reconfigures the SDK to enable seamless key rotation without restarting the process.
-- It logs an error if the key is missing.
+### Per-Session State Management and Thread Safety
+The state management system provides comprehensive session isolation:
+- **Session Locks**: Individual locks per session prevent race conditions
+- **Automatic Cleanup**: Background cleanup of expired sessions and locks
+- **Migration Support**: Handles upgrades from older state formats
+- **Payment State Integration**: Extends beyond API keys to include payment tracking
 
 ```mermaid
 flowchart TD
-Start(["_ensure_genai_configured"]) --> GetKey["get_google_api_key()"]
-GetKey --> HasKey{"Key present?"}
-HasKey --> |No| LogErr["Log error and return None"]
-HasKey --> |Yes| SameKey{"Same as cached?"}
-SameKey --> |Yes| ReturnKey["Return cached key"]
-SameKey --> |No| Reconfigure["genai.configure(api_key)"]
-Reconfigure --> Cache["Cache new key"]
-Cache --> ReturnKey
+InitSession(["initialize_state()"]) --> GetLock["get_session_lock()"]
+GetLock --> CheckExists{"Session exists?"}
+CheckExists --> |No| CreateDefault["Create default state"]
+CheckExists --> |Yes| CheckMigrations{"Need migrations?"}
+CheckMigrations --> |Yes| ApplyMigrations["Apply payment state migrations"]
+CheckMigrations --> |No| ReturnState["Return existing state"]
+CreateDefault --> ApplyMigrations
+ApplyMigrations --> ReturnState
 ```
 
 **Diagram sources**
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
-- [api_keys.py](file://src/config/api_keys.py#L45-L47)
+- [state_manager.py](file://src/utils/state_manager.py#L407-L420)
+- [state_manager.py](file://src/utils/state_manager.py#L207-L242)
 
 **Section sources**
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
-- [api_keys.py](file://src/config/api_keys.py#L45-L47)
+- [state_manager.py](file://src/utils/state_manager.py#L190-L283)
+- [state_manager.py](file://src/utils/state_manager.py#L351-L394)
 
-### Environment-Based Configuration Files
-- Example template: .env.example shows the required keys and other configuration variables.
-- Real-world example: .env demonstrates how to populate the keys and other settings.
+### Quota Error Handling and Modal Interfaces
+The system provides user-friendly interfaces for handling quota limitations:
+- **Sentinel Detection**: Special handling for quota-exceeded responses
+- **Modal Popups**: Styled HTML overlays with resolution steps
+- **Free Tier Guidance**: Links to Google AI Studio for billing setup
+- **Graceful Degradation**: Continues operation with reduced functionality
 
-Key points:
-- Required keys: GEMINI_API_KEY and CARTESIA_API_KEY
-- Optional model and runtime settings are also shown in the example file
-- The application reads these variables via the dotenv loader
+```mermaid
+flowchart TD
+ProcessOrder(["process_order()"]) --> CallLLM["llm.invoke()"]
+CallLLM --> CheckError{"Error detected?"}
+CheckError --> |No| ReturnResponse["Return normal response"]
+CheckError --> |Yes| CheckType{"Rate limit/quota?"}
+CheckType --> |No| ReturnGenericError["Return generic error"]
+CheckType --> |Yes| SetSentinel["Set QUOTA_ERROR"]
+SetSentinel --> ReturnSentinel["Return sentinel to UI"]
+```
+
+**Diagram sources**
+- [processor.py](file://src/conversation/processor.py#L28-L159)
+- [handlers.py](file://src/ui/handlers.py#L28-L38)
 
 **Section sources**
-- [.env.example](file://.env.example#L1-L33)
-- [.env](file://.env#L1-L12)
+- [processor.py](file://src/conversation/processor.py#L28-L159)
+- [handlers.py](file://src/ui/handlers.py#L28-L38)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L16-L54)
+
+### UI Integration and Session-Aware Processing
+The UI handlers coordinate between modal input, session state, and conversation processing:
+- **Session Extraction**: Uses Gradio session_hash for unique identification
+- **Key Validation**: Checks session state before processing requests
+- **Client Retrieval**: Gets per-session LLM and TTS clients
+- **Error Propagation**: Passes quota errors to modal interface
+
+**Section sources**
+- [handlers.py](file://src/ui/handlers.py#L41-L214)
+- [launcher.py](file://src/ui/launcher.py#L90-L212)
 
 ## Dependency Analysis
-- api_keys.py depends on the environment loader and standard OS environment access.
-- mayamcp_cli.py depends on api_keys for validation and uses the normalized keys internally.
-- deploy.py depends on api_keys for legacy key support and validation.
-- embeddings.py depends on api_keys for retrieving the Google AI key and lazily configures the SDK.
+The BYOK system creates a complex web of dependencies focused on session management:
+- **api_key_modal.py** depends on key_validator.py for validation and state_manager.py for storage
+- **key_validator.py** depends on google-genai SDK for validation
+- **state_manager.py** provides core session management for all other components
+- **session_registry.py** depends on state_manager.py for session locks and caching
+- **handlers.py** coordinates all components with session awareness
+- **processor.py** integrates with handlers for quota error handling
 
 ```mermaid
 graph LR
-Env[".env"] --> API["api_keys.py"]
-API --> CLI["mayamcp_cli.py"]
-API --> EMB["embeddings.py"]
-API --> DEP["deploy.py"]
+Modal["api_key_modal.py"] --> Validator["key_validator.py"]
+Modal --> State["state_manager.py"]
+Validator --> SDK["google-genai SDK"]
+State --> Registry["session_registry.py"]
+Handlers["handlers.py"] --> State
+Handlers --> Registry
+Processor["processor.py"] --> Handlers
+Client["client.py"] --> Registry
 ```
 
 **Diagram sources**
-- [api_keys.py](file://src/config/api_keys.py#L7-L22)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L12-L16)
-- [deploy.py](file://deploy.py#L142-L157)
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L1-L137)
+- [key_validator.py](file://src/llm/key_validator.py#L1-L87)
+- [state_manager.py](file://src/utils/state_manager.py#L1-L894)
+- [session_registry.py](file://src/llm/session_registry.py#L1-L107)
+- [handlers.py](file://src/ui/handlers.py#L1-L387)
+- [processor.py](file://src/conversation/processor.py#L1-L468)
+- [client.py](file://src/llm/client.py#L1-L217)
 
 **Section sources**
-- [api_keys.py](file://src/config/api_keys.py#L7-L22)
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L12-L16)
-- [deploy.py](file://deploy.py#L142-L157)
-- [embeddings.py](file://src/rag/embeddings.py#L42-L65)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L1-L137)
+- [key_validator.py](file://src/llm/key_validator.py#L1-L87)
+- [state_manager.py](file://src/utils/state_manager.py#L1-L894)
+- [session_registry.py](file://src/llm/session_registry.py#L1-L107)
+- [handlers.py](file://src/ui/handlers.py#L1-L387)
+- [processor.py](file://src/conversation/processor.py#L1-L468)
+- [client.py](file://src/llm/client.py#L1-L217)
 
 ## Performance Considerations
-- Lazy configuration avoids unnecessary SDK reinitialization when the key remains unchanged.
-- Stripping whitespace reduces accidental validation failures and improves robustness.
-- Using a helper to check multiple environment variable names prevents repeated lookups and simplifies deployment scripts.
-
-[No sources needed since this section provides general guidance]
+- **Client Caching**: Per-session client caching eliminates expensive initialization costs
+- **Hash-Based Comparison**: SHA-256 hashing provides fast key change detection
+- **Thread Safety**: Session locks prevent race conditions without excessive contention
+- **Lazy Initialization**: Clients are created only when needed, reducing startup overhead
+- **Memory Management**: Automatic cleanup of expired sessions prevents memory leaks
+- **Minimal Validation**: Lightweight API calls (models.list()) minimize validation overhead
 
 ## Troubleshooting Guide
 
-Common issues and resolutions:
-- Missing required keys at startup
-  - Symptom: Application exits immediately with an error indicating required keys are missing.
-  - Resolution: Populate GEMINI_API_KEY and CARTESIA_API_KEY in your .env file and ensure the file is readable by the process.
-  - Reference: [Startup validation](file://src/mayamcp_cli.py#L31-L39)
+### Common Issues and Resolutions
 
-- Empty or whitespace-only keys
-  - Symptom: Validation fails even though variables appear set.
-  - Cause: Keys contain only whitespace or are empty strings.
-  - Resolution: Remove surrounding whitespace and ensure non-empty values.
-  - Reference: [Validation behavior](file://src/config/api_keys.py#L24-L43), [Tests for whitespace handling](file://tests/test_api_keys.py#L260-L287)
+#### **Missing Required Keys**
+- **Symptom**: Modal shows "Please enter your Gemini API key" error
+- **Cause**: User didn't enter a key or entered only whitespace
+- **Resolution**: Enter a valid Gemini API key from Google AI Studio
+- **Reference**: [Key validation](file://src/ui/api_key_modal.py#L103-L109)
 
-- Legacy key name in deployment
-  - Symptom: Deployment script fails to find the expected key.
-  - Resolution: Provide GEMINI_API_KEY or fall back to GOOGLE_API_KEY as supported by the helper.
-  - Reference: [Deployment key helper](file://deploy.py#L142-L157)
+#### **Invalid API Key**
+- **Symptom**: Modal shows authentication error with Google AI Studio link
+- **Cause**: Key doesn't exist or lacks proper permissions
+- **Resolution**: Verify key from Google AI Studio dashboard
+- **Reference**: [Authentication error handling](file://src/llm/key_validator.py#L72-L77)
 
-- Google AI SDK not configured for embeddings
-  - Symptom: Embedding generation fails with an error.
-  - Resolution: Ensure GEMINI_API_KEY is present and non-empty; the system logs an error if missing.
-  - Reference: [Embeddings configuration guard](file://src/rag/embeddings.py#L55-L58)
+#### **Rate Limit/Quota Exceeded**
+- **Symptom**: Modal popup with "Rate Limit Reached" and resolution steps
+- **Cause**: Free tier quota exceeded or billing not enabled
+- **Resolution**: Wait for quota reset or enable billing in Google AI Studio
+- **Reference**: [Quota error handling](file://src/conversation/processor.py#L28-L38), [Modal popup](file://src/ui/api_key_modal.py#L16-L54)
 
-- Key rotation during runtime
-  - Behavior: The system detects a changed key and reconfigures the SDK without restart.
-  - Reference: [Lazy configuration and rotation](file://src/rag/embeddings.py#L42-L65)
+#### **Network Connectivity Issues**
+- **Symptom**: Connection error messages during validation
+- **Cause**: Network problems or firewall restrictions
+- **Resolution**: Check internet connection and proxy settings
+- **Reference**: [Network error handling](file://src/llm/key_validator.py#L80-L82)
 
-- Environment file not loading
-  - Symptom: Keys are None despite being set.
-  - Resolution: Confirm the dotenv loader is invoked and the .env file path is correct.
-  - Reference: [Environment loading at import](file://src/config/api_keys.py#L7-L8), [Test verifying loader invocation](file://tests/test_api_keys.py#L228-L237)
+#### **Session Lock Contention**
+- **Symptom**: Slow response times under high concurrency
+- **Cause**: Multiple threads competing for the same session lock
+- **Resolution**: Monitor session lock cleanup and reduce concurrent operations
+- **Reference**: [Session lock management](file://src/utils/state_manager.py#L207-L242)
+
+#### **Expired Session Cleanup**
+- **Symptom**: Memory growth over time
+- **Cause**: Sessions not being cleaned up properly
+- **Resolution**: Ensure cleanup_session_lock() is called during reset
+- **Reference**: [Cleanup function](file://src/utils/state_manager.py#L229-L242)
+
+#### **Client Recreation Issues**
+- **Symptom**: Stale clients serving wrong keys
+- **Cause**: Hash comparison failing or cache corruption
+- **Resolution**: Clear session clients and recreate with new keys
+- **Reference**: [Client registry](file://src/llm/session_registry.py#L98-L107)
+
+#### **Legacy Configuration Conflicts**
+- **Symptom**: Confusion between old server-side and new BYOK system
+- **Cause**: Mixing .env configuration with per-session keys
+- **Resolution**: Use per-session keys exclusively for BYOK system
+- **Reference**: [Legacy support](file://.env.example#L1-L33)
 
 **Section sources**
-- [mayamcp_cli.py](file://src/mayamcp_cli.py#L31-L39)
-- [api_keys.py](file://src/config/api_keys.py#L24-L43)
-- [deploy.py](file://deploy.py#L142-L157)
-- [embeddings.py](file://src/rag/embeddings.py#L55-L58)
-- [tests/test_api_keys.py](file://tests/test_api_keys.py#L228-L237)
+- [api_key_modal.py](file://src/ui/api_key_modal.py#L16-L54)
+- [key_validator.py](file://src/llm/key_validator.py#L52-L86)
+- [state_manager.py](file://src/utils/state_manager.py#L229-L242)
+- [session_registry.py](file://src/llm/session_registry.py#L98-L107)
+- [processor.py](file://src/conversation/processor.py#L28-L38)
 
 ## Conclusion
-MayaMCP’s API key management system provides a robust, environment-driven approach to credential handling:
-- It loads keys from .env, normalizes them, and exposes them through centralized accessors.
-- Startup validation ensures required credentials are present, with clear error messaging.
-- Deployment scripts support legacy key names and enforce presence of required keys.
-- Runtime lazy configuration enables safe key rotation without restarts.
-- Comprehensive tests validate edge cases such as missing keys, empty strings, and whitespace-only values.
+MayaMCP's BYOK API key management system represents a significant architectural advancement in secure credential handling:
+- **Distributed Authentication**: Each session manages its own credentials independently
+- **Lightweight Validation**: Minimal API calls ensure fast key verification
+- **Thread Safety**: Comprehensive locking mechanisms prevent race conditions
+- **User Experience**: Modal interfaces provide clear feedback and resolution steps
+- **Performance**: Client caching and lazy initialization optimize resource usage
+- **Security**: Keys never leave the user's session, reducing exposure risks
 
-For secure operations, follow the guidance below to manage keys across environments.
+The system successfully balances security, performance, and usability while maintaining backward compatibility with legacy configurations.
 
 ## Best Practices and Guidelines
 
-- Naming conventions
-  - Prefer GEMINI_API_KEY for Google AI and CARTESIA_API_KEY for Cartesia.
-  - Legacy support exists for GOOGLE_API_KEY in deployment contexts.
+### **Security Considerations**
+- **Session Isolation**: Keys are stored per-session and never shared between users
+- **Minimal Exposure**: Keys are only temporarily stored in memory during active sessions
+- **Hash Verification**: Raw keys are never logged; only SHA-256 hashes are tracked
+- **Automatic Cleanup**: Expired sessions are automatically cleaned up to prevent memory leaks
 
-- Environment files
-  - Use .env.example as a template and copy it to .env for local development.
-  - Populate .env with your actual keys and keep it out of version control.
+### **Key Management Guidelines**
+- **Gemini Key Requirements**: Always provide a valid Gemini API key; Cartesia key is optional
+- **Key Rotation**: Changing keys automatically recreates clients without service interruption
+- **Quota Awareness**: Monitor free tier limits and enable billing when needed
+- **Testing Keys**: Use development keys for testing; avoid production key exposure
 
-- Security
-  - Store keys securely; never commit .env or secrets to repositories.
-  - Rotate keys regularly; the system supports runtime rotation for Google AI keys.
-  - Limit permissions on .env to trusted users only.
+### **Deployment Considerations**
+- **Scalability**: Thread-safe design supports high-concurrency scenarios
+- **Resource Management**: Automatic cleanup prevents memory accumulation
+- **Monitoring**: Track session lock cleanup and client recreation metrics
+- **Fallback Handling**: Graceful degradation when keys are missing or invalid
 
-- Separation of environments
-  - Development: Use .env with test keys; keep DEBUG enabled locally.
-  - Production: Provide keys via deployment platform secrets; disable DEBUG and restrict access.
-  - Test environments: Use dedicated test keys; avoid mixing with production keys.
+### **User Experience Best Practices**
+- **Clear Error Messages**: Provide actionable guidance for key validation failures
+- **Modal Interfaces**: Use styled popups for quota and rate limit notifications
+- **Progress Feedback**: Show loading states during key validation
+- **Help Resources**: Include direct links to API key management dashboards
 
-- Validation and error handling
-  - On startup, the application validates keys and exits with a clear error if missing.
-  - In services like embeddings, missing keys are logged and operations are skipped gracefully.
-
-- Formatting requirements
-  - Keys should be non-empty strings; leading/trailing whitespace is trimmed automatically.
-  - Avoid special characters unless required by the provider; follow provider-specific key formats.
-
-- Troubleshooting checklist
-  - Confirm .env is present and readable.
-  - Verify required variables are set and non-empty.
-  - Check for whitespace-only values.
-  - For deployments, ensure the correct key names are provided.
-  - Review logs for explicit error messages indicating missing or invalid keys.
-
-[No sources needed since this section provides general guidance]
+### **Development and Testing**
+- **Mock Validation**: Use test keys for development environments
+- **Error Simulation**: Test quota limit scenarios with mock responses
+- **Concurrency Testing**: Validate thread safety under load conditions
+- **Cleanup Verification**: Ensure proper session cleanup in test environments

@@ -13,13 +13,15 @@
 - [tests/test_api_keys.py](file://tests/test_api_keys.py)
 - [tests/test_model_config.py](file://tests/test_model_config.py)
 - [tests/test_logging_config.py](file://tests/test_logging_config.py)
+- [README.md](file://README.md)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Updated model version default from `gemini-2.5-flash-lite` to `gemini-3.0-flash` in Model and Generation Configuration section
-- Updated environment variable precedence and defaults section to reflect new model version default
-- Updated supported environment variables section to reflect new model version default
+- Updated model version default from `gemini-2.5-flash-lite` to `gemini-3-flash-preview` in Model and Generation Configuration section
+- Updated temperature default behavior to be intelligently selected based on model version (1.0 for Gemini 3.x, 0.7 for older models)
+- Updated environment variable precedence and defaults section to reflect new model version default and intelligent temperature selection
+- Updated supported environment variables section to reflect new model version default and intelligent temperature behavior
 - Updated example .env files section to note the current example shows the old default for backward compatibility
 
 ## Table of Contents
@@ -70,7 +72,7 @@ Deploy["deploy.py"] --> Runtime
 
 ## Core Components
 - API keys loader and validator
-- Model and generation configuration
+- Model and generation configuration with intelligent temperature selection
 - Logging configuration and debug toggles
 - CLI and deployment integration
 
@@ -148,20 +150,24 @@ Valid --> |No| Fail["Fail validation"]
 - Behavior:
   - get_model_config reads environment variables with defaults
   - get_generation_config derives generation parameters from model config
+  - Intelligent temperature selection based on model version (1.0 for Gemini 3.x, 0.7 for older models)
   - Invalid numeric values fall back to defaults with warnings
 - Defaults:
-  - **Updated**: Model version default: gemini-3.0-flash (previously gemini-2.5-flash-lite)
-  - Temperature default: 0.7
+  - **Updated**: Model version default: gemini-3-flash-preview (previously gemini-2.5-flash-lite)
+  - Temperature default: 1.0 for Gemini 3.x models, 0.7 for older models
   - Max output tokens default: 2048
 - Validation:
   - Numeric parsing with fallback; non-numeric values logged and ignored
 
+**Updated** Temperature default is now intelligently selected based on model version. Gemini 3.x models use 1.0 by default, while older models use 0.7.
+
 ```mermaid
 flowchart TD
 Start(["get_model_config()"]) --> ReadModel["Read GEMINI_MODEL_VERSION"]
-ReadModel --> ReadTemp["Read TEMPERATURE"]
+ReadModel --> GetTemp["Get default temperature based on model"]
+GetTemp --> ReadTemp["Read TEMPERATURE"]
 ReadTemp --> ParseTemp{"Parsed?"}
-ParseTemp --> |No| TempDefault["Use default 0.7"]
+ParseTemp --> |No| TempDefault["Use intelligent default (1.0 for Gemini 3.x, 0.7 for others)"]
 ParseTemp --> |Yes| KeepTemp["Use parsed temperature"]
 ReadTemp --> ReadTokens["Read MAX_OUTPUT_TOKENS"]
 ReadTokens --> ParseTokens{"Parsed?"}
@@ -175,11 +181,11 @@ Build --> Return["Return model config"]
 ```
 
 **Diagram sources**
-- [src/config/model_config.py](file://src/config/model_config.py#L31-L59)
+- [src/config/model_config.py](file://src/config/model_config.py#L31-L64)
 - [src/config/model_config.py](file://src/config/model_config.py#L10-L28)
 
 **Section sources**
-- [src/config/model_config.py](file://src/config/model_config.py#L31-L59)
+- [src/config/model_config.py](file://src/config/model_config.py#L31-L64)
 - [tests/test_model_config.py](file://tests/test_model_config.py#L136-L189)
 
 ### Logging and Debug Configuration
@@ -301,6 +307,10 @@ Common issues and resolutions:
   - Symptom: Debug behavior differs between stages
   - Resolution: Use STAGE_DEBUG_SOURCE or rely on DEBUG; confirm value in deployment environment
   - Reference: [deploy.py](file://deploy.py#L29-L29)
+- Model version compatibility issues
+  - Symptom: Unexpected temperature behavior or model validation warnings
+  - Resolution: Gemini 3.x models automatically use temperature=1.0; older models use 0.7. Set TEMPERATURE explicitly if needed.
+  - Reference: [src/config/model_config.py](file://src/config/model_config.py#L31-L44), [tests/test_model_config.py](file://tests/test_model_config.py#L136-L189)
 
 **Section sources**
 - [src/config/api_keys.py](file://src/config/api_keys.py#L24-L43)
@@ -313,7 +323,7 @@ Common issues and resolutions:
 - [deploy.py](file://deploy.py#L29-L29)
 
 ## Conclusion
-MayaMCP's environment variable system provides a robust, predictable way to configure APIs, models, and runtime behavior across environments. By leveraging dotenv import-time loading, explicit defaults, and validation helpers, the system balances flexibility with safety. Following the guidelines and examples below ensures reliable deployments.
+MayaMCP's environment variable system provides a robust, predictable way to configure APIs, models, and runtime behavior across environments. By leveraging dotenv import-time loading, explicit defaults, and validation helpers, the system balances flexibility with safety. The intelligent temperature selection for Gemini 3.x models ensures optimal performance while maintaining backward compatibility. Following the guidelines and examples below ensures reliable deployments.
 
 ## Appendices
 
@@ -335,10 +345,11 @@ MayaMCP's environment variable system provides a robust, predictable way to conf
   - Values are read via os.getenv with documented defaults
   - API keys are stripped of whitespace; validation requires non-empty strings
   - Numeric values are parsed with fallback to defaults and warning logs
+  - **Updated**: Model version defaults to gemini-3-flash-preview; temperature defaults intelligently based on model version (1.0 for Gemini 3.x, 0.7 for older models)
 
 **Section sources**
 - [src/config/api_keys.py](file://src/config/api_keys.py#L10-L22)
-- [src/config/model_config.py](file://src/config/model_config.py#L31-L59)
+- [src/config/model_config.py](file://src/config/model_config.py#L31-L64)
 - [src/config/logging_config.py](file://src/config/logging_config.py#L7-L39)
 - [src/mayamcp_cli.py](file://src/mayamcp_cli.py#L113-L117)
 - [.env.example](file://.env.example#L1-L33)
@@ -348,8 +359,8 @@ MayaMCP's environment variable system provides a robust, predictable way to conf
   - Process environment overrides .env values
   - Explicit parameters passed to configuration functions override environment
 - Defaults
-  - **Updated**: Model version: gemini-3.0-flash (previously gemini-2.5-flash-lite)
-  - Temperature: 0.7
+  - **Updated**: Model version: gemini-3-flash-preview (previously gemini-2.5-flash-lite)
+  - Temperature: 1.0 for Gemini 3.x models, 0.7 for older models (intelligent selection)
   - Max output tokens: 2048
   - Log level: INFO unless DEBUG is true
   - Host: 0.0.0.0
@@ -393,7 +404,7 @@ Note: Replace placeholder values with real keys and adjust defaults as needed.
   - Disable DEBUG, increase LOG_LEVEL, set PYTHON_ENV=production
   - Reference: [.env.example](file://.env.example#L1-L33)
 
-**Note**: The current example .env file shows `GEMINI_MODEL_VERSION=gemini-2.5-flash-lite` for backward compatibility, but the system default is now `gemini-3.0-flash`.
+**Note**: The current example .env file shows `GEMINI_MODEL_VERSION=gemini-2.5-flash-lite` for backward compatibility, but the system default is now `gemini-3-flash-preview`. The intelligent temperature selection will automatically use 1.0 for Gemini 3.x models and 0.7 for older models.
 
 **Section sources**
 - [.env.example](file://.env.example#L1-L33)
@@ -402,7 +413,7 @@ Note: Replace placeholder values with real keys and adjust defaults as needed.
 - src/config/api_keys.py
   - Loads .env and exposes get_api_keys and validate_api_keys
 - src/config/model_config.py
-  - Loads .env and exposes get_model_config and get_generation_config
+  - Loads .env and exposes get_model_config and get_generation_config with intelligent temperature selection
 - src/config/logging_config.py
   - Loads .env and exposes setup_logging and get_logger
 - src/mayamcp_cli.py
@@ -413,7 +424,7 @@ Note: Replace placeholder values with real keys and adjust defaults as needed.
 **Section sources**
 - [src/config/__init__.py](file://src/config/__init__.py#L7-L12)
 - [src/config/api_keys.py](file://src/config/api_keys.py#L7-L8)
-- [src/config/model_config.py](file://src/config/model_config.py#L31-L59)
+- [src/config/model_config.py](file://src/config/model_config.py#L31-L64)
 - [src/config/logging_config.py](file://src/config/logging_config.py#L7-L39)
 - [src/mayamcp_cli.py](file://src/mayamcp_cli.py#L113-L117)
 - [deploy.py](file://deploy.py#L29-L29)

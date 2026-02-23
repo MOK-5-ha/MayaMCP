@@ -94,8 +94,6 @@ cascade_chat_logs/
 # MayaMCP specific files
 .maya_salt
 .kilocode/
-.kiro/
-.qoder/
 .zencoder/
 maya_output.log
 maya_memvid_output.log

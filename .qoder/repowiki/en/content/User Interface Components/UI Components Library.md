@@ -17,6 +17,13 @@
 - [tests/test_ui_launcher.py](file://tests/test_ui_launcher.py)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated section on Tip Notification Functions to reflect removal of deprecated utilities
+- Revised UI Components section to emphasize simplified architecture while maintaining core capabilities
+- Updated troubleshooting guide to reflect current state management approach
+- Added note about deprecated functions still existing in codebase despite removal directive
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -30,13 +37,15 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the UI components library that powers MayaMCP’s conversational bartender interface. It focuses on:
+This document describes the UI components library that powers MayaMCP's conversational bartender interface. It focuses on:
 - The avatar setup system supporting remote downloads and fallbacks, and dynamic emotion-based animations
 - Component composition patterns for layout, styling, and responsiveness
 - Utility functions for UI state management, validation, and error handling
 - Integration with Gradio components and the custom overlay styling system
 - Examples of customization, theme adaptation, and accessibility considerations
 - The modular architecture enabling reuse and consistent visual UX
+
+**Updated** The library has been simplified to remove deprecated utility functions while maintaining core conversation and payment capabilities.
 
 ## Project Structure
 The UI subsystem is organized around four primary modules:
@@ -90,6 +99,8 @@ comps --> fs
 - Event handlers: Process user input, orchestrate LLM/RAG/TTS, compute payment state, and resolve emotion-based avatar changes.
 - Launcher: Builds the Gradio interface with two-column layout, stateful components, and event bindings.
 - Tab overlay: Generates HTML/CSS/JS for tab/balance display, tip buttons, and animated transitions.
+
+**Updated** The tip notification functionality has been simplified - deprecated utility functions `generate_tip_notification` and `generate_tip_removal_notification` have been removed from the core processing flow, though they still exist in the codebase for backward compatibility testing.
 
 Key responsibilities:
 - Avatar system: Remote fetch, fallback, save, and runtime selection based on emotion parsing.
@@ -175,7 +186,7 @@ Key behaviors:
 - [tests/test_ui_components.py](file://tests/test_ui_components.py#L9-L334)
 
 ### Emotion-Based Avatar Switching
-Maya’s avatar reacts to internal emotional states inferred from LLM responses:
+Maya's avatar reacts to internal emotional states inferred from LLM responses:
 - Emotion parsing yields a state string (e.g., neutral, happy, flustered)
 - The system validates the emotion against a whitelist and checks asset existence
 - If valid and present, the avatar path is updated; otherwise, the previous state is preserved
@@ -275,6 +286,8 @@ The overlay displays:
 - Tip buttons (10%, 15%, 20%) with toggle behavior and visual highlighting
 - Tip and total display when a tip is selected
 - Balance color coding based on thresholds
+
+**Updated** The tip notification functionality has been simplified. While the deprecated utility functions `generate_tip_notification` and `generate_tip_removal_notification` still exist in the codebase, the core tip processing flow now relies on the state manager for tip calculations and display.
 
 ```mermaid
 flowchart TD
@@ -386,8 +399,6 @@ overlay --> fs["assets/*.mp4 / *.jpg / *.png"]
 - Network resilience: Avatar setup retries and fallbacks prevent UI stalls on network failures.
 - State updates: Atomic operations and thread-safe locks avoid race conditions and ensure consistent state.
 
-[No sources needed since this section provides general guidance]
-
 ## Troubleshooting Guide
 Common issues and resolutions:
 - Avatar not updating: Verify asset existence under assets/maya_<emotion>.mp4 and corresponding poster image; ensure emotion parsing returns a recognized state.
@@ -395,15 +406,17 @@ Common issues and resolutions:
 - TTS not playing: Ensure TTS client is configured and response text is non-empty; failures are logged and UI continues without audio.
 - Payment state inconsistencies: Use atomic operations; check for version mismatches and insufficient funds errors.
 
+**Updated** Tip notification functionality: The deprecated utility functions `generate_tip_notification` and `generate_tip_removal_notification` still exist in the codebase but are no longer actively used in the core tip processing flow. The tip display and calculation are now handled entirely by the state manager and tab overlay components.
+
 **Section sources**
 - [src/ui/handlers.py](file://src/ui/handlers.py#L97-L118)
 - [src/ui/tab_overlay.py](file://src/ui/tab_overlay.py#L407-L483)
 - [src/utils/state_manager.py](file://src/utils/state_manager.py#L685-L757)
 
 ## Conclusion
-MayaMCP’s UI components library provides a robust, modular, and resilient interface for conversational ordering and avatar-driven feedback. The avatar system supports remote fetching, fallbacks, and emotion-based animations with smooth transitions. The Gradio-based launcher composes a responsive layout with stateful components and event handlers. Built-in state management and error handling ensure consistent UX even under failure conditions.
+MayaMCP's UI components library provides a robust, modular, and resilient interface for conversational ordering and avatar-driven feedback. The avatar system supports remote fetching, fallbacks, and emotion-based animations with smooth transitions. The Gradio-based launcher composes a responsive layout with stateful components and event handlers. Built-in state management and error handling ensure consistent UX even under failure conditions.
 
-[No sources needed since this section summarizes without analyzing specific files]
+**Updated** The library has been simplified by removing deprecated utility functions while maintaining core conversation and payment capabilities. The system now focuses on streamlined state management and direct tip processing through the overlay components.
 
 ## Appendices
 
@@ -413,12 +426,16 @@ MayaMCP’s UI components library provides a robust, modular, and resilient inte
 - Adjust overlay styles: Edit the embedded CSS in the overlay generator to change fonts, colors, and layout.
 - Theme adaptation: Swap the Ocean theme for another Gradio theme; verify responsive behavior across screen sizes.
 
-[No sources needed since this section provides general guidance]
-
 ### Accessibility Considerations
 - Contrast and color: Balance color coding meets minimum contrast ratios; adjust colors for low vision needs.
 - Keyboard navigation: Ensure textboxes and buttons are focusable and operable via keyboard.
 - Screen reader support: Use descriptive labels and aria attributes where applicable in custom HTML.
-- Motion sensitivity: Provide reduced motion options; the overlay’s animations can be tuned or disabled.
+- Motion sensitivity: Provide reduced motion options; the overlay's animations can be tuned or disabled.
 
-[No sources needed since this section provides general guidance]
+### Deprecated Function Reference
+**Updated** The following utility functions have been removed from the core processing flow but still exist in the codebase for backward compatibility:
+
+- `generate_tip_notification`: Creates conversational tip selection notifications
+- `generate_tip_removal_notification`: Creates conversational tip removal notifications
+
+These functions are no longer actively used in the tip processing workflow and have been replaced by direct state management through the overlay components.

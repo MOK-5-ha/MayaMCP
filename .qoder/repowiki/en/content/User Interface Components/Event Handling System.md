@@ -15,6 +15,15 @@
 - [deploy.py](file://deploy.py)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Removed comprehensive tip handling functionality sections
+- Updated architecture diagrams to reflect simplified event handling system
+- Removed tip button click handler documentation
+- Removed JavaScript integration for dynamic tip buttons
+- Updated state synchronization mechanisms to focus on core interaction patterns
+- Revised troubleshooting guide to remove tip-related issues
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -27,7 +36,9 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document provides comprehensive documentation for the event handling system that processes user interactions and coordinates between UI components and backend services in the Maya bartender agent. The system centers around three primary event handlers: the main input handler that processes user messages, the tip button click handler that manages gratuity selection, and the clear conversation handler that resets UI state while maintaining avatar consistency. The documentation covers the handle_input_fn function, tip button click handling, clear conversation functionality, state synchronization mechanisms, JavaScript integration for dynamic tip buttons, event propagation patterns, custom event handlers, state management patterns, and error handling strategies.
+This document provides comprehensive documentation for the event handling system that processes user interactions and coordinates between UI components and backend services in the Maya bartender agent. The system centers around the main input handler that processes user messages, manages conversation flow, and integrates with the conversation processor. The documentation covers the handle_gradio_input function, state synchronization mechanisms, JavaScript integration for dynamic interactions, event propagation patterns, custom event handlers, state management patterns, and error handling strategies.
+
+**Updated** The system now focuses on core interaction patterns without payment-specific features, simplifying the architecture while maintaining robust conversation management capabilities.
 
 ## Project Structure
 The event handling system spans several modules that work together to manage user interactions:
@@ -67,30 +78,26 @@ Deploy --> Launcher
 
 **Diagram sources**
 - [launcher.py](file://src/ui/launcher.py#L49-L354)
-- [handlers.py](file://src/ui/handlers.py#L23-L392)
-- [processor.py](file://src/conversation/processor.py#L73-L456)
+- [handlers.py](file://src/ui/handlers.py#L23-L259)
+- [processor.py](file://src/conversation/processor.py#L73-L480)
 - [state_manager.py](file://src/utils/state_manager.py#L394-L814)
 
 **Section sources**
-- [launcher.py](file://src/ui/launcher.py#L1-L354)
-- [handlers.py](file://src/ui/handlers.py#L1-L392)
+- [launcher.py](file://src/ui/launcher.py#L1-L362)
+- [handlers.py](file://src/ui/handlers.py#L1-L259)
 
 ## Core Components
-The event handling system consists of three primary components:
+The event handling system consists of two primary components:
 
 ### Main Input Handler (`handle_gradio_input`)
 The central event handler that processes user messages, manages conversation flow, and integrates with the conversation processor. It orchestrates the complete user interaction lifecycle from input processing to UI state updates.
-
-### Tip Button Handler (`handle_tip_button_click`)
-Specialized handler for processing user tip selections with toggle behavior and notification generation for the AI agent.
 
 ### Clear Conversation Handler (`clear_chat_state`)
 Handler that resets all UI state while maintaining avatar consistency and cleaning up backend session state.
 
 **Section sources**
-- [handlers.py](file://src/ui/handlers.py#L23-L184)
-- [handlers.py](file://src/ui/handlers.py#L218-L392)
-- [handlers.py](file://src/ui/handlers.py#L186-L216)
+- [handlers.py](file://src/ui/handlers.py#L71-L259)
+- [handlers.py](file://src/ui/handlers.py#L231-L259)
 
 ## Architecture Overview
 The event handling system follows a layered architecture with clear separation of concerns:
@@ -118,10 +125,10 @@ Note over Handler,Overlay : "State synchronization<br/>occurs throughout the flo
 ```
 
 **Diagram sources**
-- [handlers.py](file://src/ui/handlers.py#L23-L184)
-- [processor.py](file://src/conversation/processor.py#L73-L456)
+- [handlers.py](file://src/ui/handlers.py#L71-L259)
+- [processor.py](file://src/conversation/processor.py#L73-L480)
 - [state_manager.py](file://src/utils/state_manager.py#L627-L640)
-- [tab_overlay.py](file://src/ui/tab_overlay.py#L151-L486)
+- [tab_overlay.py](file://src/ui/tab_overlay.py#L151-L595)
 
 ## Detailed Component Analysis
 
@@ -152,7 +159,7 @@ UpdateUI --> End([Return Updated State])
 ```
 
 **Diagram sources**
-- [handlers.py](file://src/ui/handlers.py#L84-L184)
+- [handlers.py](file://src/ui/handlers.py#L71-L259)
 
 #### State Synchronization Mechanisms
 The handler maintains synchronization between multiple state sources:
@@ -162,50 +169,9 @@ The handler maintains synchronization between multiple state sources:
 - **UI State**: Controls overlay animations and visual feedback
 
 **Section sources**
-- [handlers.py](file://src/ui/handlers.py#L23-L184)
-- [processor.py](file://src/conversation/processor.py#L73-L456)
+- [handlers.py](file://src/ui/handlers.py#L71-L259)
+- [processor.py](file://src/conversation/processor.py#L73-L480)
 - [state_manager.py](file://src/utils/state_manager.py#L627-L640)
-
-### Tip Button Click Handler (`handle_tip_button_click`)
-Specialized handler for processing user tip selections with sophisticated toggle behavior.
-
-#### Toggle Behavior Implementation
-The tip handler implements intelligent toggle behavior:
-- **Same Percentage Click**: Removes existing tip (toggle off)
-- **Different Percentage Click**: Sets new tip percentage (toggle on)
-- **No Selection**: Allows tip removal when same percentage is already selected
-
-#### Notification System
-The handler generates contextual notifications for the AI agent:
-- **Tip Added**: "I'd like to add a {percentage}% tip (${amount}) for your great service!"
-- **Tip Removed**: "I've decided to remove the tip."
-
-#### Processing Flow
-```mermaid
-sequenceDiagram
-participant User as "User"
-participant JS as "JavaScript"
-participant Handler as "Tip Handler"
-participant State as "State Manager"
-participant Processor as "Conversation Processor"
-participant Overlay as "Tab Overlay"
-User->>JS : "Click tip button"
-JS->>Handler : "handle_tip_button_click()"
-Handler->>State : "set_tip(session_id, percentage)"
-State->>State : "Calculate tip amount"
-Handler->>Processor : "process_order(notification)"
-Processor->>State : "Update conversation state"
-Handler->>Overlay : "Create overlay with new tip"
-Overlay->>User : "Display updated tip state"
-```
-
-**Diagram sources**
-- [handlers.py](file://src/ui/handlers.py#L218-L392)
-- [tab_overlay.py](file://src/ui/tab_overlay.py#L118-L148)
-
-**Section sources**
-- [handlers.py](file://src/ui/handlers.py#L218-L392)
-- [tab_overlay.py](file://src/ui/tab_overlay.py#L118-L148)
 
 ### Clear Conversation Handler (`clear_chat_state`)
 Handler that resets all UI state while maintaining avatar consistency.
@@ -224,10 +190,10 @@ The handler includes robust error recovery:
 - **Backend State Issues**: Continues with UI reset even if backend fails
 
 **Section sources**
-- [handlers.py](file://src/ui/handlers.py#L186-L216)
+- [handlers.py](file://src/ui/handlers.py#L231-L259)
 
-### JavaScript Integration for Dynamic Tip Buttons
-The system integrates JavaScript for dynamic tip button functionality:
+### JavaScript Integration for Dynamic Interactions
+The system integrates JavaScript for dynamic UI interactions:
 
 #### JavaScript Callback System
 ```javascript
@@ -255,9 +221,11 @@ The JavaScript integration follows a specific event propagation pattern:
 4. **Gradio Processing**: Gradio detects change and invokes handler
 5. **State Update**: Handler processes tip selection and updates UI
 
+**Updated** The current implementation focuses on core interaction patterns without payment-specific features, so the JavaScript integration is primarily for demonstration purposes.
+
 **Section sources**
-- [launcher.py](file://src/ui/launcher.py#L170-L193)
-- [launcher.py](file://src/ui/launcher.py#L345-L349)
+- [launcher.py](file://src/ui/launcher.py#L229-L243)
+- [launcher.py](file://src/ui/launcher.py#L349-L357)
 
 ### State Management Patterns
 The system employs several sophisticated state management patterns:
@@ -275,15 +243,10 @@ class SessionLockManager {
 class StateManager {
 +initialize_state(session_id, store) void
 +get_payment_state(session_id, store) Dict
-+set_tip(session_id, store, percentage) Tuple
 +atomic_order_update(session_id, store, price, expected_version) Tuple
 }
 SessionLockManager --> StateManager : "provides thread safety"
 ```
-
-**Diagram sources**
-- [state_manager.py](file://src/utils/state_manager.py#L207-L282)
-- [state_manager.py](file://src/utils/state_manager.py#L556-L610)
 
 #### Atomic Operations
 The state manager implements atomic operations for financial transactions:
@@ -292,6 +255,7 @@ The state manager implements atomic operations for financial transactions:
 - **Transaction Rollback**: Ensures state consistency
 
 **Section sources**
+- [state_manager.py](file://src/utils/state_manager.py#L207-L282)
 - [state_manager.py](file://src/utils/state_manager.py#L685-L757)
 
 ### Conversation Processing Integration
@@ -398,18 +362,6 @@ The tab overlay implements an animation queue with:
 - Verify LLM availability
 - Review tool dependencies
 
-#### Tip Selection Problems
-**Symptoms**: Tips not applying or removing incorrectly
-**Causes**:
-- Invalid tip percentage values
-- State synchronization issues
-- JavaScript event propagation failures
-
-**Solutions**:
-- Validate tip percentage (10, 15, 20)
-- Check session state consistency
-- Verify JavaScript callback registration
-
 #### Avatar State Issues
 **Symptoms**: Avatar not changing or reverting unexpectedly
 **Causes**:
@@ -444,8 +396,8 @@ The Maya event handling system demonstrates sophisticated architecture for manag
 
 - **Modular Design**: Clear separation of concerns across UI, conversation, and state management layers
 - **Robust State Management**: Thread-safe operations with atomic transactions and optimistic locking
-- **Enhanced User Experience**: Dynamic tip buttons, avatar emotion switching, and smooth animations
+- **Enhanced User Experience**: Dynamic avatar emotion switching, smooth animations, and responsive interactions
 - **Production Ready**: Support for both local development and cloud deployment with Modal
 - **Extensible Architecture**: Well-defined interfaces for adding custom event handlers and state management patterns
 
-The system provides a solid foundation for extending conversational AI capabilities while maintaining reliability and user experience quality.
+The system provides a solid foundation for extending conversational AI capabilities while maintaining reliability and user experience quality. The simplified architecture without payment-specific features focuses on core interaction patterns, making the system more maintainable and easier to understand.

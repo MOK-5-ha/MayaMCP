@@ -15,6 +15,13 @@
 - [test_ui_components.py](file://tests/test_ui_components.py)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated tip management section to reflect simplified approach without interactive tip controls
+- Modified UI integration documentation to remove tip button functionality
+- Updated state management documentation to reflect streamlined payment state handling
+- Revised troubleshooting guide to address simplified tip handling scenarios
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -29,10 +36,12 @@
 ## Introduction
 This document provides comprehensive documentation for MayaMCP's tab management system, focusing on balance tracking and order state management. The system maintains user payment sessions with robust state validation, thread-safe concurrency control, and a real-time tab overlay UI that displays balances with animated visual feedback. The architecture integrates state management with UI components to ensure seamless updates during payment processing, order modifications, and tab resets.
 
+**Updated** The system now focuses on core payment state management without interactive tip controls, providing a simplified approach to tab tracking and balance management.
+
 ## Project Structure
 The tab management system spans several modules:
 - State management: centralized payment and order state handling
-- UI overlay: real-time balance display with animations and tip controls
+- UI overlay: real-time balance display with animations
 - Handlers: Gradio event processing and integration
 - Launcher: Gradio interface orchestration
 - Payments: Stripe integration for payment processing
@@ -45,9 +54,9 @@ SM["state_manager.py<br/>PaymentState, validation,<br/>atomic operations"]
 PM["phase_manager.py<br/>Conversation phases"]
 end
 subgraph "UI Layer"
-TO["tab_overlay.py<br/>Tab overlay HTML,<br/>animations, tip buttons"]
+TO["tab_overlay.py<br/>Tab overlay HTML,<br/>animations"]
 LH["launcher.py<br/>Gradio interface,<br/>state wiring"]
-HD["handlers.py<br/>Event handlers,<br/>tip processing"]
+HD["handlers.py<br/>Event handlers"]
 CP["components.py<br/>Avatar setup"]
 end
 subgraph "Integration"
@@ -65,20 +74,20 @@ CP --> LH
 ```
 
 **Diagram sources**
-- [state_manager.py](file://src/utils/state_manager.py#L1-L814)
+- [state_manager.py](file://src/utils/state_manager.py#L1-L871)
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L1-L595)
-- [handlers.py](file://src/ui/handlers.py#L1-L392)
-- [launcher.py](file://src/ui/launcher.py#L1-L354)
+- [handlers.py](file://src/ui/handlers.py#L1-L259)
+- [launcher.py](file://src/ui/launcher.py#L1-L362)
 - [components.py](file://src/ui/components.py#L1-L55)
-- [processor.py](file://src/conversation/processor.py#L1-L456)
+- [processor.py](file://src/conversation/processor.py#L1-L480)
 - [phase_manager.py](file://src/conversation/phase_manager.py#L1-L92)
 - [stripe_mcp.py](file://src/payments/stripe_mcp.py#L1-L475)
 
 **Section sources**
-- [state_manager.py](file://src/utils/state_manager.py#L1-L814)
+- [state_manager.py](file://src/utils/state_manager.py#L1-L871)
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L1-L595)
-- [handlers.py](file://src/ui/handlers.py#L1-L392)
-- [launcher.py](file://src/ui/launcher.py#L1-L354)
+- [handlers.py](file://src/ui/handlers.py#L1-L259)
+- [launcher.py](file://src/ui/launcher.py#L1-L362)
 
 ## Core Components
 The tab management system consists of four primary components:
@@ -92,21 +101,19 @@ The state manager provides:
 - Comprehensive state persistence and migration support
 
 Key data structures:
-- PaymentState: balance, tab_total, tip fields, payment_status, version tracking
+- PaymentState: balance, tab_total, payment_status, version tracking
 - Session locks for thread safety
 - Default state templates for backward compatibility
 
 ### Tab Overlay UI
 The overlay component delivers:
 - Real-time balance and tab display with animated count-up effects
-- Interactive tip buttons with visual feedback
 - Dynamic avatar integration with emotion-based state
 - Responsive design with color-coded balance indicators
 
 ### Gradio Handlers
 Event handlers manage:
 - User input processing and state updates
-- Tip button click events with toggle behavior
 - Avatar state management and emotion transitions
 - Error handling and graceful degradation
 
@@ -143,19 +150,11 @@ State-->>Handler : payment_state
 Handler->>Overlay : create_tab_overlay_html()
 Overlay-->>UI : Animated HTML with balance
 UI-->>User : Updated tab display
-User->>UI : Click tip button
-UI->>Handler : handle_tip_button_click()
-Handler->>State : set_tip()
-State->>State : calculate_tip()
-State-->>Handler : new_tip_state
-Handler->>Overlay : create_tab_overlay_html()
-Overlay-->>UI : Updated tip display
-UI-->>User : Animated tip update
 ```
 
 **Diagram sources**
-- [handlers.py](file://src/ui/handlers.py#L23-L184)
-- [state_manager.py](file://src/utils/state_manager.py#L447-L517)
+- [handlers.py](file://src/ui/handlers.py#L71-L229)
+- [state_manager.py](file://src/utils/state_manager.py#L671-L742)
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L151-L485)
 - [stripe_mcp.py](file://src/payments/stripe_mcp.py#L183-L273)
 
@@ -175,10 +174,8 @@ classDiagram
 class PaymentState {
 +float balance
 +float tab_total
-+Optional~int~ tip_percentage
-+float tip_amount
-+Optional~str~ stripe_payment_id
 +str payment_status
++Optional~str~ stripe_payment_id
 +Optional~str~ idempotency_key
 +int version
 +bool needs_reconciliation
@@ -189,7 +186,6 @@ class StateManager {
 +update_payment_state()
 +atomic_order_update()
 +atomic_payment_complete()
-+set_tip()
 +get_payment_total()
 +check_sufficient_funds()
 }
@@ -203,12 +199,11 @@ StateManager --> SessionLock : "uses"
 ```
 
 **Diagram sources**
-- [state_manager.py](file://src/utils/state_manager.py#L17-L814)
+- [state_manager.py](file://src/utils/state_manager.py#L17-L871)
 
 #### Payment State Validation
 The system enforces strict validation rules:
 - Balance and tab_total must be non-negative
-- Tip percentage must be 10, 15, or 20 (or None)
 - Payment status follows linear transitions (pending → processing → completed)
 - Stripe payment IDs follow specific patterns
 - Idempotency keys use session_id_timestamp format
@@ -221,25 +216,17 @@ Atomic operations ensure data consistency:
 - Thread-safe session locking
 
 **Section sources**
-- [state_manager.py](file://src/utils/state_manager.py#L66-L167)
-- [state_manager.py](file://src/utils/state_manager.py#L685-L757)
-- [state_manager.py](file://src/utils/state_manager.py#L780-L814)
+- [state_manager.py](file://src/utils/state_manager.py#L67-L168)
+- [state_manager.py](file://src/utils/state_manager.py#L671-L742)
+- [state_manager.py](file://src/utils/state_manager.py#L745-L780)
 
 ### Tab Overlay UI Component
 The tab overlay provides a sophisticated real-time display system:
 
 ```mermaid
 flowchart TD
-Start([Overlay Creation]) --> CalcValues["Calculate Values<br/>tab, balance, tip"]
-CalcValues --> CheckTab{"Tab > 0?"}
-CheckTab --> |Yes| ShowButtons["Show Tip Buttons<br/>10%, 15%, 20%"]
-CheckTab --> |No| HideButtons["Hide Tip Buttons"]
-ShowButtons --> CheckTip{"Tip Selected?"}
-CheckTip --> |Yes| ShowTipRow["Show Tip/Total Row"]
-CheckTip --> |No| HideTipRow["Hide Tip/Total Row"]
-HideButtons --> RenderHTML["Render HTML with<br/>Animations"]
-ShowTipRow --> RenderHTML
-HideTipRow --> RenderHTML
+Start([Overlay Creation]) --> CalcValues["Calculate Values<br/>tab, balance"]
+CalcValues --> RenderHTML["Render HTML with<br/>Animations"]
 RenderHTML --> Animate["Animate Changes<br/>Count-up Effects"]
 Animate --> End([Display Updated Overlay])
 ```
@@ -253,13 +240,6 @@ The overlay implements a sophisticated animation queue:
 - Max queue depth of 5 items
 - Smooth count-up animations with scaling effects
 - Real-time balance color updates based on funding levels
-
-#### Tip Management
-Interactive tip buttons with:
-- Toggle behavior (click same percentage to remove)
-- Visual feedback with color changes
-- Immediate state updates and Maya notifications
-- Automatic tip calculation based on current tab
 
 **Section sources**
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L24-L44)
@@ -288,7 +268,7 @@ Overlay->>Overlay : AnimationQueue.enqueue()
 ```
 
 **Diagram sources**
-- [handlers.py](file://src/ui/handlers.py#L133-L184)
+- [handlers.py](file://src/ui/handlers.py#L71-L229)
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L307-L485)
 
 The integration pattern provides:
@@ -298,7 +278,7 @@ The integration pattern provides:
 - Persistent state across UI updates
 
 **Section sources**
-- [handlers.py](file://src/ui/handlers.py#L133-L184)
+- [handlers.py](file://src/ui/handlers.py#L71-L229)
 - [launcher.py](file://src/ui/launcher.py#L159-L165)
 
 ### Payment Processing Integration
@@ -368,10 +348,10 @@ TO -.-> TO
 ```
 
 **Diagram sources**
-- [launcher.py](file://src/ui/launcher.py#L1-L354)
-- [handlers.py](file://src/ui/handlers.py#L1-L392)
-- [processor.py](file://src/conversation/processor.py#L1-L456)
-- [state_manager.py](file://src/utils/state_manager.py#L1-L814)
+- [launcher.py](file://src/ui/launcher.py#L1-L362)
+- [handlers.py](file://src/ui/handlers.py#L1-L259)
+- [processor.py](file://src/conversation/processor.py#L1-L480)
+- [state_manager.py](file://src/utils/state_manager.py#L1-L871)
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L1-L595)
 - [components.py](file://src/ui/components.py#L1-L55)
 - [phase_manager.py](file://src/conversation/phase_manager.py#L1-L92)
@@ -384,8 +364,8 @@ Key dependency characteristics:
 - External dependencies isolated in specific modules
 
 **Section sources**
-- [launcher.py](file://src/ui/launcher.py#L1-L354)
-- [handlers.py](file://src/ui/handlers.py#L1-L392)
+- [launcher.py](file://src/ui/launcher.py#L1-L362)
+- [handlers.py](file://src/ui/handlers.py#L1-L259)
 
 ## Performance Considerations
 The system implements several performance optimizations:
@@ -438,11 +418,6 @@ The system implements several performance optimizations:
 - Resolution: Check AnimationQueue.is_running flag
 - Prevention: Monitor queue depth and collapse strategy
 
-**Tip Button Not Responding**
-- Symptom: Tip buttons don't update state
-- Resolution: Verify JavaScript callback registration
-- Prevention: Ensure handleTipClick function is available
-
 ### Payment Processing Issues
 **Stripe Unavailable**
 - Symptom: Payment link creation fails
@@ -455,11 +430,13 @@ The system implements several performance optimizations:
 - Prevention: Implement proper timeout handling
 
 **Section sources**
-- [state_manager.py](file://src/utils/state_manager.py#L680-L757)
+- [state_manager.py](file://src/utils/state_manager.py#L671-L742)
 - [tab_overlay.py](file://src/ui/tab_overlay.py#L307-L485)
 - [stripe_mcp.py](file://src/payments/stripe_mcp.py#L130-L182)
 
 ## Conclusion
 MayaMCP's tab management system provides a robust, scalable solution for payment session management with real-time UI updates. The architecture successfully separates concerns between state management, UI presentation, and payment processing while maintaining thread safety and data consistency. The system's comprehensive validation, atomic operations, and graceful error handling ensure reliable operation in production environments. The integration between state management and UI components creates a seamless user experience with immediate visual feedback for all payment operations.
 
-The modular design enables easy maintenance and extension, while the well-defined interfaces facilitate future enhancements such as additional payment providers, advanced tip management features, and enhanced analytics capabilities.
+The modular design enables easy maintenance and extension, while the well-defined interfaces facilitate future enhancements such as additional payment providers, enhanced analytics capabilities, and improved user interaction patterns.
+
+**Updated** The simplified approach without interactive tip controls maintains the core functionality of balance tracking and order state management while reducing complexity and improving system reliability.

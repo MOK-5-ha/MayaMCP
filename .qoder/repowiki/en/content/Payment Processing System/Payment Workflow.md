@@ -13,6 +13,14 @@
 - [TODO.md](file://TODO.md)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Updated payment workflow documentation to focus on core payment processing without tip management features
+- Removed detailed sections about tip calculation, toggle behavior, and tip-related UI components
+- Simplified payment tools documentation to exclude tip-related functionality
+- Updated state management documentation to reflect tip removal
+- Revised UI integration documentation to remove tip button functionality
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -25,14 +33,15 @@
 9. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains the complete payment workflow in MayaMCP, focusing on the end-to-end payment processing pipeline from order placement to payment completion. It covers:
+This document explains the complete payment workflow in MayaMCP, focusing on the end-to-end payment processing pipeline from order placement to payment completion. The workflow has been simplified to focus on core payment processing without tip management features. It covers:
 - Balance validation and atomic order updates
 - Payment link generation with idempotency and fallback to mock payments
 - Payment status verification and timeout handling
-- Tip calculation and inclusion in payment totals
 - Integration with LLM tools for payment-related conversations
 - State management coordination across the payment lifecycle
 - Security measures and graceful degradation strategies
+
+**Updated** The payment workflow documentation now focuses on core payment processing without tip calculation, tip management, or tip-related UI components.
 
 ## Project Structure
 The payment workflow spans several modules:
@@ -95,17 +104,18 @@ Conv_Processor --> SecurityScanner
 ## Core Components
 - StripeMCPClient: Async payment link creation with retry/backoff, availability probing, and mock fallback
 - State Manager: Atomic order updates, payment state schema, validation, and status transitions
-- Payment LLM Tools: Balance checks, order additions with balance validation, tip management, payment link creation, and status polling
-- UI Integration: Handlers and tab overlay for tip selection and payment state visualization
+- Payment LLM Tools: Balance checks, order additions with balance validation, payment link creation, and status polling
+- UI Integration: Handlers and tab overlay for payment state visualization
 - Security Scanner: Input and output scanning to mitigate risks
 
 Key capabilities:
 - Idempotent payment link creation using session-based keys
 - Retry with exponential backoff and overall timeout
 - Graceful fallback to mock payments when Stripe MCP is unavailable
-- Tip calculation and inclusion in payment totals
 - Atomic state updates with optimistic locking and validation
-- Animated UI overlays for tab, balance, tip, and total
+- Animated UI overlays for tab and balance
+
+**Updated** Removed tip calculation and toggle behavior functionality from core components.
 
 **Section sources**
 - [src/payments/stripe_mcp.py](file://src/payments/stripe_mcp.py#L66-L475)
@@ -116,7 +126,7 @@ Key capabilities:
 - [src/security/scanner.py](file://src/security/scanner.py#L32-L137)
 
 ## Architecture Overview
-The payment workflow is orchestrated by the conversation processor, which detects intents and invokes payment tools. The tools coordinate with state management and the Stripe MCP client. The UI reflects state changes and enables tip selection.
+The payment workflow is orchestrated by the conversation processor, which detects intents and invokes payment tools. The tools coordinate with state management and the Stripe MCP client. The UI reflects state changes and enables payment initiation.
 
 ```mermaid
 sequenceDiagram
@@ -133,7 +143,7 @@ Tools->>State : update_payment_state(idempotency_key, processing)
 Tools->>Stripe : create_payment_link(amount, description)
 Stripe-->>Tools : url, payment_id, is_simulated
 Tools-->>Proc : ToolSuccess(url, payment_id, is_simulated)
-Proc-->>UI : Updated overlay (tab, balance, tip)
+Proc-->>UI : Updated overlay (tab, balance)
 UI-->>User : Payment link displayed
 User->>UI : "Check status"
 UI->>Proc : handle_gradio_input()
@@ -196,8 +206,7 @@ Responsibilities:
 - Define PaymentState schema with validation rules
 - Enforce status transitions: pending → processing → completed
 - Atomic order updates with optimistic locking and version increments
-- Atomic payment completion resetting tab and tip
-- Tip calculation and toggle behavior
+- Atomic payment completion resetting tab
 - Thread-safe session locking with expiration
 
 Validation rules:
@@ -229,17 +238,16 @@ Persist --> Done(["Return new_balance"])
 ### Payment LLM Tools
 Responsibilities:
 - Balance checks and order additions with balance validation
-- Tip setting/getting with toggle behavior
 - Payment link creation and status polling
 - Error classification and user-friendly messages
 
 Key tools:
 - `add_to_order_with_balance`: Validates balance and atomically updates state
 - `get_balance`: Returns current balance and tab
-- `set_tip`: Calculates tip, stores tip fields, returns total
-- `get_tip`: Returns current tip and total
-- `create_stripe_payment`: Builds description with tip, generates idempotency key, creates payment link
-- `check_payment_status`: Polls status and completes payment atomically on success
+- Payment link creation and status polling
+- Error classification and user-friendly messages
+
+**Updated** Removed tip-related tools (`set_tip`, `get_tip`) from payment tools documentation.
 
 ```mermaid
 sequenceDiagram
@@ -249,7 +257,7 @@ participant State as "State Manager"
 participant Stripe as "Stripe MCP Client"
 Agent->>Tools : create_stripe_payment()
 Tools->>State : update_payment_state(processing, idempotency_key)
-Tools->>Stripe : create_payment_link(total_with_tip, description)
+Tools->>Stripe : create_payment_link(total, description)
 Stripe-->>Tools : url, payment_id, is_simulated
 Tools-->>Agent : ToolSuccess
 Agent->>Tools : check_payment_status()
@@ -270,14 +278,14 @@ Tools-->>Agent : ToolSuccess(payment_status)
 ### UI Integration
 Responsibilities:
 - Handle user input and integrate with conversation processor
-- Manage tip selection and send notifications to the agent
-- Render tab, balance, tip, and total via tab overlay
-- Wire JavaScript callbacks for tip buttons
+- Render tab and balance via tab overlay
+- Wire JavaScript callbacks for user interactions
 
 Key behaviors:
-- Tip buttons generate notifications sent to the agent
-- Tab overlay animates changes and reflects tip/total
+- Tab overlay animates changes and reflects current state
 - Clear button resets all payment state to defaults
+
+**Updated** Removed tip button functionality and tip-related UI components from documentation.
 
 **Section sources**
 - [src/ui/handlers.py](file://src/ui/handlers.py#L218-L392)
@@ -356,4 +364,4 @@ Operational notes:
 - [src/payments/stripe_mcp.py](file://src/payments/stripe_mcp.py#L83-L108)
 
 ## Conclusion
-MayaMCP’s payment workflow integrates state management, LLM tools, UI overlays, and Stripe MCP client to provide a robust, secure, and user-friendly payment experience. It emphasizes idempotency, atomic state updates, graceful fallbacks, and clear user feedback through animated UI components. The design ensures reliability under partial failures and maintains compliance with sandbox constraints.
+MayaMCP's payment workflow integrates state management, LLM tools, UI overlays, and Stripe MCP client to provide a robust, secure, and user-friendly payment experience. The workflow has been simplified to focus on core payment processing without tip management features. It emphasizes idempotency, atomic state updates, graceful fallbacks, and clear user feedback through animated UI components. The design ensures reliability under partial failures and maintains compliance with sandbox constraints.
