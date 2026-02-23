@@ -6,7 +6,7 @@ import gradio as gr
 from ..config.logging_config import get_logger
 from ..conversation.processor import process_order, process_order_stream
 from ..voice.tts import get_voice_audio
-from ..llm.session_registry import get_session_llm, get_session_tts
+from ..llm.session_registry import get_session_llm, get_session_tts, SessionLimitExceededError
 from ..utils.state_manager import (
     reset_session_state,
     get_current_order_state,
@@ -204,7 +204,12 @@ def handle_gradio_input(
         )
 
     except Exception as e:
-        if _is_quota_error(e):
+        if isinstance(e, SessionLimitExceededError):
+            # Handle session limit exceeded specifically
+            logger.warning(f"Session limit exceeded: {e}")
+            friendly = "The bar is at capacity right now! Please try again in a moment."
+            quota_error_html = ""
+        elif _is_quota_error(e):
             quota_error_html = create_quota_error_html()
             friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."
         else:

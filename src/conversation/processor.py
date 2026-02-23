@@ -121,6 +121,18 @@ def process_order(
         
         return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
 
+    # Rate limiting check
+    rate_allowed, rate_reason = check_rate_limits(session_id)
+    if not rate_allowed:
+        logger.warning(f"Rate limit exceeded: {rate_reason}")
+        rate_error_msg = f"Rate limit exceeded: {rate_reason}"
+        
+        updated_history = current_session_history[:]
+        updated_history.append({'role': 'user', 'content': user_input_text})
+        updated_history.append({'role': 'assistant', 'content': rate_error_msg})
+        
+        return rate_error_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
+
     # Set session context for tools to access
     # This allows payment tools to know which session they're operating on
     # Treat None as "no active session" - tools fall back to legacy behavior
@@ -582,6 +594,7 @@ def process_order_stream(
             sentence_buffer = SentenceBuffer()
             accumulated_text = ""
             security_buffer = ""  # Buffer for security scanning
+            chunk_scan_passed = True  # Track if any chunks were blocked
             
             for chunk in text_stream:
                 if hasattr(chunk, 'text') and chunk.text:
@@ -589,10 +602,11 @@ def process_order_stream(
                     accumulated_text += text_chunk
                     security_buffer += text_chunk
                     
-                    # Security scan each chunk before yielding
-                    chunk_scan_result = scan_output(security_buffer, prompt=user_input_text)
+                    # Security scan only the new chunk before yielding
+                    chunk_scan_result = scan_output(text_chunk, prompt=user_input_text)
                     if not chunk_scan_result.is_valid:
                         logger.warning("Streaming content blocked by security scanner")
+                        chunk_scan_passed = False
                         # Yield error and stop streaming
                         yield {
                             'type': 'error',
@@ -600,6 +614,9 @@ def process_order_stream(
                             'emotion_state': 'neutral'
                         }
                         return
+                    
+                    # Append sanitized text to security buffer
+                    security_buffer += chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text else text_chunk
                     
                     # Check for complete sentences
                     sentences = sentence_buffer.add_text(text_chunk)
@@ -618,20 +635,9 @@ def process_order_stream(
                             'content': sentence
                         }
             
-            # Flush remaining content with security check
+            # Flush remaining content
             remaining_sentences = sentence_buffer.flush()
             for sentence in remaining_sentences:
-                # Final security check on remaining content
-                final_scan_result = scan_output(accumulated_text, prompt=user_input_text)
-                if not final_scan_result.is_valid:
-                    logger.warning("Final streaming content blocked by security scanner")
-                    yield {
-                        'type': 'error',
-                        'content': final_scan_result.sanitized_text,
-                        'emotion_state': 'neutral'
-                    }
-                    return
-                
                 yield {
                     'type': 'sentence',
                     'content': sentence
@@ -640,12 +646,14 @@ def process_order_stream(
             # Extract emotion from final response
             emotion_state, clean_response = extract_emotion(accumulated_text)
             
-            # Final Security Scan: Output (additional verification)
-            output_scan_result = scan_output(clean_response, prompt=user_input_text)
-            if not output_scan_result.is_valid:
-                logger.warning("Final output blocked by security scanner")
-                clean_response = output_scan_result.sanitized_text
-                emotion_state = "neutral"
+            # Final Security Scan: only if chunks passed
+            if chunk_scan_passed:
+                # Only scan if no chunks were blocked during streaming
+                output_scan_result = scan_output(clean_response, prompt=user_input_text)
+                if not output_scan_result.is_valid:
+                    logger.warning("Final output blocked by security scanner")
+                    clean_response = output_scan_result.sanitized_text
+                    emotion_state = "neutral"
             
             # Signal completion with final data
             yield {

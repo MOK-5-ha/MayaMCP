@@ -55,7 +55,7 @@ def main():
         
         # Start security services
         start_session_cleanup()
-        rate_limiter = get_rate_limiter()
+        get_rate_limiter()  # Initialize singleton
         logger.info("Security services initialized: session cleanup, rate limiting")
 
         # Get tool definitions (static, shared across all sessions)
@@ -132,8 +132,11 @@ def main():
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
         # Cleanup security services
-        stop_session_cleanup()
-        logger.info("Security services stopped")
+        try:
+            stop_session_cleanup()
+            logger.info("Security services stopped")
+        except Exception as e:
+            logger.exception(f"Error stopping security services: {e}")
         sys.exit(0)
     except Exception as e:
         logger.exception(f"Critical error starting application: {e}")

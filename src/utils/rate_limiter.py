@@ -38,6 +38,10 @@ class TokenBucket:
         Returns:
             True if tokens were consumed, False if insufficient tokens
         """
+        # Validate input
+        if not isinstance(tokens, int) or tokens <= 0:
+            raise ValueError(f"Tokens must be a positive integer, got {tokens}")
+        
         with self._lock:
             self._refill()
             
@@ -104,17 +108,25 @@ class RateLimiter:
         try:
             value = os.getenv(env_var)
             if value:
-                return int(value)
+                parsed_value = int(value)
+                if parsed_value > 0:
+                    return parsed_value
+                else:
+                    logger.warning(
+                        f"Invalid rate limit in {env_var}: {value} (must be > 0), "
+                        f"using default {default}"
+                    )
         except (ValueError, TypeError):
             logger.warning(f"Invalid rate limit in {env_var}, using default {default}")
         return default
     
-    def check_session_limit(self, session_id: str) -> Tuple[bool, str]:
+    def check_session_limit(self, session_id: str, consume: bool = True) -> Tuple[bool, str]:
         """
         Check if session can make a request.
         
         Args:
             session_id: Unique session identifier
+            consume: Whether to consume a token (True) or just check (False)
             
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
@@ -133,20 +145,33 @@ class RateLimiter:
             bucket = self._session_buckets[session_id]
         
         # Check session rate limit
-        if not bucket.consume():
-            return False, f"Session rate limit exceeded ({self.session_limit}/min)"
+        if consume:
+            if not bucket.consume():
+                return False, f"Session rate limit exceeded ({self.session_limit}/min)"
+        else:
+            # Check-only mode: verify we have enough tokens
+            if bucket.tokens < 1:
+                return False, f"Session rate limit exceeded ({self.session_limit}/min)"
         
         return True, ""
     
-    def check_app_limit(self) -> Tuple[bool, str]:
+    def check_app_limit(self, consume: bool = True) -> Tuple[bool, str]:
         """
         Check if application can handle a request.
         
+        Args:
+            consume: Whether to consume a token (True) or just check (False)
+            
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
-        if not self._app_bucket.consume():
-            return False, f"Application rate limit exceeded ({self.app_limit}/min)"
+        if consume:
+            if not self._app_bucket.consume():
+                return False, f"Application rate limit exceeded ({self.app_limit}/min)"
+        else:
+            # Check-only mode: verify we have enough tokens
+            if self._app_bucket.tokens < 1:
+                return False, f"Application rate limit exceeded ({self.app_limit}/min)"
         
         return True, ""
     
@@ -160,13 +185,29 @@ class RateLimiter:
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
-        # Check application limit first (more restrictive)
-        app_allowed, app_reason = self.check_app_limit()
+        # First, check both limits without consuming tokens
+        app_allowed, app_reason = self.check_app_limit(consume=False)
         if not app_allowed:
             return False, app_reason
         
-        # Then check session limit
-        return self.check_session_limit(session_id)
+        session_allowed, session_reason = self.check_session_limit(session_id, consume=False)
+        if not session_allowed:
+            return False, session_reason
+        
+        # Both checks passed, now consume tokens
+        # Note: We consume app token first since it's more restrictive
+        app_allowed, app_reason = self.check_app_limit(consume=True)
+        if not app_allowed:
+            # This should not happen since we checked above, but handle gracefully
+            return False, app_reason
+        
+        session_allowed, session_reason = self.check_session_limit(session_id, consume=True)
+        if not session_allowed:
+            # This should not happen since we checked above, but handle gracefully
+            # Note: We don't rollback the app token to avoid complexity
+            return False, session_reason
+        
+        return True, ""
     
     def _check_burst_limit(self, session_id: str) -> bool:
         """
@@ -206,6 +247,10 @@ class RateLimiter:
         now = time.time()
         cutoff_time = now - max_age_seconds
         
+        # Track cleanup counts separately
+        session_expired_count = 0
+        history_expired_count = 0
+        
         with self._session_lock:
             expired_sessions = []
             for session_id, bucket in self._session_buckets.items():
@@ -214,6 +259,8 @@ class RateLimiter:
             
             for session_id in expired_sessions:
                 del self._session_buckets[session_id]
+            
+            session_expired_count = len(expired_sessions)
         
         with self._history_lock:
             expired_sessions = []
@@ -223,9 +270,18 @@ class RateLimiter:
             
             for session_id in expired_sessions:
                 del self._request_history[session_id]
+            
+            history_expired_count = len(expired_sessions)
         
-        if expired_sessions:
-            logger.info(f"Cleaned up rate limiter data for {len(expired_sessions)} sessions")
+        # Log combined cleanup results
+        total_cleaned = session_expired_count + history_expired_count
+        if total_cleaned > 0:
+            logger.info(
+                f"Cleaned up rate limiter data: "
+                f"{session_expired_count} session buckets, "
+                f"{history_expired_count} request histories "
+                f"(total: {total_cleaned})"
+            )
     
     def get_session_stats(self, session_id: str) -> Dict[str, int]:
         """
@@ -255,11 +311,13 @@ class RateLimiter:
         Returns:
             Dictionary with application rate limiting statistics
         """
-        return {
-            "tokens": int(self._app_bucket.tokens),
-            "capacity": self._app_bucket.capacity,
-            "refill_rate": int(self._app_bucket.refill_rate * 60)  # per minute
-        }
+        # Acquire app bucket lock to ensure consistent snapshot
+        with self._app_bucket._lock:
+            return {
+                "tokens": int(self._app_bucket.tokens),
+                "capacity": self._app_bucket.capacity,
+                "refill_rate": int(self._app_bucket.refill_rate * 60)  # per minute
+            }
 
 
 # Global rate limiter instance

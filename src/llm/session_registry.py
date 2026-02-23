@@ -14,8 +14,23 @@ _session_clients: Dict[str, Dict[str, Any]] = {}
 _registry_lock = threading.Lock()
 
 # Resource limits
-MAX_CONCURRENT_SESSIONS = int(os.getenv("MAYA_MAX_SESSIONS", "1000"))
-MAX_SESSION_MEMORY_MB = int(os.getenv("MAYA_MAX_SESSION_MEMORY_MB", "100"))
+def _get_env_int(env_var: str, default: int) -> int:
+    """Safely parse integer from environment variable with fallback."""
+    try:
+        value = os.getenv(env_var)
+        if value is not None:
+            return int(value)
+    except ValueError:
+        logger.error(f"Invalid {env_var} value '{value}', using default {default}")
+    return default
+
+MAX_CONCURRENT_SESSIONS = _get_env_int("MAYA_MAX_SESSIONS", 1000)
+# MAX_SESSION_MEMORY_MB removed - unused in current implementation
+
+
+class SessionLimitExceededError(RuntimeError):
+    """Raised when maximum concurrent session limit is exceeded."""
+    pass
 
 
 def _key_hash(api_key: str) -> str:
@@ -36,18 +51,22 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     Returns:
         Initialized ``ChatGoogleGenerativeAI`` instance with tools bound.
     """
-    # Check resource limits
-    with _registry_lock:
-        if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
-            logger.warning(f"Maximum concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
-            raise ResourceWarning(f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}")
-    
     key_hash = _key_hash(api_key)
 
+    # Check for existing session first (fast path)
     with _registry_lock:
         entry = _session_clients.get(session_id)
         if entry and entry.get("llm") and entry.get("gemini_hash") == key_hash:
             return entry["llm"]
+        
+        # Check session limit and reserve slot atomically
+        if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
+            logger.warning(f"Maximum concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
+            raise SessionLimitExceededError(f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}")
+        
+        # Reserve session slot
+        if session_id not in _session_clients:
+            _session_clients[session_id] = {}
 
     # Create outside lock to avoid blocking other sessions
     from .client import initialize_llm
@@ -56,8 +75,6 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     logger.info("Created new LLM instance for session %s...", session_id[:8])
 
     with _registry_lock:
-        if session_id not in _session_clients:
-            _session_clients[session_id] = {}
         entry = _session_clients[session_id]
         # Another thread may have stored an LLM while we were creating ours
         existing = entry.get("llm")
@@ -137,6 +154,37 @@ def get_session_tts(session_id: str, api_key: Optional[str] = None):
         entry["cartesia_hash"] = key_hash
 
     return tts
+
+
+def cleanup_sessions(session_ids: List[str]) -> None:
+    """Remove cached LLM and TTS clients for multiple sessions.
+    
+    Attempts to close TTS clients for each session before discarding entries.
+    Used by background cleanup processes to free resources.
+    
+    Args:
+        session_ids: List of session IDs to clean up.
+    """
+    with _registry_lock:
+        for session_id in session_ids:
+            entry = _session_clients.pop(session_id, None)
+            
+            if entry is None:
+                continue
+                
+            # Close TTS client if it exposes a close() method (Cartesia does)
+            tts = entry.get("tts")
+            if tts is not None:
+                close_fn = getattr(tts, "close", None)
+                if callable(close_fn):
+                    try:
+                        close_fn()
+                    except Exception:
+                        logger.exception(
+                            "Failed to close TTS client for session %s",
+                            session_id[:8],
+                        )
+                logger.info(f"Cleaned up LLM/TTS clients for session: {session_id[:8]}")
 
 
 def clear_session_clients(session_id: str) -> None:

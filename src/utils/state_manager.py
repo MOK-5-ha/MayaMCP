@@ -1,5 +1,6 @@
 """State management for conversation and order tracking."""
 
+import os
 import re
 import threading
 import time
@@ -213,12 +214,12 @@ _session_locks_mutex = threading.Lock()  # Protects _session_locks dict
 _session_last_access: Dict[str, float] = {}
 
 # Default session expiry time (1 hour)
-SESSION_EXPIRY_SECONDS = 3600
+SESSION_EXPIRY_SECONDS = int(os.getenv("MAYA_SESSION_EXPIRY_SECONDS", "3600"))
 
 # Background cleanup thread
 _cleanup_thread: Optional[threading.Thread] = None
 _cleanup_stop_event = threading.Event()
-_CLEANUP_INTERVAL_SECONDS = 300  # 5 minutes
+CLEANUP_INTERVAL_SECONDS = int(os.getenv("MAYA_CLEANUP_INTERVAL_SECONDS", "300"))  # 5 minutes
 
 
 def get_session_lock(session_id: str) -> threading.Lock:
@@ -277,40 +278,47 @@ def _cleanup_expired_sessions() -> None:
                     if current_time - last_access > SESSION_EXPIRY_SECONDS:
                         expired_sessions.append(session_id)
                 
-                # Clean up expired sessions
+                # Clean up each expired session atomically
                 for session_id in expired_sessions:
-                    _session_locks.pop(session_id, None)
-                    _session_last_access.pop(session_id, None)
-                    logger.info(f"Cleaned up expired session: {session_id}")
-            
-            # Clean up session registry clients for expired sessions
-            if expired_sessions:
-                try:
-                    from ..llm.session_registry import _session_clients, _registry_lock
-                    with _registry_lock:
-                        for session_id in expired_sessions:
-                            entry = _session_clients.pop(session_id, None)
-                            if entry:
-                                # Close TTS client if it exists
-                                tts = entry.get("tts")
-                                if tts and hasattr(tts, "close"):
-                                    try:
-                                        tts.close()
-                                    except Exception:
-                                        logger.exception(
-                                            f"Failed to close TTS client for expired session {session_id}"
-                                        )
-                                logger.info(f"Cleaned up LLM/TTS clients for expired session: {session_id}")
-                except ImportError:
-                    logger.warning("Could not import session registry for cleanup")
-                except Exception as e:
-                    logger.error(f"Error during session registry cleanup: {e}")
+                    try:
+                        # Acquire per-session lock for atomic cleanup
+                        session_lock = _session_locks.get(session_id)
+                        if session_lock:
+                            session_lock.acquire()
+                        
+                        # Remove all session state atomically
+                        _session_locks.pop(session_id, None)
+                        _session_last_access.pop(session_id, None)
+                        
+                        # Attempt client cleanup (may fail, but session state is already removed)
+                        try:
+                            from ..llm.session_registry import cleanup_sessions
+                            cleanup_sessions([session_id])
+                            logger.info(f"Cleaned up expired session: {session_id}")
+                        except ImportError:
+                            logger.warning("Could not import session registry for cleanup")
+                        except Exception as e:
+                            logger.error(f"Error during session registry cleanup for {session_id}: {e}")
+                            # Session state is already removed, but we log the failure
+                            
+                    except Exception as e:
+                        logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
+                        # Rollback: restore session state if cleanup failed
+                        _session_locks[session_id] = session_lock
+                        _session_last_access[session_id] = current_time - SESSION_EXPIRY_SECONDS - 1
+                    finally:
+                        # Always release the per-session lock
+                        if session_lock:
+                            try:
+                                session_lock.release()
+                            except Exception:
+                                logger.warning(f"Failed to release session lock for {session_id}")
             
         except Exception as e:
             logger.error(f"Error in session cleanup task: {e}")
         
         # Wait for next cleanup interval or stop event
-        _cleanup_stop_event.wait(_CLEANUP_INTERVAL_SECONDS)
+        _cleanup_stop_event.wait(CLEANUP_INTERVAL_SECONDS)
 
 
 def start_session_cleanup() -> None:
@@ -322,6 +330,9 @@ def start_session_cleanup() -> None:
     global _cleanup_thread
     
     if _cleanup_thread is None or not _cleanup_thread.is_alive():
+        # Clear any previous stop event before starting new thread
+        _cleanup_stop_event.clear()
+        
         _cleanup_thread = threading.Thread(
             target=_cleanup_expired_sessions,
             name="session-cleanup",
@@ -342,7 +353,21 @@ def stop_session_cleanup() -> None:
     if _cleanup_thread and _cleanup_thread.is_alive():
         _cleanup_stop_event.set()
         _cleanup_thread.join(timeout=10)
-        logger.info("Stopped session cleanup background thread")
+        
+        # Verify thread actually stopped
+        if _cleanup_thread.is_alive():
+            logger.error("Session cleanup thread failed to stop within timeout")
+        else:
+            # Reset state for future restarts
+            _cleanup_stop_event.clear()
+            _cleanup_thread = None
+            logger.info("Stopped session cleanup background thread")
+    elif _cleanup_thread is None:
+        logger.debug("Session cleanup thread not running")
+    else:
+        # Thread exists but not alive
+        _cleanup_thread = None
+        logger.debug("Session cleanup thread already stopped")
 
 
 # Default State Templates
