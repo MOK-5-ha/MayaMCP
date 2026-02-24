@@ -133,6 +133,9 @@ def main():
         logger.info("Application interrupted by user")
         # Cleanup security services
         try:
+            # Clean up rate limiter session data
+            rate_limiter = get_rate_limiter()
+            rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
             stop_session_cleanup()
             logger.info("Security services stopped")
         except Exception as e:
@@ -142,9 +145,12 @@ def main():
         logger.exception(f"Critical error starting application: {e}")
         # Cleanup security services on error
         try:
+            # Clean up rate limiter session data
+            rate_limiter = get_rate_limiter()
+            rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
             stop_session_cleanup()
-        except Exception as cleanup_error:
-            logger.error(f"Error during cleanup: {cleanup_error}")
+        except Exception:
+            logger.exception("Error during security cleanup")
         sys.exit(1)
 
 if __name__ == "__main__":

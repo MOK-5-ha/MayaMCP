@@ -41,29 +41,41 @@ def test_basic_functionality():
         print("✓ Rate limiter module found")
         
         # Test basic rate limiting
-        allowed, reason = limiter.check_limits("test_session")
-        print(f"✓ Rate limiting works: {allowed}, reason: {reason}")
-        
-    except ImportError as e:
-        print(f"✗ Rate limiter import failed: {e}")
+        try:
+            allowed, reason = limiter.check_limits("test_session")
+            print(f"✓ Rate limiting works: {allowed}, reason: {reason}")
+        except ImportError as e:
+            print(f"✗ Rate limiter import failed: {e}")
+        except Exception as e:
+            print(f"✗ Rate limiting failed: {e}")
+        finally:
+            print("✓ Rate limiter test completed")
     
     # Test 3: Check if session management exists
     try:
         from utils.state_manager import start_session_cleanup, stop_session_cleanup
         print("✓ Session management module found")
         
-        # Test basic session management functionality
-        start_session_cleanup()
-        print("✓ Session cleanup started")
-        
-        stop_session_cleanup()
-        print("✓ Session cleanup stopped")
-        
+        # Test basic session management functionality with proper cleanup
+        started = False
+        try:
+            start_session_cleanup()
+            started = True
+            print("✓ Session cleanup started")
+        finally:
+            if started:
+                try:
+                    stop_session_cleanup()
+                    print("✓ Session cleanup stopped")
+                except Exception as cleanup_error:
+                    print(f"✗ Session cleanup failed to stop: {cleanup_error}")
     except ImportError as e:
         print(f"✗ Session management import failed: {e}")
     except Exception as e:
         print(f"✗ Session management function failed: {e}")
-    
+    finally:
+        print("✓ Session management test completed")
+
     print("\nBasic security functionality test completed!")
 
 if __name__ == "__main__":

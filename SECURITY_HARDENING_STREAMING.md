@@ -40,44 +40,64 @@ def _cleanup_expired_sessions():
         current_time = time.time()
         expired_sessions = []
         
+        # Gather expired session IDs while holding _session_locks_mutex
         with _session_locks_mutex:
-            # Find expired sessions
             for session_id, last_access in _session_last_access.items():
                 if current_time - last_access > SESSION_EXPIRY_SECONDS:
                     expired_sessions.append(session_id)
+        
+        # Process each expired session without holding _session_locks_mutex
+        for session_id in expired_sessions:
+            acquired_lock = False
+            session_lock = None
             
-            # Clean up each expired session atomically
-            for session_id in expired_sessions:
-                try:
-                    # Acquire per-session lock for atomic cleanup
+            try:
+                # Fetch session lock without holding _session_locks_mutex
+                with _session_locks_mutex:
                     session_lock = _session_locks.get(session_id)
-                    if session_lock:
-                        session_lock.acquire()
-                    
-                    # Remove all session state atomically
+                
+                # Acquire per-session lock without holding _session_locks_mutex
+                if session_lock:
+                    session_lock.acquire()
+                    acquired_lock = True
+                
+                # Perform atomic removal of session state
+                with _session_locks_mutex:
                     _session_locks.pop(session_id, None)
                     _session_last_access.pop(session_id, None)
-                    
-                    # Attempt client cleanup with proper error handling
-                    try:
-                        from ..llm.session_registry import cleanup_sessions
-                        cleanup_sessions([session_id])
-                        logger.info(f"Cleaned up expired session: {session_id}")
-                    except Exception as e:
-                        logger.error(f"Error during client cleanup for {session_id}: {e}")
-                        
+                
+                # Release both locks before calling cleanup_sessions
+                if acquired_lock:
+                    session_lock.release()
+                    acquired_lock = False
+                
+                # Call cleanup_sessions after releasing both locks
+                try:
+                    from ..llm.session_registry import cleanup_sessions
+                    cleanup_sessions([session_id])
+                    logger.info(f"Cleaned up expired session: {session_id}")
                 except Exception as e:
-                    logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
-                    # Rollback: restore session state if cleanup failed
-                    _session_locks[session_id] = session_lock
-                    _session_last_access[session_id] = current_time - SESSION_EXPIRY_SECONDS - 1
-                finally:
-                    # Always release the per-session lock
-                    if session_lock:
-                        try:
-                            session_lock.release()
-                        except Exception:
-                            logger.warning(f"Failed to release session lock for {session_id}")
+                    logger.error(f"Error during client cleanup for {session_id}: {e}")
+                    
+            except Exception as e:
+                logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
+                # Exception handlers restore state if removal failed
+                try:
+                    with _session_locks_mutex:
+                        if session_id not in _session_locks and session_lock:
+                            _session_locks[session_id] = session_lock
+                        if session_id not in _session_last_access:
+                            _session_last_access[session_id] = current_time - SESSION_EXPIRY_SECONDS - 1
+                except Exception as restore_error:
+                    logger.error(f"Failed to restore session state for {session_id}: {restore_error}")
+                    
+            finally:
+                # Only call session_lock.release() when we confirmed the lock was successfully acquired
+                if acquired_lock and session_lock:
+                    try:
+                        session_lock.release()
+                    except Exception:
+                        logger.warning(f"Failed to release session lock for {session_id}")
 ```
 
 **Integration Points**:
@@ -109,18 +129,20 @@ class RateLimiter:
 
 **Algorithm Implementation**:
 
-**Token Bucket Parameters**:
+**Token Bucket Parameters** (exclusively for rate limiting):
 - **Requests per minute → Token Bucket**: `refill_rate = rpm/60` tokens/second
 - **Bucket Capacity**: `capacity = rpm` (allows full minute quota to be accumulated)
 - **Example**: `10 requests/minute` → `refill_rate = 0.167 tokens/sec, capacity = 10`
 
-**Burst Protection**: Implemented as **separate fixed-window check** (10-second sliding window) using request history deque, not by bucket size.
+**Burst Protection**: Implemented as **separate fixed-window check** (10-second sliding window) using request history deque, completely independent of token-bucket capacity.
 
-**Burst Duration Calculation**:
+**Burst Limit Configuration**:
 ```python
-# For desired burst duration (seconds) and rate limit (rpm):
-burst_capacity = (rate_limit / 60) * burst_duration
-# Example: 10 rpm with 30-second burst = 5 tokens capacity
+# MAYA_BURST_LIMIT is a separate control from token-bucket capacity
+# This is only a sizing heuristic for the fixed-window ceiling
+burst_limit_heuristic = (rate_limit / 60) * burst_duration
+# Example: 10 rpm with 30-second burst = 5 requests in 10-second window
+# Note: Token-bucket capacity (10) and MAYA_BURST_LIMIT (5) are independent
 ```
 
 **Distributed Behavior**:
@@ -153,23 +175,19 @@ REDIS_URL="redis://localhost:6379"       # For shared counters
   - Lower to 1-2× for strict DoS protection
   - Higher (5-10×) for bursty workloads
 
-**Expected Concurrency Examples**:
-```bash
-# Small deployment (1-5 concurrent users)
-MAYA_SESSION_RATE_LIMIT=20
-MAYA_APP_RATE_LIMIT=100
-MAYA_BURST_LIMIT=15
+**Deployment Configuration Examples**:
 
-# Medium deployment (10-50 concurrent users)  
-MAYA_SESSION_RATE_LIMIT=15
-MAYA_APP_RATE_LIMIT=750
-MAYA_BURST_LIMIT=10
+| Deployment Size | Concurrent Users | MAYA_SESSION_RATE_LIMIT | MAYA_APP_RATE_LIMIT | MAYA_BURST_LIMIT |
+|----------------|------------------|-------------------------|-------------------|------------------|
+| Small | 1-10 | 20 | 200 | 10 |
+| Medium | 10-100 | 15 | 500 | 8 |
+| Large | 100+ | 10 | 1000 | 5 |
 
-# Large deployment (50+ concurrent users)
-MAYA_SESSION_RATE_LIMIT=8
-MAYA_APP_RATE_LIMIT=2000
-MAYA_BURST_LIMIT=6
-```
+**Configuration Notes**:
+- **Session Rate Limit**: Per-user requests per minute
+- **App Rate Limit**: Global requests per minute across all users  
+- **Burst Limit**: Requests allowed in 10-second sliding window
+- **Session limits** and **expiry settings** configured separately in Resource Limits section
 
 **Integration**:
 - Early rejection in streaming processor before LLM calls
@@ -368,35 +386,6 @@ MAYA_CLEANUP_INTERVAL_SECONDS=300    # cleanup interval (5 minutes)
 - **Zero/Negative Handling**: Values ≤ 0 are rejected and use defaults
 - **Error Logging**: Invalid values trigger warning logs with fallback message
 
-**Deployment Scaling:**
-
-**Small Deployment** (1-10 concurrent users):
-```bash
-MAYA_SESSION_RATE_LIMIT=20
-MAYA_APP_RATE_LIMIT=200
-MAYA_BURST_LIMIT=10
-MAYA_MAX_SESSIONS=50
-MAYA_SESSION_EXPIRY_SECONDS=7200
-```
-
-**Medium Deployment** (10-100 concurrent users):
-```bash
-MAYA_SESSION_RATE_LIMIT=15
-MAYA_APP_RATE_LIMIT=500
-MAYA_BURST_LIMIT=8
-MAYA_MAX_SESSIONS=500
-MAYA_SESSION_EXPIRY_SECONDS=3600
-```
-
-**Large Deployment** (100+ concurrent users):
-```bash
-MAYA_SESSION_RATE_LIMIT=10
-MAYA_APP_RATE_LIMIT=1000
-MAYA_BURST_LIMIT=5
-MAYA_MAX_SESSIONS=2000
-MAYA_SESSION_EXPIRY_SECONDS=1800
-```
-
 ## Testing
 
 ### Test Results
@@ -582,7 +571,7 @@ PYTHONPATH=. python3 tests/test_security_hardening.py
 | Session Management | ✅ PASSING | Complete |
 | DoS Protection | ✅ PASSING | Complete |
 | Thread Safety | ✅ PASSING | Complete |
-| Resource Limits | ✅ PASSING | Complete |
+| Resource Limits | ⚠️ PARTIAL | Session count only; memory limits TODO | Memory limit enforcement not yet implemented (MAYA_MAX_SESSION_MEMORY_MB ignored) |
 
 ## Security Impact
 
@@ -800,12 +789,13 @@ The implementation includes comprehensive monitoring with specific metrics to co
 #### Test Scenario 1: Concurrent Session Creation
 - **Objective**: Validate SessionRegistry handles concurrent session creation correctly
 - **Setup**: 
+  - Set MAX_CONCURRENT_SESSIONS to 5 (below thread count) via environment variable
   - Create 10 concurrent threads requesting new sessions
   - Each thread calls `get_session_llm()` with unique session IDs
   - Monitor for `SessionLimitExceededError` exceptions
 - **Expected results**: 
-  - All valid sessions created successfully
-  - 10th session triggers rate limit exception gracefully
+  - First 5 sessions created successfully
+  - Sessions 6-10 trigger SessionLimitExceededError gracefully
   - No deadlocks or race conditions
 
 #### Test Scenario 2: Rate Limiting Under Load

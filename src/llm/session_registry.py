@@ -21,7 +21,10 @@ def _get_env_int(env_var: str, default: int) -> int:
         if value is not None:
             return int(value)
     except ValueError:
-        logger.error(f"Invalid {env_var} value '{value}', using default {default}")
+        logger.error(
+            "Invalid %s value '%s', using default %s",
+            env_var, value, default
+        )
     return default
 
 MAX_CONCURRENT_SESSIONS = _get_env_int("MAYA_MAX_SESSIONS", 1000)
@@ -59,13 +62,18 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
         if entry and entry.get("llm") and entry.get("gemini_hash") == key_hash:
             return entry["llm"]
         
-        # Check session limit and reserve slot atomically
-        if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
-            logger.warning(f"Maximum concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
-            raise SessionLimitExceededError(f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}")
-        
-        # Reserve session slot
+        # Check session limit and reserve slot atomically for new sessions only
         if session_id not in _session_clients:
+            if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
+                logger.warning(
+                    f"Maximum concurrent sessions "
+                    f"({MAX_CONCURRENT_SESSIONS}) reached"
+                )
+                raise SessionLimitExceededError(
+                    f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"
+                )
+            
+            # Reserve session slot
             _session_clients[session_id] = {}
 
     # Create outside lock to avoid blocking other sessions
@@ -165,26 +173,27 @@ def cleanup_sessions(session_ids: List[str]) -> None:
     Args:
         session_ids: List of session IDs to clean up.
     """
+    # Collect entries under the lock, then do I/O cleanup outside it.
+    evicted: List[tuple] = []
     with _registry_lock:
         for session_id in session_ids:
             entry = _session_clients.pop(session_id, None)
-            
-            if entry is None:
-                continue
-                
-            # Close TTS client if it exposes a close() method (Cartesia does)
-            tts = entry.get("tts")
-            if tts is not None:
-                close_fn = getattr(tts, "close", None)
-                if callable(close_fn):
-                    try:
-                        close_fn()
-                    except Exception:
-                        logger.exception(
-                            "Failed to close TTS client for session %s",
-                            session_id[:8],
-                        )
-                logger.info(f"Cleaned up LLM/TTS clients for session: {session_id[:8]}")
+            if entry is not None:
+                evicted.append((session_id, entry))
+
+    for session_id, entry in evicted:
+        tts = entry.get("tts")
+        if tts is not None:
+            close_fn = getattr(tts, "close", None)
+            if callable(close_fn):
+                try:
+                    close_fn()
+                except Exception:
+                    logger.exception(
+                        "Failed to close TTS client for session %s",
+                        session_id[:8],
+                    )
+    logger.info("Cleaned up LLM/TTS clients for session %s...", session_id[:8])
 
 
 def clear_session_clients(session_id: str) -> None:

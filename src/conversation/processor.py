@@ -594,7 +594,6 @@ def process_order_stream(
             sentence_buffer = SentenceBuffer()
             accumulated_text = ""
             security_buffer = ""  # Buffer for security scanning
-            chunk_scan_passed = True  # Track if any chunks were blocked
             
             for chunk in text_stream:
                 if hasattr(chunk, 'text') and chunk.text:
@@ -606,7 +605,6 @@ def process_order_stream(
                     chunk_scan_result = scan_output(text_chunk, prompt=user_input_text)
                     if not chunk_scan_result.is_valid:
                         logger.warning("Streaming content blocked by security scanner")
-                        chunk_scan_passed = False
                         # Yield error and stop streaming
                         yield {
                             'type': 'error',
@@ -616,15 +614,20 @@ def process_order_stream(
                         return
                     
                     # Append sanitized text to security buffer
-                    security_buffer += chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text else text_chunk
+                    sanitized_chunk = (
+                        chunk_scan_result.sanitized_text
+                        if chunk_scan_result.sanitized_text
+                        else text_chunk
+                    )
+                    security_buffer += sanitized_chunk
                     
-                    # Check for complete sentences
-                    sentences = sentence_buffer.add_text(text_chunk)
+                    # Check for complete sentences using sanitized text
+                    sentences = sentence_buffer.add_text(sanitized_chunk)
                     
                     # Yield text chunk for immediate UI update (after security check)
                     yield {
                         'type': 'text_chunk',
-                        'content': text_chunk,
+                        'content': sanitized_chunk,
                         'partial': sentence_buffer.get_partial()
                     }
                     
@@ -646,14 +649,14 @@ def process_order_stream(
             # Extract emotion from final response
             emotion_state, clean_response = extract_emotion(accumulated_text)
             
-            # Final Security Scan: only if chunks passed
-            if chunk_scan_passed:
-                # Only scan if no chunks were blocked during streaming
-                output_scan_result = scan_output(clean_response, prompt=user_input_text)
-                if not output_scan_result.is_valid:
-                    logger.warning("Final output blocked by security scanner")
-                    clean_response = output_scan_result.sanitized_text
-                    emotion_state = "neutral"
+            # Final Security Scan
+            output_scan_result = scan_output(
+                clean_response, prompt=user_input_text
+            )
+            if not output_scan_result.is_valid:
+                logger.warning("Final output blocked by security scanner")
+                clean_response = output_scan_result.sanitized_text
+                emotion_state = "neutral"
             
             # Signal completion with final data
             yield {

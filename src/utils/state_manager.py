@@ -213,13 +213,58 @@ _session_locks_mutex = threading.Lock()  # Protects _session_locks dict
 # Track last access time for session expiry
 _session_last_access: Dict[str, float] = {}
 
+logger = get_logger(__name__)
+
+def _parse_int_env(env_var: str, default: int, description: str) -> int:
+    """
+    Parse integer environment variable with defensive error handling.
+    
+    Args:
+        env_var: Environment variable name
+        default: Default value if parsing fails
+        description: Description for logging
+        
+    Returns:
+        Parsed integer value or default
+    """
+    try:
+        value = os.getenv(env_var)
+        if value is not None:
+            parsed = int(value)
+            if parsed <= 0:
+                logger.warning(
+                    f"Invalid {description} in {env_var}: {value} "
+                    f"(must be positive), using default {default}"
+                )
+                return default
+            logger.debug(f"Using {description} from {env_var}: {parsed}")
+            return parsed
+    except (ValueError, TypeError) as e:
+        logger.warning(
+            f"Failed to parse {description} from {env_var}: {e}, "
+            f"using default {default}"
+        )
+    return default
+
+
+# Track retry counts for cleanup failures
+_session_retry_counts: Dict[str, int] = {}
+
 # Default session expiry time (1 hour)
-SESSION_EXPIRY_SECONDS = int(os.getenv("MAYA_SESSION_EXPIRY_SECONDS", "3600"))
+SESSION_EXPIRY_SECONDS = _parse_int_env(
+    "MAYA_SESSION_EXPIRY_SECONDS", 3600, "session expiry seconds"
+)
+
+# Retry and backoff constants for cleanup failures
+MAX_SESSION_CLEANUP_RETRIES = 3
+MAX_BACKOFF = 300  # Maximum 5 minutes backoff
 
 # Background cleanup thread
 _cleanup_thread: Optional[threading.Thread] = None
 _cleanup_stop_event = threading.Event()
-CLEANUP_INTERVAL_SECONDS = int(os.getenv("MAYA_CLEANUP_INTERVAL_SECONDS", "300"))  # 5 minutes
+CLEANUP_INTERVAL_SECONDS = _parse_int_env(
+    "MAYA_CLEANUP_INTERVAL_SECONDS", 300, "cleanup interval seconds"
+)
 
 
 def get_session_lock(session_id: str) -> threading.Lock:
@@ -295,6 +340,8 @@ def _cleanup_expired_sessions() -> None:
                             from ..llm.session_registry import cleanup_sessions
                             cleanup_sessions([session_id])
                             logger.info(f"Cleaned up expired session: {session_id}")
+                            # Reset retry count on successful cleanup
+                            _session_retry_counts.pop(session_id, None)
                         except ImportError:
                             logger.warning("Could not import session registry for cleanup")
                         except Exception as e:
@@ -303,9 +350,31 @@ def _cleanup_expired_sessions() -> None:
                             
                     except Exception as e:
                         logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
-                        # Rollback: restore session state if cleanup failed
-                        _session_locks[session_id] = session_lock
-                        _session_last_access[session_id] = current_time - SESSION_EXPIRY_SECONDS - 1
+                        
+                        # Get retry count and apply exponential backoff
+                        retry_count = _session_retry_counts.get(session_id, 0) + 1
+                        _session_retry_counts[session_id] = retry_count
+                        
+                        if retry_count <= MAX_SESSION_CLEANUP_RETRIES:
+                            # Calculate exponential backoff: 2^retry_count * 60 seconds, capped at MAX_BACKOFF
+                            backoff_seconds = min(2 ** (retry_count - 1) * 60, MAX_BACKOFF)
+                            future_time = current_time + backoff_seconds
+                            
+                            # Rollback: re-insert session with backoff
+                            _session_locks[session_id] = session_lock
+                            _session_last_access[session_id] = future_time
+                            
+                            logger.warning(
+                                f"Cleanup failed for session {session_id[:8]}, "
+                                f"retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES} in {backoff_seconds}s"
+                            )
+                        else:
+                            # Max retries exceeded, give up on this session
+                            logger.error(
+                                f"Max cleanup retries exceeded for session {session_id[:8]}, "
+                                f"removing from retry tracking"
+                            )
+                            _session_retry_counts.pop(session_id, None)
                     finally:
                         # Always release the per-session lock
                         if session_lock:

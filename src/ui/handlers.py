@@ -208,7 +208,7 @@ def handle_gradio_input(
             # Handle session limit exceeded specifically
             logger.warning(f"Session limit exceeded: {e}")
             friendly = "The bar is at capacity right now! Please try again in a moment."
-            quota_error_html = ""
+            # No quota error popup for session limit exceeded
         elif _is_quota_error(e):
             quota_error_html = create_quota_error_html()
             friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."

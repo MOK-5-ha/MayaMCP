@@ -50,6 +50,17 @@ class TokenBucket:
                 return True
             return False
     
+    def peek(self) -> int:
+        """
+        Get current token count without consuming.
+        
+        Returns:
+            Current number of tokens in bucket
+        """
+        with self._lock:
+            self._refill()
+            return self.tokens
+    
     def _refill(self) -> None:
         """Refill tokens based on elapsed time."""
         now = time.time()
@@ -58,6 +69,21 @@ class TokenBucket:
         
         self.tokens = min(self.capacity, self.tokens + tokens_to_add)
         self.last_refill = now
+    
+    def stats(self) -> Dict[str, int]:
+        """
+        Get consistent snapshot of bucket statistics.
+        
+        Returns:
+            Dictionary with tokens, capacity, and refill_rate per minute
+        """
+        with self._lock:
+            self._refill()
+            return {
+                "tokens": int(self.tokens),
+                "capacity": self.capacity,
+                "refill_rate": int(self.refill_rate * 60)  # per minute
+            }
 
 
 class RateLimiter:
@@ -149,8 +175,8 @@ class RateLimiter:
             if not bucket.consume():
                 return False, f"Session rate limit exceeded ({self.session_limit}/min)"
         else:
-            # Check-only mode: verify we have enough tokens
-            if bucket.tokens < 1:
+            # Check-only mode: verify we have enough tokens using peek()
+            if bucket.peek() < 1:
                 return False, f"Session rate limit exceeded ({self.session_limit}/min)"
         
         return True, ""
@@ -169,15 +195,18 @@ class RateLimiter:
             if not self._app_bucket.consume():
                 return False, f"Application rate limit exceeded ({self.app_limit}/min)"
         else:
-            # Check-only mode: verify we have enough tokens
-            if self._app_bucket.tokens < 1:
+            # Check-only mode: verify we have enough tokens using peek()
+            if self._app_bucket.peek() < 1:
                 return False, f"Application rate limit exceeded ({self.app_limit}/min)"
         
         return True, ""
     
     def check_limits(self, session_id: str) -> Tuple[bool, str]:
         """
-        Check both session and application rate limits.
+        Check both session and application rate limits atomically.
+        
+        This method addresses TOCTOU race conditions by consuming tokens
+        directly under consistent locking order rather than using pre-checks.
         
         Args:
             session_id: Unique session identifier
@@ -185,29 +214,37 @@ class RateLimiter:
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
-        # First, check both limits without consuming tokens
-        app_allowed, app_reason = self.check_app_limit(consume=False)
-        if not app_allowed:
-            return False, app_reason
-        
-        session_allowed, session_reason = self.check_session_limit(session_id, consume=False)
-        if not session_allowed:
-            return False, session_reason
-        
-        # Both checks passed, now consume tokens
-        # Note: We consume app token first since it's more restrictive
-        app_allowed, app_reason = self.check_app_limit(consume=True)
-        if not app_allowed:
-            # This should not happen since we checked above, but handle gracefully
-            return False, app_reason
-        
-        session_allowed, session_reason = self.check_session_limit(session_id, consume=True)
-        if not session_allowed:
-            # This should not happen since we checked above, but handle gracefully
-            # Note: We don't rollback the app token to avoid complexity
-            return False, session_reason
-        
-        return True, ""
+        # Take both locks in consistent order to prevent deadlock
+        # App lock first, then session lock to maintain ordering
+        with self._app_bucket._lock:
+            with self._session_lock:
+                # Check app limit directly with consume=True
+                if not self._app_bucket.consume():
+                    return False, f"Application rate limit exceeded ({self.app_limit}/min)"
+                
+                # Get or create session bucket
+                if session_id not in self._session_buckets:
+                    self._session_buckets[session_id] = TokenBucket(
+                        capacity=self.session_limit,
+                        refill_rate=self.session_limit / 60.0  # per second
+                    )
+                
+                bucket = self._session_buckets[session_id]
+                
+                # Check burst limit first
+                if not self._check_burst_limit(session_id):
+                    # Rollback app token by adding it back
+                    self._app_bucket.tokens += 1
+                    return False, "Too many requests in quick succession"
+                
+                # Check session limit directly with consume=True
+                if not bucket.consume():
+                    # Rollback app token by adding it back
+                    self._app_bucket.tokens += 1
+                    return False, f"Session rate limit exceeded ({self.session_limit}/min)"
+                
+                # All checks passed, tokens consumed successfully
+                return True, ""
     
     def _check_burst_limit(self, session_id: str) -> bool:
         """
@@ -298,11 +335,7 @@ class RateLimiter:
             if not bucket:
                 return {"tokens": 0, "capacity": self.session_limit}
             
-            return {
-                "tokens": int(bucket.tokens),
-                "capacity": bucket.capacity,
-                "refill_rate": int(bucket.refill_rate * 60)  # per minute
-            }
+            return bucket.stats()
     
     def get_app_stats(self) -> Dict[str, int]:
         """
@@ -311,13 +344,7 @@ class RateLimiter:
         Returns:
             Dictionary with application rate limiting statistics
         """
-        # Acquire app bucket lock to ensure consistent snapshot
-        with self._app_bucket._lock:
-            return {
-                "tokens": int(self._app_bucket.tokens),
-                "capacity": self._app_bucket.capacity,
-                "refill_rate": int(self._app_bucket.refill_rate * 60)  # per minute
-            }
+        return self._app_bucket.stats()
 
 
 # Global rate limiter instance
