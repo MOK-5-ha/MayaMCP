@@ -146,6 +146,16 @@ def serve_maya():
 
     # Initialize state
     initialize_state()
+    
+    # Initialize session manager and start background cleanup
+    try:
+        from utils.session_manager import get_session_manager, cleanup_expired_sessions_background
+        session_manager = get_session_manager()
+        cleanup_thread = cleanup_expired_sessions_background()
+        logger.info("Session manager initialized with background cleanup")
+    except Exception as e:
+        logger.warning(f"Failed to initialize session manager: {e}")
+        cleanup_thread = None
 
     # Get tool definitions (static, shared)
     tools = get_all_tools()
@@ -218,16 +228,45 @@ def serve_maya():
         lines.append('# HELP maya_config_max_containers Configured max containers for autoscaling')
         lines.append('# TYPE maya_config_max_containers gauge')
         lines.append(f'maya_config_max_containers {MAX_CONTAINERS}')
-        # cgroup memory
-        cur, lim = _read_cgroup_memory()
-        if cur is not None:
+        
+        # Enhanced memory monitoring
+        try:
+            from utils.memory_monitor import get_memory_monitor
+            memory_monitor = get_memory_monitor()
+            memory_metrics = memory_monitor.get_memory_metrics()
+            
             lines.append('# HELP maya_container_memory_usage_bytes Container memory usage in bytes')
             lines.append('# TYPE maya_container_memory_usage_bytes gauge')
-            lines.append(f'maya_container_memory_usage_bytes {cur}')
-        if lim is not None:
+            lines.append(f'maya_container_memory_usage_bytes {memory_metrics["current_bytes"]}')
+            
             lines.append('# HELP maya_container_memory_limit_bytes Container memory limit in bytes')
             lines.append('# TYPE maya_container_memory_limit_bytes gauge')
-            lines.append(f'maya_container_memory_limit_bytes {lim}')
+            lines.append(f'maya_container_memory_limit_bytes {memory_metrics["limit_bytes"]}')
+            
+            lines.append('# HELP maya_container_memory_utilization Container memory utilization ratio (0-1)')
+            lines.append('# TYPE maya_container_memory_utilization gauge')
+            lines.append(f'maya_container_memory_utilization {memory_metrics["utilization"]:.3f}')
+            
+            lines.append('# HELP maya_container_memory_available_mb Available memory in MB')
+            lines.append('# TYPE maya_container_memory_available_mb gauge')
+            lines.append(f'maya_container_memory_available_mb {memory_metrics["available_mb"]:.1f}')
+            
+            lines.append('# HELP maya_container_memory_pressure Memory pressure alert (1=pressure, 0=normal)')
+            lines.append('# TYPE maya_container_memory_pressure gauge')
+            lines.append(f'maya_container_memory_pressure {1 if memory_metrics["pressure"] else 0}')
+            
+        except Exception as e:
+            logger.warning(f"Failed to collect memory metrics: {e}")
+            # Fallback to original cgroup reading
+            cur, lim = _read_cgroup_memory()
+            if cur is not None:
+                lines.append('# HELP maya_container_memory_usage_bytes Container memory usage in bytes')
+                lines.append('# TYPE maya_container_memory_usage_bytes gauge')
+                lines.append(f'maya_container_memory_usage_bytes {cur}')
+            if lim is not None:
+                lines.append('# HELP maya_container_memory_limit_bytes Container memory limit in bytes')
+                lines.append('# TYPE maya_container_memory_limit_bytes gauge')
+                lines.append(f'maya_container_memory_limit_bytes {lim}')
         # CPU usage seconds total
         cpu_sec = _read_cgroup_cpu_seconds()
         if cpu_sec is not None:
@@ -264,6 +303,39 @@ def serve_maya():
         rag_type_value = {"none": 0, "memvid": 1, "faiss": 2}.get(rag_type, 0)
         lines.append(f'maya_rag_type {rag_type_value}')
         
+        # Session management metrics
+        try:
+            from utils.session_manager import get_session_manager
+            session_manager = get_session_manager()
+            session_stats = session_manager.get_statistics()
+            
+            lines.append('# HELP maya_active_sessions Current number of active sessions')
+            lines.append('# TYPE maya_active_sessions gauge')
+            lines.append(f'maya_active_sessions {session_stats["current_sessions"]}')
+            
+            lines.append('# HELP maya_max_sessions Maximum sessions per container')
+            lines.append('# TYPE maya_max_sessions gauge')
+            lines.append(f'maya_max_sessions {session_stats["max_sessions"]}')
+            
+            lines.append('# HELP maya_session_utilization Session utilization ratio (0-1)')
+            lines.append('# TYPE maya_session_utilization gauge')
+            lines.append(f'maya_session_utilization {session_stats["utilization"]:.3f}')
+            
+            lines.append('# HELP maya_sessions_created_total Total sessions created')
+            lines.append('# TYPE maya_sessions_created_total counter')
+            lines.append(f'maya_sessions_created_total {session_stats["sessions_created"]}')
+            
+            lines.append('# HELP maya_sessions_rejected_total Total sessions rejected')
+            lines.append('# TYPE maya_sessions_rejected_total counter')
+            lines.append(f'maya_sessions_rejected_total {session_stats["sessions_rejected"]}')
+            
+            lines.append('# HELP maya_sessions_expired_total Total sessions expired')
+            lines.append('# TYPE maya_sessions_expired_total counter')
+            lines.append(f'maya_sessions_expired_total {session_stats["sessions_expired"]}')
+            
+        except Exception as e:
+            logger.warning(f"Failed to collect session metrics: {e}")
+        
         return "\n".join(lines) + "\n"
 
     @web_app.get("/metrics")
@@ -274,6 +346,15 @@ def serve_maya():
     def healthz():
         # Check critical dependencies
         checks = []
+        
+        # Enhanced session monitoring
+        try:
+            from utils.memory_monitor import check_memory_health
+            memory_healthy = check_memory_health()
+            if not memory_healthy:
+                checks.append("Container memory pressure detected")
+        except Exception as e:
+            logger.warning(f"Memory health check failed: {e}")
         
         # Check RAG availability (either Memvid or FAISS)
         # Only mandatory if server-side key is provided (non-BYOK for RAG)

@@ -13,6 +13,14 @@ logger = get_logger(__name__)
 _session_clients: Dict[str, Dict[str, Any]] = {}
 _registry_lock = threading.Lock()
 
+# Import new session manager for memory-aware admission control
+try:
+    from ..utils.session_manager import get_session_manager
+    _session_manager_available = True
+except ImportError:
+    logger.warning("Session manager not available, using legacy session limits")
+    _session_manager_available = False
+
 # Resource limits
 def _get_env_int(env_var: str, default: int) -> int:
     """Safely parse integer from environment variable with fallback."""
@@ -27,8 +35,8 @@ def _get_env_int(env_var: str, default: int) -> int:
         )
     return default
 
+# Legacy fallback if session manager unavailable
 MAX_CONCURRENT_SESSIONS = _get_env_int("MAYA_MAX_SESSIONS", 1000)
-# MAX_SESSION_MEMORY_MB removed - unused in current implementation
 
 
 class SessionLimitExceededError(RuntimeError):
@@ -42,14 +50,14 @@ def _key_hash(api_key: str) -> str:
 
 
 def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None):
-    """Return a cached or newly created LLM instance for the session.
+    """Return a cached or newly created LLM instance for session.
 
-    If the API key has changed since the last call, the LLM is recreated.
+    If API key has changed since last call, LLM is recreated.
 
     Args:
         session_id: Gradio session hash.
         api_key: User-provided Gemini API key.
-        tools: Tool definitions to bind to the LLM.
+        tools: Tool definitions to bind to LLM.
 
     Returns:
         Initialized ``ChatGoogleGenerativeAI`` instance with tools bound.
@@ -61,20 +69,32 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
         entry = _session_clients.get(session_id)
         if entry and entry.get("llm") and entry.get("gemini_hash") == key_hash:
             return entry["llm"]
-        
-        # Check session limit and reserve slot atomically for new sessions only
-        if session_id not in _session_clients:
-            if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
-                logger.warning(
-                    f"Maximum concurrent sessions "
-                    f"({MAX_CONCURRENT_SESSIONS}) reached"
-                )
-                raise SessionLimitExceededError(
-                    f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"
-                )
-            
-            # Reserve session slot
-            _session_clients[session_id] = {}
+
+    # Memory-aware session admission control
+    if _session_manager_available:
+        session_manager = get_session_manager()
+        if not session_manager.create_session(session_id, key_hash):
+            logger.warning(
+                f"Session {session_id[:8]} rejected by memory-aware admission control"
+            )
+            raise SessionLimitExceededError(
+                "Session rejected: insufficient memory or session limit reached"
+            )
+    else:
+        # Legacy fallback: check session limit and reserve slot atomically
+        with _registry_lock:
+            if session_id not in _session_clients:
+                if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
+                    logger.warning(
+                        f"Maximum concurrent sessions "
+                        f"({MAX_CONCURRENT_SESSIONS}) reached"
+                    )
+                    raise SessionLimitExceededError(
+                        f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"
+                    )
+
+                # Reserve session slot
+                _session_clients[session_id] = {}
 
     # Create outside lock to avoid blocking other sessions
     from .client import initialize_llm
@@ -173,7 +193,7 @@ def cleanup_sessions(session_ids: List[str]) -> None:
     Args:
         session_ids: List of session IDs to clean up.
     """
-    # Collect entries under the lock, then do I/O cleanup outside it.
+    # Collect entries under lock, then do I/O cleanup outside it.
     evicted: List[tuple] = []
     with _registry_lock:
         for session_id in session_ids:
@@ -194,6 +214,15 @@ def cleanup_sessions(session_ids: List[str]) -> None:
                         session_id[:8],
                     )
     logger.info("Cleaned up LLM/TTS clients for session %s...", session_id[:8])
+
+    # Also remove from session manager if available
+    if _session_manager_available:
+        try:
+            session_manager = get_session_manager()
+            for session_id in session_ids:
+                session_manager.remove_session(session_id)
+        except Exception as e:
+            logger.warning(f"Failed to remove session from manager: {e}")
 
 
 def clear_session_clients(session_id: str) -> None:
