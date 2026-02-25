@@ -309,12 +309,6 @@ def handle_gradio_input_stream(
         }
         return
 
-    # Get current payment state for overlay
-    payment_state = get_payment_state(session_id, app_state)
-    new_tab = payment_state['tab_total']
-    new_balance = payment_state['balance']
-    new_tip_percentage = payment_state['tip_percentage']
-    new_tip_amount = payment_state['tip_amount']
 
     # Start streaming processing
     try:
@@ -327,13 +321,11 @@ def handle_gradio_input_stream(
             rag_retriever, effective_rag_key, session_id, app_state
         )
         
-        accumulated_text = ""
         updated_history = session_history_state[:]
         
         for event in response_stream:
             if event['type'] == 'text_chunk':
                 # Yield text chunk for immediate display
-                accumulated_text += event['content']
                 yield {
                     'type': 'text_chunk',
                     'content': event['content'],
@@ -416,8 +408,8 @@ def handle_gradio_input_stream(
 
     except SessionLimitExceededError as e:
         # Handle session limit exceeded
-        quota_error_html = create_quota_error_html()
-        error_message = "It looks like your API key has hit its rate limit. Please check the popup for details."
+        logger.warning(f"Session limit exceeded: {e}")
+        error_message = "The bar is at capacity right now! Please try again in a moment."
         
         error_history = session_history_state[:]
         error_history.append({'role': 'user', 'content': user_input})
@@ -427,8 +419,7 @@ def handle_gradio_input_stream(
             'type': 'error',
             'content': error_message,
             'history': error_history,
-            'emotion_state': 'neutral',
-            'quota_error_html': quota_error_html
+            'emotion_state': 'neutral'
         }
         
         yield error_payload

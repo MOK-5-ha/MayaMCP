@@ -220,10 +220,11 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
         session_manager = get_session_manager()
         if not session_manager.create_session(session_id, key_hash):
             logger.warning(
-                f"Session {session_id[:8]} rejected by memory-aware admission control"
+                "Session %s rejected by memory-aware admission control",
+                session_id[:8]
             )
             raise SessionLimitExceededError(
-                "Session rejected: insufficient memory or session limit reached"
+                "Session rejected: session limit reached"
             )
     else:
         # Legacy fallback: check session limit and reserve slot atomically
@@ -231,8 +232,8 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
             if session_id not in _session_clients:
                 if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
                     logger.warning(
-                        f"Maximum concurrent sessions "
-                        f"({MAX_CONCURRENT_SESSIONS}) reached"
+                        "Maximum concurrent sessions (%d) reached",
+                        MAX_CONCURRENT_SESSIONS
                     )
                     raise SessionLimitExceededError(
                         f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"

@@ -157,7 +157,8 @@ class RateLimiter:
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
-        # Check burst limit first
+        # Check burst limit (records attempt even if subsequent limits fail, 
+        # providing intentional DoS protection against rapid retries)
         if not self._check_burst_limit(session_id):
             return False, "Too many requests in quick succession"
         
@@ -211,7 +212,8 @@ class RateLimiter:
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
-        # Check burst limit first (before any locks to avoid lock ordering issues)
+        # Check burst limit (records attempt even if subsequent limits fail, 
+        # providing intentional DoS protection against rapid retries)
         if not self._check_burst_limit(session_id):
             return False, "Too many requests in quick succession"
         
@@ -245,6 +247,11 @@ class RateLimiter:
         """
         Check burst limit to prevent rapid-fire requests.
         
+        Note: This method appends to the history immediately if the check passes.
+        This means denied attempts (due to subsequent app or session limits) 
+        are still recorded, providing a natural penalty for rapid retries 
+        during rate-limit or capacity conditions (DoS protection).
+
         Args:
             session_id: Unique session identifier
             

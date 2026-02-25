@@ -27,7 +27,7 @@ This document summarizes the implementation of Modal-based memory monitoring and
 
 ### MayaSessionManager Class (`src/utils/session_manager.py`)
 - **Memory-aware admission**: Checks memory availability before creating sessions
-- **Container-level limits**: Configurable sessions per container (default: 100)
+- **Container-level limits**: Configurable sessions per container (default: 50)
 - **Session lifecycle**: Creation, access tracking, expiration, cleanup
 - **Statistics tracking**: Comprehensive metrics for monitoring
 - **Background cleanup**: Automatic expired session removal
@@ -57,7 +57,7 @@ This document summarizes the implementation of Modal-based memory monitoring and
 ### Environment Variables (`.env.example`)
 ```bash
 # Modal-specific session management
-MAYA_SESSIONS_PER_CONTAINER=100  # sessions per Modal container
+MAYA_SESSIONS_PER_CONTAINER=50  # sessions per Modal container
 MAYA_DEFAULT_SESSION_MEMORY_MB=50  # default memory allocation per session
 MAYA_CONTAINER_MEMORY_THRESHOLD=0.8  # memory pressure threshold (0.0-1.0)
 
@@ -161,7 +161,7 @@ MODAL_MAX_CONTAINERS=10
 
 ## ⚠️ Current Limitations
 
-1. **Distributed Session Coordination**: Session registry is currently per-container, meaning each Modal container can admit up to `MAYA_SESSIONS_PER_CONTAINER` sessions independently. This makes the global `MAYA_MAX_SESSIONS` limit effectively unenforced across the deployment, potentially allowing more concurrent sessions than intended.
+1. **Distributed Session Coordination**: Session registry is currently per-container, meaning each Modal container can admit up to `MAYA_SESSIONS_PER_CONTAINER` sessions independently. This makes the global `MAYA_MAX_SESSIONS` limit effectively unenforced across the deployment, potentially allowing more concurrent sessions than intended. See Future Enhancement #1 (Distributed Session Coordination) below.
 
 2. **Memory Limit Configuration**: The `MAYA_MAX_SESSION_MEMORY_MB` environment variable is not implemented in the current deployment. Memory limits are enforced only at the container level via cgroups, not at the individual session level.
 
@@ -171,13 +171,13 @@ MODAL_MAX_CONTAINERS=10
 - **Scaling behavior** may not respect global session caps
 
 **Recommended Mitigations**:
-- **Single-container enforcement**: Deploy with `MAX_CONTAINERS=1` for strict global limits
+- **Single-container enforcement**: Deploy with `MODAL_MAX_CONTAINERS=1` for strict global limits
 - **Orchestration-level admission**: Implement session counting at the load balancer/proxy level
 - **Monitor total sessions**: Use `/metrics` endpoint to track aggregate session usage across containers
 
 ## 🔧 Future Enhancements
 
-1. **Distributed Session Coordination**: Use Modal Dict for cross-container session tracking
+1. **Distributed Session Coordination**: Use Modal Dict for cross-container session tracking (Related limitation: Current Limitations → Distributed Session Coordination)
 2. **Advanced Metrics**: Session memory usage per session (if needed)
 3. **Auto-scaling Integration**: Memory-based container scaling triggers
 4. **Performance Optimization**: Memory usage patterns and optimization recommendations

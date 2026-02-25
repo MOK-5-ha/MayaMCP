@@ -1,7 +1,8 @@
 """Unit tests for UI handlers."""
 
 from unittest.mock import Mock, patch, MagicMock
-from src.ui.handlers import handle_gradio_input, clear_chat_state
+from src.ui.handlers import handle_gradio_input, clear_chat_state, handle_gradio_input_stream
+from src.llm.session_registry import SessionLimitExceededError
 
 
 def _make_request(session_id="test_session"):
@@ -401,3 +402,49 @@ class TestClearChatState:
         result = clear_chat_state(request=_make_request(), app_state={})
         mock_reset_session_state.assert_called_once()
         assert result == ([], [], [], None)
+    @patch('src.ui.handlers.handle_gradio_input_stream')
+    def test_handle_gradio_streaming_input_session_limit(
+        self, mock_handle_stream
+    ):
+        """Test handle_gradio_streaming_input correctly routes to streaming handler."""
+        from src.ui.handlers import handle_gradio_streaming_input
+        
+        mock_handle_stream.return_value = ["event"]
+        
+        result = handle_gradio_streaming_input(
+            "Hi", [], 0.0, 1000.0, None, 0.0,
+            streaming_enabled=True, request=_make_request(),
+            app_state={}
+        )
+        
+    @patch('src.ui.handlers.process_order_stream')
+    @patch('src.ui.handlers.get_session_tts')
+    @patch('src.ui.handlers.get_session_llm')
+    def test_handle_gradio_input_stream_session_limit_exceeded(
+        self, mock_get_llm, mock_get_tts, mock_process_order_stream
+    ):
+        """Test streaming handler when session limit is exceeded."""
+        mock_process_order_stream.side_effect = SessionLimitExceededError("Limit reached")
+        
+        test_state = {}
+        _seed_session_keys(test_state)
+        
+        generator = handle_gradio_input_stream(
+            user_input="Hi",
+            session_history_state=[],
+            current_tab=0.0,
+            current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
+            request=_make_request(),
+            app_state=test_state
+        )
+        
+        events = list(generator)
+        assert len(events) == 1
+        event = events[0]
+        
+        assert event['type'] == 'error'
+        assert "at capacity" in event['content']
+        assert len(event['history']) == 2
+        assert 'quota_error_html' not in event

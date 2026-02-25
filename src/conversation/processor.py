@@ -602,7 +602,7 @@ def process_order_stream(
                     security_buffer += text_chunk
                     
                     # Security scan only the new chunk before yielding
-                    chunk_scan_result = scan_output(text_chunk, prompt=user_input_text)
+                    chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
                     if not chunk_scan_result.is_valid:
                         logger.warning("Streaming content blocked by security scanner")
                         # Yield error and stop streaming
@@ -651,7 +651,7 @@ def process_order_stream(
             
             # Final Security Scan
             output_scan_result = scan_output(
-                clean_response, prompt=user_input_text
+                clean_response, prompt=sanitized_input
             )
             if not output_scan_result.is_valid:
                 logger.warning("Final output blocked by security scanner")

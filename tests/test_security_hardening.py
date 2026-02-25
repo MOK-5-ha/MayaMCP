@@ -8,6 +8,7 @@ import time
 from src.security.scanner import scan_input, scan_output
 from src.utils.rate_limiter import check_rate_limits, get_rate_limiter
 from src.utils.state_manager import start_session_cleanup, stop_session_cleanup
+import src.utils.state_manager as state_manager
 
 
 def test_rate_limiting():
@@ -75,18 +76,15 @@ def test_session_cleanup():
 
     try:
         # Poll for cleanup thread to be alive with timeout
-        import src.utils.state_manager as state_manager
         
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval
-        elapsed = 0.0
-        
-        while elapsed < timeout:
-            if state_manager._cleanup_thread and state_manager._cleanup_thread.is_alive():
-                print(f"Cleanup thread started after {elapsed:.2f}s")
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            if state_manager.is_cleanup_running():
+                print(f"Cleanup thread started after {time.time() - start_time:.2f}s")
                 break
             time.sleep(poll_interval)
-            elapsed += poll_interval
         else:
             raise AssertionError(
                 "Cleanup thread failed to start within timeout"
@@ -100,14 +98,12 @@ def test_session_cleanup():
         # Verify thread stopped with timeout
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval
-        elapsed = 0.0
-        
-        while elapsed < timeout:
-            if not state_manager._cleanup_thread or not state_manager._cleanup_thread.is_alive():
-                print(f"Cleanup thread stopped after {elapsed:.2f}s")
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            if not state_manager.is_cleanup_running():
+                print(f"Cleanup thread stopped after {time.time() - start_time:.2f}s")
                 break
             time.sleep(poll_interval)
-            elapsed += poll_interval
         else:
             raise AssertionError(
                 "Cleanup thread failed to stop within timeout"

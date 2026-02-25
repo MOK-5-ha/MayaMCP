@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch, MagicMock
 
 from src.utils.memory_monitor import MemoryMonitor, get_memory_monitor, check_memory_health
 from src.utils.session_manager import MayaSessionManager, SessionData, get_session_manager
+import src.utils.memory_monitor
+import src.utils.session_manager
 
 
 class TestMemoryMonitor:
@@ -173,7 +175,11 @@ class TestMayaSessionManager:
     def test_create_session_success(self, mock_get_monitor):
         """Test successful session creation."""
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = True
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 100,
+            "utilization": 0.5,
+            "pressure": False
+        }
         mock_get_monitor.return_value = mock_monitor
         
         manager = MayaSessionManager()
@@ -187,7 +193,11 @@ class TestMayaSessionManager:
     def test_create_session_memory_limit(self, mock_get_monitor):
         """Test session creation rejected due to memory limit."""
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = False
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 10,  # Below default 50MB
+            "utilization": 0.9,
+            "pressure": False
+        }
         mock_get_monitor.return_value = mock_monitor
         
         manager = MayaSessionManager()
@@ -203,7 +213,11 @@ class TestMayaSessionManager:
     def test_create_session_limit_reached(self, mock_get_monitor):
         """Test session creation rejected due to session limit."""
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = True
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 500,
+            "utilization": 0.1,
+            "pressure": False
+        }
         mock_get_monitor.return_value = mock_monitor
         
         manager = MayaSessionManager()
@@ -217,83 +231,105 @@ class TestMayaSessionManager:
         assert manager.get_session_count() == 2
     
     @patch('src.utils.session_manager.get_memory_monitor')
-    def test_access_existing_session(self):
+    def test_access_existing_session(self, mock_get_monitor):
         """Test accessing an existing session."""
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = True
-        with patch('src.utils.session_manager.get_memory_monitor', return_value=mock_monitor):
-            manager = MayaSessionManager()
-            
-            removed = manager.remove_session("nonexistent")
-            assert removed is False
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 100,
+            "utilization": 0.5,
+            "pressure": False
+        }
+        mock_get_monitor.return_value = mock_monitor
+        
+        manager = MayaSessionManager()
+        manager.create_session("test123", "keyhash")
+        
+        assert manager.access_session("test123") is True
     
     @patch('src.utils.session_manager.get_memory_monitor')
-    def test_remove_existing_session(self):
+    def test_remove_existing_session(self, mock_get_monitor):
         """Test removing an existing session."""
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = True
-        with patch('src.utils.session_manager.get_memory_monitor', return_value=mock_monitor):
-            manager = MayaSessionManager()
-            manager.create_session("test123", "keyhash")
-            
-            removed = manager.remove_session("test123")
-            assert removed is True
-            assert manager.get_session_count() == 0
-    
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 100,
+            "utilization": 0.5,
+            "pressure": False
+        }
+        mock_get_monitor.return_value = mock_monitor
+        
+        manager = MayaSessionManager()
+        manager.create_session("test123", "keyhash")
+        
+        removed = manager.remove_session("test123")
+        assert removed is True
+        assert manager.get_session_count() == 0
     @patch('src.utils.session_manager.get_memory_monitor')
-    def test_remove_nonexistent_session(self):
+    def test_remove_nonexistent_session(self, mock_get_monitor):
         """Test removing a non-existent session."""
+        mock_monitor = Mock()
+        mock_get_monitor.return_value = mock_monitor
+
+        manager = MayaSessionManager()
+        removed = manager.remove_session("nonexistent-session-id")
         assert removed is False
     
     @patch('src.utils.session_manager.get_memory_monitor')
-    def test_cleanup_expired_sessions(self):
+    def test_cleanup_expired_sessions(self, mock_get_monitor):
         """Test cleanup of expired sessions."""
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = True
-        with patch('src.utils.session_manager.get_memory_monitor', return_value=mock_monitor):
-            manager = MayaSessionManager()
-            
-            # Create sessions
-            manager.create_session("test1", "keyhash")
-            manager.create_session("test2", "keyhash")
-            
-            # Expire one session
-            session1 = manager.get_session_info("test1")
-            session1.last_access = time.time() - 3700  # Expired
-            
-            # Cleanup
-            cleaned = manager.cleanup_expired_sessions()
-            
-            assert cleaned == 1
-            assert manager.get_session_count() == 1
-            assert manager.access_session("test1") is False
-            assert manager.access_session("test2") is True
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 100,
+            "utilization": 0.5,
+            "pressure": False
+        }
+        mock_get_monitor.return_value = mock_monitor
+        
+        manager = MayaSessionManager()
+        
+        # Create sessions
+        manager.create_session("test1", "keyhash")
+        manager.create_session("test2", "keyhash")
+        
+        # Expire one session
+        with manager._lock:
+            manager._sessions["test1"].last_access = time.time() - 3700  # Expired
+        
+        # Cleanup
+        cleaned = manager.cleanup_expired_sessions()
+        
+        assert cleaned == 1
+        assert manager.get_session_count() == 1
+        assert manager.access_session("test1") is False
+        assert manager.access_session("test2") is True
     
-    @patch('src.utils.memory_monitor.MemoryMonitor.read_cgroup_memory')
-    def test_get_statistics(self):
+    @patch.dict(os.environ, {'MAYA_SESSIONS_PER_CONTAINER': '3'})
+    @patch('src.utils.session_manager.get_memory_monitor')
+    def test_get_statistics(self, mock_get_monitor):
         """Test statistics collection."""
         # Create deterministic manager with fixed limits and mock memory monitor
         mock_monitor = Mock()
-        mock_monitor.is_memory_available.return_value = True
+        mock_monitor.get_memory_metrics.return_value = {
+            "available_mb": 1000,
+            "utilization": 0.1,
+            "pressure": False
+        }
+        mock_get_monitor.return_value = mock_monitor
         
-        with patch('src.utils.session_manager.get_memory_monitor', return_value=mock_monitor):
-            # Use fixed low limit to ensure deterministic behavior
-            manager = MayaSessionManager(max_sessions_per_container=3)
-            
-            # All three sessions should succeed (memory available)
-            assert manager.create_session("test1", "keyhash") is True
-            assert manager.create_session("test2", "keyhash") is True
-            assert manager.create_session("test3", "keyhash") is True
-            
-            stats = manager.get_statistics()
-            
-            # Assert exact deterministic values
-            assert stats["current_sessions"] == 3
-            assert stats["max_sessions"] == 3  # Our fixed limit
-            assert stats["sessions_created"] == 3
-            assert "utilization" in stats
-            assert 0 <= stats["utilization"] <= 1  # Between 0% and 100%
-        assert 0 <= stats["utilization"] <= 1
+        manager = MayaSessionManager()
+        
+        # All three sessions should succeed (memory available)
+        assert manager.create_session("test1", "keyhash") is True
+        assert manager.create_session("test2", "keyhash") is True
+        assert manager.create_session("test3", "keyhash") is True
+        
+        stats = manager.get_statistics()
+        
+        # Assert exact deterministic values
+        assert stats["current_sessions"] == 3
+        assert stats["max_sessions"] == 3  # Our fixed limit
+        assert stats["sessions_created"] == 3
+        assert "utilization" in stats
+        assert 0 <= stats["utilization"] <= 1  # Between 0% and 100%
 
 
 class TestGlobalFunctions:
@@ -302,38 +338,34 @@ class TestGlobalFunctions:
     @patch('src.utils.memory_monitor.MemoryMonitor')
     def test_get_memory_monitor_singleton(self, mock_monitor_class):
         """Test memory monitor singleton behavior."""
-        # Reset module-level singleton before test
-        import src.utils.memory_monitor
-        src.utils.memory_monitor._memory_monitor = None
-        
-        mock_instance = Mock()
-        mock_monitor_class.return_value = mock_instance
-        
-        # First call should create instance
-        monitor1 = get_memory_monitor()
-        # Second call should return same instance
-        monitor2 = get_memory_monitor()
-        
-        assert monitor1 is monitor2
-        mock_monitor_class.assert_called_once()
+        # Isolate module-level singleton using patch.object
+        with patch.object(src.utils.memory_monitor, '_memory_monitor', None):
+            mock_instance = Mock()
+            mock_monitor_class.return_value = mock_instance
+            
+            # First call should create instance
+            monitor1 = get_memory_monitor()
+            # Second call should return same instance
+            monitor2 = get_memory_monitor()
+            
+            assert monitor1 is monitor2
+            mock_monitor_class.assert_called_once()
     
     @patch('src.utils.session_manager.MayaSessionManager')
     def test_get_session_manager_singleton(self, mock_manager_class):
         """Test session manager singleton behavior."""
-        # Reset module-level singleton before test
-        import src.utils.session_manager
-        src.utils.session_manager._session_manager = None
-        
-        mock_instance = Mock()
-        mock_manager_class.return_value = mock_instance
-        
-        # First call should create instance
-        manager1 = get_session_manager()
-        # Second call should return same instance
-        manager2 = get_session_manager()
-        
-        assert manager1 is manager2
-        mock_manager_class.assert_called_once()
+        # Isolate module-level singleton using patch.object
+        with patch.object(src.utils.session_manager, '_session_manager', None):
+            mock_instance = Mock()
+            mock_manager_class.return_value = mock_instance
+            
+            # First call should create instance
+            manager1 = get_session_manager()
+            # Second call should return same instance
+            manager2 = get_session_manager()
+            
+            assert manager1 is manager2
+            mock_manager_class.assert_called_once()
     
     @patch('src.utils.memory_monitor.get_memory_monitor')
     def test_check_memory_health_true(self, mock_get_monitor):

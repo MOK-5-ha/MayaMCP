@@ -132,41 +132,35 @@ def main():
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
         # Cleanup security services
+        # Clean up rate limiter session data
         try:
-            # Clean up rate limiter session data
-            try:
-                rate_limiter = get_rate_limiter()
-                rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
-            except Exception as e:
-                logger.exception(f"Error cleaning up rate limiter: {e}")
-            
-            # Always stop session cleanup regardless of rate limiter errors
-            try:
-                stop_session_cleanup()
-                logger.info("Security services stopped")
-            except Exception as e:
-                logger.exception(f"Error stopping session cleanup: {e}")
-        except Exception as e:
-            logger.exception(f"Unexpected error during security cleanup: {e}")
+            rate_limiter = get_rate_limiter()
+            rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
+        except Exception as cleanup_err:
+            logger.exception("Error cleaning up rate limiter")
+        
+        # Always stop session cleanup regardless of rate limiter errors
+        try:
+            stop_session_cleanup()
+            logger.info("Security services stopped")
+        except Exception as cleanup_err:
+            logger.exception("Error stopping session cleanup")
         sys.exit(0)
     except Exception as e:
-        logger.exception(f"Critical error starting application: {e}")
+        logger.exception("Critical error starting application")
         # Cleanup security services on error
+        # Clean up rate limiter session data
         try:
-            # Clean up rate limiter session data
-            try:
-                rate_limiter = get_rate_limiter()
-                rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
-            except Exception as e:
-                logger.exception(f"Error cleaning up rate limiter: {e}")
-            
-            # Always stop session cleanup regardless of rate limiter errors
-            try:
-                stop_session_cleanup()
-            except Exception as e:
-                logger.exception(f"Error stopping session cleanup: {e}")
-        except Exception:
-            logger.exception("Unexpected error during security cleanup")
+            rate_limiter = get_rate_limiter()
+            rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
+        except Exception as cleanup_err:
+            logger.exception("Error cleaning up rate limiter")
+        
+        # Always stop session cleanup regardless of rate limiter errors
+        try:
+            stop_session_cleanup()
+        except Exception as cleanup_err:
+            logger.exception("Error stopping session cleanup")
         sys.exit(1)
 
 if __name__ == "__main__":

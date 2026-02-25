@@ -28,15 +28,15 @@ GEMINI_API_KEY=your_gemini_api_key_here
 CARTESIA_API_KEY=your_cartesia_api_key_here
 
 # Modal Memory Management (NEW)
-MAYA_SESSIONS_PER_CONTAINER=100      # Sessions per container
+MAYA_SESSIONS_PER_CONTAINER=50       # Sessions per container
 MAYA_DEFAULT_SESSION_MEMORY_MB=50     # Memory per session
 MAYA_CONTAINER_MEMORY_THRESHOLD=0.8    # Memory pressure threshold
 MAYA_SESSION_EXPIRY_SECONDS=3600       # Session timeout (1 hour)
 MAYA_CLEANUP_INTERVAL_SECONDS=300      # Cleanup interval (5 minutes)
 
 # Modal Container Configuration
-MODAL_MEMORY_MB=4096                  # Container memory limit
-MODAL_MAX_CONTAINERS=5                # Maximum concurrent containers
+MODAL_MEMORY_MB=4096                  # Read by deploy.py — project-defined, not automatically applied by Modal
+MODAL_MAX_CONTAINERS=5                # Read by deploy.py — project-defined, not automatically applied by Modal
 ```
 
 ### 2. Deploy to Modal
@@ -79,7 +79,7 @@ MODAL_MAX_CONTAINERS=2
 #### Medium Deployment (Production)
 ```bash
 # .env configuration
-MAYA_SESSIONS_PER_CONTAINER=100
+MAYA_SESSIONS_PER_CONTAINER=50
 MAYA_DEFAULT_SESSION_MEMORY_MB=50
 MAYA_CONTAINER_MEMORY_THRESHOLD=0.8
 MODAL_MEMORY_MB=4096
@@ -89,7 +89,7 @@ MODAL_MAX_CONTAINERS=5
 #### Large Deployment (High Traffic)
 ```bash
 # .env configuration
-MAYA_SESSIONS_PER_CONTAINER=200
+MAYA_SESSIONS_PER_CONTAINER=100
 MAYA_DEFAULT_SESSION_MEMORY_MB=75
 MAYA_CONTAINER_MEMORY_THRESHOLD=0.75
 MODAL_MEMORY_MB=8192
@@ -109,11 +109,14 @@ image = (
     .env({"PYTHONPATH": "/root"})  # Environment variables
 )
 
-app = modal.App(
-    name="mayamcp-production",
+app = modal.App(name="mayamcp-production")
+
+@app.function(
     image=image,
-    secrets=[modal.Secret.from_name("maya-secrets")]  # Production secrets
+    secrets=[modal.Secret.from_name("maya-secrets")]
 )
+def some_function():
+    pass
 ```
 
 ## 📊 Monitoring and Observability
@@ -181,17 +184,20 @@ maya_container_memory_utilization > 0.8
 
 ### Secret Management
 
+You can define secrets directly in your deployment script using `modal.Secret.from_dict`:
+
+```python
+# Example of defining secrets in deploy.py
+maya_secrets = modal.Secret.from_dict({
+    "GEMINI_API_KEY": "your_production_gemini_key",
+    "CARTESIA_API_KEY": "your_production_cartesia_key",
+    "MAYA_MASTER_KEY": "your_encryption_key"
+})
+```
+
+Alternatively, create them via the Modal CLI:
 ```bash
-# Create Modal secrets for production
-modal.Secret.objects.create(
-    "maya-secrets",
-    {
-        "GEMINI_API_KEY": "your_production_gemini_key",
-        "CARTESIA_API_KEY": "your_production_cartesia_key",
-        "MAYA_MASTER_KEY": "your_encryption_key"
-    },
-    allow_existing=True
-)
+modal secret create maya-secrets GEMINI_API_KEY=... CARTESIA_API_KEY=... MAYA_MASTER_KEY=...
 ```
 
 ### Environment Variables Security
@@ -200,10 +206,13 @@ For production, use Modal secrets instead of `.env` file:
 
 ```python
 # deploy.py - Secure configuration
-app = modal.App(
-    name="mayamcp-production",
+app = modal.App(name="mayamcp-production")
+
+@app.function(
     secrets=[modal.Secret.from_name("maya-secrets")]
 )
+def secure_function():
+    pass
 ```
 
 ## 🚀 Deployment Strategies
@@ -217,9 +226,12 @@ modal deploy deploy.py --name mayamcp-staging
 # Test staging deployment
 curl https://your-workspace--mayamcp-staging.modal.run/healthz
 
-# Promote to production (update DNS)
-modal app update mayamcp-staging --name mayamcp-production
+# Promote to production (redeploy with production name)
+modal deploy deploy.py --name mayamcp-production
 ```
+
+> [!NOTE]
+> Modal CLI does not have a direct "update" or "promote" subcommand for `app`. Available `modal app` subcommands are limited to `list`, `logs`, `rollback`, `stop`, `history`, and `dashboard`. To promote a staging app to production, simply redeploy the same script with the production name using `modal deploy`.
 
 ### Canary Deployment
 
@@ -278,7 +290,7 @@ modal deploy deploy.py
 export MAYA_SESSIONS_PER_CONTAINER=150
 
 # Or increase container count
-# Edit deploy.py: max_containers=10
+# Edit deploy.py: MODAL_MAX_CONTAINERS=10
 modal deploy deploy.py
 ```
 
@@ -291,7 +303,7 @@ modal deploy deploy.py
 **Solutions:**
 ```bash
 # Use Modal's container keep-alive
-# Edit deploy.py: keep_warm=1
+# Edit deploy.py: min_containers=1
 modal deploy deploy.py
 
 # Or use persistent volumes for model caching
@@ -361,11 +373,9 @@ modal app logs mayamcp-production --follow
    ```python
    # deploy.py - Auto-scaling configuration
    @app.function(
-       autoscaler=modal.Autoscaler(
-           max_containers=20,
-           min_containers=2,
-           idle_timeout=300
-       )
+       max_containers=20,
+       min_containers=2,
+       scaledown_window=300
    )
    ```
 
@@ -392,10 +402,15 @@ modal app logs mayamcp-production --follow
 
 3. **Monthly Updates**
    ```bash
-   # Update dependencies
-   pip freeze > requirements.txt
-   git add requirements.txt
-   git commit -m "Update dependencies"
+   # Update direct dependencies in requirements.in first
+   # Then regenerate requirements.txt using pip-compile (from pip-tools)
+   pip-compile --upgrade requirements.in
+   
+   # Commit both files to maintain reproducible builds
+   git add requirements.in requirements.txt
+   git commit -m "Update dependencies using pip-compile"
+   
+   # Redeploy with updated dependencies
    modal deploy deploy.py
    ```
 
@@ -418,7 +433,7 @@ modal app logs mayamcp-production --follow
 
 - [Modal Documentation](https://modal.com/docs)
 - [Modal Python API](https://modal.com/docs/reference)
-- [MayaMCP Repository](https://github.com/your-org/MayaMCP)
+- [MayaMCP Repository](https://github.com/MOK-5-ha/MayaMCP)
 - [Memory Implementation Details](./MODAL_MEMORY_IMPLEMENTATION_SUMMARY.md)
 
 ## 🆘 Support

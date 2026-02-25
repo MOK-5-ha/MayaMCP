@@ -412,7 +412,7 @@ You can set these environment variables in your deployment environment (e.g., Mo
 
 At startup, the service logs the configured resource values and attempts to read cgroups for memory usage:
 
-- `Configured resources: MEMORY_MB=..., MAX_CONTAINERS=...`
+- `Configured resources: MEMORY_MB=..., MODAL_MAX_CONTAINERS=...`
 - `Container memory usage at start: X.Y MB / Z.W MB`
 
 Use these to:
@@ -434,7 +434,7 @@ Use this quick checklist when deploying on Modal:
   - `MODAL_MEMORY_MB` (e.g., 4096, 8192)
   - `MODAL_MAX_CONTAINERS` (e.g., 3, 5)
 - Expected startup logs
-  - `Configured resources: MEMORY_MB=..., MAX_CONTAINERS=...`
+  - `Configured resources: MEMORY_MB=..., MODAL_MAX_CONTAINERS=...`
   - `Container memory usage at start: ...`
 - Monitoring
   - Scrape `GET /metrics` (Prometheus format) for:

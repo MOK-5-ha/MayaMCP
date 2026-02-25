@@ -367,6 +367,12 @@ def _cleanup_expired_sessions() -> None:
                                     f"Cleanup failed for session {session_id[:8]}, "
                                     f"retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES} in {backoff_seconds}s"
                                 )
+                            else:
+                                logger.warning(
+                                    f"Cleanup failed for session {session_id[:8]} and session_lock is missing; "
+                                    f"dropping session (retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES})"
+                                )
+                                _session_retry_counts.pop(session_id, None)
                         else:
                             # Max retries exceeded, remove session from all tracking maps
                             _session_locks.pop(session_id, None)
@@ -439,6 +445,22 @@ def stop_session_cleanup() -> None:
         # Thread exists but not alive
         _cleanup_thread = None
         logger.debug("Session cleanup thread already stopped")
+
+
+def is_cleanup_running() -> bool:
+    """
+    Check if the background session cleanup thread is running.
+    
+    Returns:
+        True if cleanup thread exists and is alive, False otherwise.
+    """
+    thread = getattr(state_manager_module, "_cleanup_thread", None)
+    return isinstance(thread, threading.Thread) and thread.is_alive()
+
+
+# Global reference for self-introspection in getattr
+import sys
+state_manager_module = sys.modules[__name__]
 
 
 # Default State Templates

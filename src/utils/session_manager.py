@@ -37,7 +37,7 @@ class MayaSessionManager:
         """Initialize session manager with configuration from environment."""
         # Session limits from environment
         self.max_sessions_per_container = int(
-            os.getenv("MAYA_SESSIONS_PER_CONTAINER", "100")
+            os.getenv("MAYA_SESSIONS_PER_CONTAINER", "50")
         )
         self.session_expiry_seconds = int(
             os.getenv("MAYA_SESSION_EXPIRY_SECONDS", "3600")
@@ -76,7 +76,7 @@ class MayaSessionManager:
             True if session can be admitted, False otherwise
         """
         return (
-            memory_metrics["available_mb"] >= stats["default_memory_mb"]
+            memory_metrics["available_mb"] >= stats["default_session_memory_mb"]
             and stats["current_sessions"] < stats["max_sessions"]
             and not memory_metrics["pressure"]
         )
@@ -206,7 +206,7 @@ class MayaSessionManager:
                 session_id=session_data.session_id,
                 created_at=session_data.created_at,
                 last_access=session_data.last_access,
-                memory_mb=session_data.memory_mb,
+                memory_allocated_mb=session_data.memory_allocated_mb,
                 api_key_hash=session_data.api_key_hash
             )
     
@@ -264,7 +264,7 @@ class MayaSessionManager:
             "memory_pressure": memory_metrics["pressure"],
             "sessions_per_container": stats["current_sessions"],
             "max_sessions_per_container": stats["max_sessions"],
-            "estimated_session_memory": stats["default_memory_mb"],
+            "estimated_session_memory": stats["default_session_memory_mb"],
             "can_create_session": self._can_admit_session(memory_metrics, stats)
         }
 
@@ -284,12 +284,11 @@ def get_session_manager() -> MayaSessionManager:
         if _session_manager is None:
             _session_manager = MayaSessionManager()
             logger.info("Global session manager initialized")
-        logger.info("Global session manager initialized")
     return _session_manager
 
 
 def cleanup_expired_sessions_background(
-        interval_seconds: int = 300, stop_event: threading.Event, session_manager: Optional[MayaSessionManager] = None
+        stop_event: threading.Event, interval_seconds: int = 300, session_manager: Optional[MayaSessionManager] = None
     ) -> threading.Thread:
     """
     Start background thread for cleaning up expired sessions.
@@ -311,7 +310,10 @@ def cleanup_expired_sessions_background(
         
         # Create new cleanup thread
         def cleanup_loop():
-            manager = session_manager
+            manager = session_manager or get_session_manager()
+            if manager is None:
+                logger.error("No session manager available; cleanup thread exiting")
+                return
             logger.info(f"Session cleanup thread started (interval: {interval_seconds}s)")
             
             while not stop_event.is_set():
@@ -319,10 +321,9 @@ def cleanup_expired_sessions_background(
                     cleaned = manager.cleanup_expired_sessions()
                     if cleaned > 0:
                         logger.info(f"Background cleanup removed {cleaned} expired sessions")
-                    time.sleep(interval_seconds)
                 except Exception as e:
                     logger.error(f"Session cleanup error: {e}", exc_info=True)
-                    time.sleep(interval_seconds)
+                stop_event.wait(interval_seconds)
         
         cleanup_thread = threading.Thread(
             target=cleanup_loop,
@@ -332,27 +333,3 @@ def cleanup_expired_sessions_background(
         cleanup_thread.start()
         _cleanup_thread = cleanup_thread
         return cleanup_thread
-
-# Mount Gradio app with FastAPI for Modal
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
-from gradio.routes import mount_gradio_app
-
-web_app = FastAPI()
-
-# Track process start time for uptime metric
-START_TIME = time.time()
-
-# Store cleanup thread reference for shutdown
-cleanup_thread_ref = [None]
-
-# Shutdown hook for graceful cleanup
-def shutdown_cleanup_thread():
-    """Gracefully stop the cleanup thread."""
-    if cleanup_thread_ref[0]:
-        stop_event.set()  # Signal thread to stop
-        cleanup_thread_ref[0].join(timeout=5.0)  # Wait for graceful shutdown
-        cleanup_thread_ref[0] = None
-
-# Register shutdown hook
-web_app.add_event_handler("shutdown", shutdown_cleanup_thread)

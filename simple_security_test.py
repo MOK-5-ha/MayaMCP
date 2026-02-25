@@ -57,19 +57,21 @@ def test_basic_functionality():
     except ImportError as e:
         print(f"✗ Rate limiter import failed: {e}")
     
-    # Test 3: Check if session management exists
-    try:
-        from utils.state_manager import start_session_cleanup, stop_session_cleanup
-        print("✓ Session management module found")
-        
         session_test_success = False
+        session_error = None
         # Test basic session management functionality with proper cleanup
         started = False
         try:
+            from utils.state_manager import start_session_cleanup, stop_session_cleanup
+            print("✓ Session management module found")
             start_session_cleanup()
             started = True
             print("✓ Session cleanup started")
             session_test_success = True
+        except ImportError as e:
+            session_error = f"import failed: {e}"
+        except Exception as e:
+            session_error = e
         finally:
             if started:
                 try:
@@ -78,15 +80,13 @@ def test_basic_functionality():
                 except Exception as cleanup_error:
                     print(f"✗ Session cleanup failed to stop: {cleanup_error}")
                     session_test_success = False
-    except ImportError as e:
-        print(f"✗ Session management import failed: {e}")
-    except Exception as e:
-        print(f"✗ Session management function failed: {e}")
-    finally:
-        if session_test_success:
-            print("✓ Session management test completed successfully")
-        else:
-            print("✗ Session management test failed")
+            
+            if session_test_success:
+                print("✓ Session management test completed successfully")
+            elif session_error:
+                print(f"✗ Session management function failed: {session_error}")
+            else:
+                print("✗ Session management test failed")
 
     print("\nBasic security functionality test completed!")
 

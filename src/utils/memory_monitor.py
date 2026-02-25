@@ -41,24 +41,12 @@ class MemoryMonitor:
                 if os.path.exists(p):
                     with open(p) as f:
                         raw = f.read().strip()
-                        if p == "/sys/fs/cgroup/memory.current":
+                        try:
                             current = int(raw)
-                        elif p == "/sys/fs/cgroup/memory.usage_in_bytes":
-                            current = int(raw)
-                        elif raw.lower() == "max":
-                            # Treat "max" as unlimited
-                            limit = None
-                        elif raw.lower() == "unknown":
-                            # Treat unknown as unbounded
-                            limit = None
-                        else:
-                            # Parse numeric limit
-                            try:
-                                limit = int(raw)
-                            except ValueError:
-                                logger.warning(f"Invalid cgroup limit value: {raw}")
-                                limit = None
-                            break
+                        except ValueError:
+                            logger.warning(f"Invalid cgroup current-usage value: {raw}")
+                            continue
+                        break  # got a valid current value, stop looking
             
             # Memory limit
             for p in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.limit_in_bytes"):
@@ -66,31 +54,26 @@ class MemoryMonitor:
                     with open(p) as f:
                         raw = f.read().strip()
                         if raw.lower() == "max":
-                            # "max" means unlimited - treat as None
                             limit = None
+                            break
                         elif raw.lower() == "unknown":
-                            # "unknown" means unbounded - treat as None
                             limit = None
+                            break
                         else:
-                            # Parse numeric limit
                             try:
                                 limit = int(raw)
+                                break
                             except ValueError:
                                 logger.warning(f"Invalid cgroup limit value: {raw}")
                                 limit = None
-                            break
-            
             return current, limit
-        except Exception:
-            logger.debug("Failed to read cgroup memory", exc_info=True)
+        except Exception as e:
+            logger.warning(f"Error reading cgroup memory: {e}")
             return None, None
 
     def get_memory_usage_mb(self) -> Optional[float]:
         """
         Get current memory usage in MB.
-
-        Returns:
-            Memory usage in MB or None if unavailable
         """
         current_bytes, _ = self.read_cgroup_memory()
         if current_bytes is not None:
@@ -112,12 +95,13 @@ class MemoryMonitor:
         Check if sufficient memory is available for new session.
         """
         current_bytes, limit_bytes = self.read_cgroup_memory()
-        if current_bytes is not None and limit_bytes is not None:
-            current_mb = current_bytes / (1024 * 1024)
-            limit_mb = limit_bytes / (1024 * 1024)
-            return current_mb >= required_mb
-        else:
+        if current_bytes is None:
             return False
+        if limit_bytes is None or limit_bytes <= 0:
+            # No limit detected — treat as sufficient
+            return True
+        available_mb = (limit_bytes - current_bytes) / (1024 * 1024)
+        return available_mb >= required_mb
     
     def check_memory_pressure(self) -> Dict[str, Any]:
         """
@@ -127,8 +111,12 @@ class MemoryMonitor:
         if current_bytes is not None and limit_bytes is not None:
             current_mb = current_bytes / (1024 * 1024)
             limit_mb = limit_bytes / (1024 * 1024)
-            utilization = current_mb / limit_mb
-            pressure = utilization >= self.memory_threshold
+            if limit_mb > 0:
+                utilization = current_mb / limit_mb
+                pressure = utilization >= self.memory_threshold
+            else:
+                utilization = 0.0
+                pressure = False
             
             # Check cooldown period to avoid alert spam
             current_time = time.time()
@@ -146,7 +134,7 @@ class MemoryMonitor:
                 "available_mb": available_mb,
                 "current_mb": current_mb,
                 "limit_mb": limit_mb,
-                "message": f"Memory utilization: {utilization:.1%}%, available: {available_mb:.1f}MB"
+                "message": f"Memory utilization: {utilization:.1%}, available: {available_mb:.1f}MB"
             }
         else:
             return {
@@ -157,14 +145,7 @@ class MemoryMonitor:
                 "limit_mb": None,
                 "message": "Memory monitoring unavailable"
             }
-    
-        return {
-            "pressure": pressure,
-            "utilization": utilization,
-            "current_mb": current_mb,
-            "limit_mb": limit_mb,
-            "message": f"Memory utilization: {utilization:.1%}" if pressure else "Memory usage normal"
-        }
+
 
     def get_memory_metrics(self) -> Dict[str, Any]:
         """
@@ -218,25 +199,28 @@ class MemoryMonitor:
         }
 
 
-# Global memory monitor instance
+# Global memory monitor instance and its initialization lock
 _memory_monitor: Optional[MemoryMonitor] = None
+_monitor_lock = threading.Lock()
 
 
 def get_memory_monitor() -> MemoryMonitor:
-    """Get or create the global memory monitor instance."""
+    """Get or create the global memory monitor instance with thread-safe initialization."""
     global _memory_monitor
     if _memory_monitor is None:
-        # Read threshold from environment
-        try:
-            threshold = float(os.getenv("MAYA_CONTAINER_MEMORY_THRESHOLD", "0.8"))
-        except ValueError:
-            logger.warning(
-                "Invalid MAYA_CONTAINER_MEMORY_THRESHOLD value; defaulting to 0.8"
-            )
-            threshold = 0.8
-        threshold = max(0.1, min(0.95, threshold))
-        _memory_monitor = MemoryMonitor(memory_threshold=threshold)
-        logger.info(f"Memory monitor initialized with threshold: {threshold:.1%}")
+        with _monitor_lock:
+            if _memory_monitor is None:
+                # Read threshold from environment
+                try:
+                    threshold = float(os.getenv("MAYA_CONTAINER_MEMORY_THRESHOLD", "0.8"))
+                except ValueError:
+                    logger.warning(
+                        "Invalid MAYA_CONTAINER_MEMORY_THRESHOLD value; defaulting to 0.8"
+                    )
+                    threshold = 0.8
+                threshold = max(0.1, min(0.95, threshold))
+                _memory_monitor = MemoryMonitor(memory_threshold=threshold)
+                logger.info(f"Memory monitor initialized with threshold: {threshold:.1%}")
     return _memory_monitor
 
 

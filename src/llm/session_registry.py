@@ -14,13 +14,9 @@ _session_clients: Dict[str, Dict[str, Any]] = {}
 _registry_lock = threading.Lock()
 
 # Import new session manager for memory-aware admission control
+# Import new session manager for memory-aware admission control
 try:
-    if evicted:
-        logger.info(
-            "Cleaned up LLM/TTS clients for %d session(s): %s",
-            len(evicted),
-            ", ".join(sid[:8] for sid, _ in evicted),
-        )from ..utils.session_manager import get_session_manager
+    from ..utils.session_manager import get_session_manager
     _session_manager_available = True
 except ImportError:
     logger.warning("Session manager not available, using legacy session limits")
@@ -81,40 +77,34 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
         
         # Serialize admission per session_id to prevent TOCTOU race
         with _registry_lock:
-            # Check if session already admitted by another thread
-            if session_id in _session_clients:
-                # Session already admitted, return existing LLM
-                entry = _session_clients[session_id]
-                if entry.get("llm") and entry.get("gemini_hash") == key_hash:
-                    return entry["llm"]
-                else:
-                    # Session exists but with different key, recreate
-                    pass
-            else:
-                # Reserve session slot atomically
-                _session_clients[session_id] = {}
-        
-        # Now attempt admission with session manager
-        if not session_manager.create_session(session_id, key_hash):
-            # Roll back session reservation if admission failed
-            with _registry_lock:
-                _session_clients.pop(session_id, None)
+            # Double-check if session already admitted by another thread while we waited for lock
+            entry = _session_clients.get(session_id)
+            if entry and entry.get("llm") and entry.get("gemini_hash") == key_hash:
+                return entry["llm"]
             
-            logger.warning(
-                "Session %s rejected by memory-aware admission control",
-                session_id[:8]
-            )
-            raise SessionLimitExceededError(
-                "Session rejected: insufficient memory or session limit reached"
-            )
+            # Now attempt admission with session manager UNDER LOCK
+            # This prevents multiple threads from calling create_session concurrently for the same session
+            if not session_manager.create_session(session_id, key_hash):
+                # We don't need to pop here because we haven't added it yet if it wasn't there
+                # If it was there but we're recreating due to key change, it's already in _session_clients
+                logger.warning(
+                    "Session %s rejected by memory-aware admission control",
+                    session_id[:8]
+                )
+                raise SessionLimitExceededError(
+                    "Session rejected: insufficient memory or session limit reached"
+                )
+            
+            # Reserve session slot atomically if not already present
+            if session_id not in _session_clients:
+                _session_clients[session_id] = {}
     else:
         # Legacy fallback: check session limit and reserve slot atomically
         with _registry_lock:
             if session_id not in _session_clients:
                 if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
                     logger.warning(
-                        "Maximum concurrent sessions "
-                        "(%s) reached",
+                        "Maximum concurrent sessions (%d) reached",
                         MAX_CONCURRENT_SESSIONS
                     )
                     raise SessionLimitExceededError(
@@ -244,7 +234,7 @@ def cleanup_sessions(session_ids: List[str]) -> None:
     
     # Log summary of cleaned up sessions
     if evicted:
-        cleaned_session_ids = [sid[:8] for sid, _ in evicted]
+        cleaned_session_ids = ", ".join(sid[:8] for sid, _ in evicted)
         logger.info("Cleaned up LLM/TTS clients for sessions %s...", cleaned_session_ids)
 
     # Also remove from session manager if available
@@ -254,7 +244,7 @@ def cleanup_sessions(session_ids: List[str]) -> None:
             for session_id in session_ids:
                 session_manager.remove_session(session_id)
         except Exception as e:
-            logger.warning(f"Failed to remove session from manager: {e}")
+            logger.warning("Failed to remove session from manager: %s", e)
 
 
 def clear_session_clients(session_id: str) -> None:
