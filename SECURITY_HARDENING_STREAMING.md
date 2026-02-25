@@ -75,12 +75,12 @@ def _cleanup_expired_sessions():
                 try:
                     from ..llm.session_registry import cleanup_sessions
                     cleanup_sessions([session_id])
-                    logger.info(f"Cleaned up expired session: {session_id}")
+                    logger.info("Cleaned up expired session: %s", session_id)
                 except Exception as e:
-                    logger.error(f"Error during client cleanup for {session_id}: {e}")
+                    logger.error("Error during client cleanup for %s: %s", session_id, e)
                     
             except Exception as e:
-                logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
+                logger.error("Error during atomic cleanup of session %s: %s", session_id, e)
                 # Exception handlers restore state if removal failed
                 try:
                     with _session_locks_mutex:
@@ -89,7 +89,7 @@ def _cleanup_expired_sessions():
                         if session_id not in _session_last_access:
                             _session_last_access[session_id] = current_time - SESSION_EXPIRY_SECONDS - 1
                 except Exception as restore_error:
-                    logger.error(f"Failed to restore session state for {session_id}: {restore_error}")
+                    logger.error("Failed to restore session state for %s: %s", session_id, restore_error)
                     
             finally:
                 # Only call session_lock.release() when we confirmed the lock was successfully acquired
@@ -97,7 +97,7 @@ def _cleanup_expired_sessions():
                     try:
                         session_lock.release()
                     except Exception:
-                        logger.warning(f"Failed to release session lock for {session_id}")
+                        logger.warning("Failed to release session lock for %s", session_id)
 ```
 
 **Integration Points**:
@@ -206,15 +206,40 @@ MAX_CONCURRENT_SESSIONS = int(os.getenv("MAYA_MAX_SESSIONS", "1000"))
 # MAX_SESSION_MEMORY_MB = int(os.getenv("MAYA_MAX_SESSION_MEMORY_MB", "100"))  # TODO: Not implemented
 
 def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None):
-    # Check resource limits and reserve slot atomically
+    """Return a cached or newly created LLM instance for session."""
+    key_hash = _key_hash(api_key)
+    
+    # Check for existing session first (fast path)
     with _registry_lock:
-        if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
-            logger.warning(f"Maximum concurrent sessions ({MAX_CONCURRENT_SESSIONS}) reached")
-            raise SessionLimitExceededError(f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}")
-        
-        # Reserve session slot atomically
-        if session_id not in _session_clients:
-            _session_clients[session_id] = {}
+        entry = _session_clients.get(session_id)
+        if entry and entry.get("llm") and entry.get("gemini_hash") == key_hash:
+            return entry["llm"]
+
+    # Memory-aware session admission control
+    if _session_manager_available:
+        session_manager = get_session_manager()
+        if not session_manager.create_session(session_id, key_hash):
+            logger.warning(
+                f"Session {session_id[:8]} rejected by memory-aware admission control"
+            )
+            raise SessionLimitExceededError(
+                "Session rejected: insufficient memory or session limit reached"
+            )
+    else:
+        # Legacy fallback: check session limit and reserve slot atomically
+        with _registry_lock:
+            if session_id not in _session_clients:
+                if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
+                    logger.warning(
+                        f"Maximum concurrent sessions "
+                        f"({MAX_CONCURRENT_SESSIONS}) reached"
+                    )
+                    raise SessionLimitExceededError(
+                        f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"
+                    )
+                
+                # Reserve session slot atomically
+                _session_clients[session_id] = {}
 ```
 
 **Memory Limit Enforcement Status**: ⚠️ **NOT YET IMPLEMENTED**

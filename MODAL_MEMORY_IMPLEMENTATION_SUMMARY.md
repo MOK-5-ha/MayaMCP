@@ -126,7 +126,7 @@ MODAL_MAX_CONTAINERS=2
 
 ### Medium Deployment (Production)
 ```bash
-MAYA_SESSIONS_PER_CONTAINER=100
+MAYA_SESSIONS_PER_CONTAINER=50
 MAYA_DEFAULT_SESSION_MEMORY_MB=50
 MAYA_CONTAINER_MEMORY_THRESHOLD=0.8
 MODAL_MEMORY_MB=4096
@@ -135,9 +135,9 @@ MODAL_MAX_CONTAINERS=5
 
 ### Large Deployment (High Traffic)
 ```bash
-MAYA_SESSIONS_PER_CONTAINER=200
+MAYA_SESSIONS_PER_CONTAINER=80
 MAYA_DEFAULT_SESSION_MEMORY_MB=75
-MAYA_CONTAINER_MEMORY_THRESHOLD=0.75
+MAYA_CONTAINER_MEMORY_THRESHOLD=0.8
 MODAL_MEMORY_MB=8192
 MODAL_MAX_CONTAINERS=10
 ```
@@ -158,6 +158,22 @@ MODAL_MAX_CONTAINERS=10
    - Complete session lifecycle management
    - Memory-aware admission control
    - Statistics and monitoring integration
+
+## ⚠️ Current Limitations
+
+1. **Distributed Session Coordination**: Session registry is currently per-container, meaning each Modal container can admit up to `MAYA_SESSIONS_PER_CONTAINER` sessions independently. This makes the global `MAYA_MAX_SESSIONS` limit effectively unenforced across the deployment, potentially allowing more concurrent sessions than intended.
+
+2. **Memory Limit Configuration**: The `MAYA_MAX_SESSION_MEMORY_MB` environment variable is not implemented in the current deployment. Memory limits are enforced only at the container level via cgroups, not at the individual session level.
+
+**Operational Consequences**:
+- **Multi-container deployments** may exceed intended global session limits
+- **Memory allocation** is not tracked per-session, only container-wide
+- **Scaling behavior** may not respect global session caps
+
+**Recommended Mitigations**:
+- **Single-container enforcement**: Deploy with `MAX_CONTAINERS=1` for strict global limits
+- **Orchestration-level admission**: Implement session counting at the load balancer/proxy level
+- **Monitor total sessions**: Use `/metrics` endpoint to track aggregate session usage across containers
 
 ## 🔧 Future Enhancements
 

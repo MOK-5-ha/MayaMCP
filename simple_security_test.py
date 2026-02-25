@@ -40,28 +40,36 @@ def test_basic_functionality():
         limiter = get_rate_limiter()
         print("✓ Rate limiter module found")
         
+        rate_limit_success = False
         # Test basic rate limiting
         try:
             allowed, reason = limiter.check_limits("test_session")
             print(f"✓ Rate limiting works: {allowed}, reason: {reason}")
-        except ImportError as e:
-            print(f"✗ Rate limiter import failed: {e}")
+            rate_limit_success = True
         except Exception as e:
             print(f"✗ Rate limiting failed: {e}")
         finally:
-            print("✓ Rate limiter test completed")
+            if rate_limit_success:
+                print("✓ Rate limiter test completed successfully")
+            else:
+                print("✗ Rate limiter test failed")
+    
+    except ImportError as e:
+        print(f"✗ Rate limiter import failed: {e}")
     
     # Test 3: Check if session management exists
     try:
         from utils.state_manager import start_session_cleanup, stop_session_cleanup
         print("✓ Session management module found")
         
+        session_test_success = False
         # Test basic session management functionality with proper cleanup
         started = False
         try:
             start_session_cleanup()
             started = True
             print("✓ Session cleanup started")
+            session_test_success = True
         finally:
             if started:
                 try:
@@ -69,12 +77,16 @@ def test_basic_functionality():
                     print("✓ Session cleanup stopped")
                 except Exception as cleanup_error:
                     print(f"✗ Session cleanup failed to stop: {cleanup_error}")
+                    session_test_success = False
     except ImportError as e:
         print(f"✗ Session management import failed: {e}")
     except Exception as e:
         print(f"✗ Session management function failed: {e}")
     finally:
-        print("✓ Session management test completed")
+        if session_test_success:
+            print("✓ Session management test completed successfully")
+        else:
+            print("✗ Session management test failed")
 
     print("\nBasic security functionality test completed!")
 

@@ -15,7 +15,12 @@ _registry_lock = threading.Lock()
 
 # Import new session manager for memory-aware admission control
 try:
-    from ..utils.session_manager import get_session_manager
+    if evicted:
+        logger.info(
+            "Cleaned up LLM/TTS clients for %d session(s): %s",
+            len(evicted),
+            ", ".join(sid[:8] for sid, _ in evicted),
+        )from ..utils.session_manager import get_session_manager
     _session_manager_available = True
 except ImportError:
     logger.warning("Session manager not available, using legacy session limits")
@@ -73,9 +78,31 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     # Memory-aware session admission control
     if _session_manager_available:
         session_manager = get_session_manager()
+        
+        # Serialize admission per session_id to prevent TOCTOU race
+        with _registry_lock:
+            # Check if session already admitted by another thread
+            if session_id in _session_clients:
+                # Session already admitted, return existing LLM
+                entry = _session_clients[session_id]
+                if entry.get("llm") and entry.get("gemini_hash") == key_hash:
+                    return entry["llm"]
+                else:
+                    # Session exists but with different key, recreate
+                    pass
+            else:
+                # Reserve session slot atomically
+                _session_clients[session_id] = {}
+        
+        # Now attempt admission with session manager
         if not session_manager.create_session(session_id, key_hash):
+            # Roll back session reservation if admission failed
+            with _registry_lock:
+                _session_clients.pop(session_id, None)
+            
             logger.warning(
-                f"Session {session_id[:8]} rejected by memory-aware admission control"
+                "Session %s rejected by memory-aware admission control",
+                session_id[:8]
             )
             raise SessionLimitExceededError(
                 "Session rejected: insufficient memory or session limit reached"
@@ -86,8 +113,9 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
             if session_id not in _session_clients:
                 if len(_session_clients) >= MAX_CONCURRENT_SESSIONS:
                     logger.warning(
-                        f"Maximum concurrent sessions "
-                        f"({MAX_CONCURRENT_SESSIONS}) reached"
+                        "Maximum concurrent sessions "
+                        "(%s) reached",
+                        MAX_CONCURRENT_SESSIONS
                     )
                     raise SessionLimitExceededError(
                         f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"
@@ -213,7 +241,11 @@ def cleanup_sessions(session_ids: List[str]) -> None:
                         "Failed to close TTS client for session %s",
                         session_id[:8],
                     )
-    logger.info("Cleaned up LLM/TTS clients for session %s...", session_id[:8])
+    
+    # Log summary of cleaned up sessions
+    if evicted:
+        cleaned_session_ids = [sid[:8] for sid, _ in evicted]
+        logger.info("Cleaned up LLM/TTS clients for sessions %s...", cleaned_session_ids)
 
     # Also remove from session manager if available
     if _session_manager_available:

@@ -213,8 +213,6 @@ _session_locks_mutex = threading.Lock()  # Protects _session_locks dict
 # Track last access time for session expiry
 _session_last_access: Dict[str, float] = {}
 
-logger = get_logger(__name__)
-
 def _parse_int_env(env_var: str, default: int, description: str) -> int:
     """
     Parse integer environment variable with defensive error handling.
@@ -358,23 +356,27 @@ def _cleanup_expired_sessions() -> None:
                         if retry_count <= MAX_SESSION_CLEANUP_RETRIES:
                             # Calculate exponential backoff: 2^retry_count * 60 seconds, capped at MAX_BACKOFF
                             backoff_seconds = min(2 ** (retry_count - 1) * 60, MAX_BACKOFF)
-                            future_time = current_time + backoff_seconds
                             
-                            # Rollback: re-insert session with backoff
-                            _session_locks[session_id] = session_lock
-                            _session_last_access[session_id] = future_time
-                            
-                            logger.warning(
-                                f"Cleanup failed for session {session_id[:8]}, "
-                                f"retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES} in {backoff_seconds}s"
-                            )
+                            # Rollback: re-insert session with corrected timing
+                            # Set last_access so expiry triggers after backoff period from now
+                            if session_lock is not None:
+                                _session_locks[session_id] = session_lock
+                                _session_last_access[session_id] = current_time + backoff_seconds - SESSION_EXPIRY_SECONDS
+                                
+                                logger.warning(
+                                    f"Cleanup failed for session {session_id[:8]}, "
+                                    f"retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES} in {backoff_seconds}s"
+                                )
                         else:
-                            # Max retries exceeded, give up on this session
+                            # Max retries exceeded, remove session from all tracking maps
+                            _session_locks.pop(session_id, None)
+                            _session_last_access.pop(session_id, None)
+                            _session_retry_counts.pop(session_id, None)
+                            
                             logger.error(
                                 f"Max cleanup retries exceeded for session {session_id[:8]}, "
-                                f"removing from retry tracking"
+                                f"removing from all tracking (retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES})"
                             )
-                            _session_retry_counts.pop(session_id, None)
                     finally:
                         # Always release the per-session lock
                         if session_lock:

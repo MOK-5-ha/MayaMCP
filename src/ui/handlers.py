@@ -39,8 +39,7 @@ def _is_quota_error(error: Exception) -> bool:
 
 def resolve_avatar_path(
     emotion_state: Optional[str],
-    current_avatar_path: str,
-    logger: Any
+    current_avatar_path: str
 ) -> str:
     """
     Resolve the final avatar/video path based on the emotion state.
@@ -184,7 +183,7 @@ def handle_gradio_input(
         new_tip_amount = payment_state['tip_amount']
 
         # Resolve Avatar based on Emotion State
-        final_avatar_path = resolve_avatar_path(emotion_state, avatar_path, logger)
+        final_avatar_path = resolve_avatar_path(emotion_state, avatar_path)
 
         # Create overlay HTML with animation from previous to new values
         overlay_html = create_tab_overlay_html(
@@ -323,115 +322,119 @@ def handle_gradio_input_stream(
         effective_rag_key = rag_api_key or gemini_key
 
         # Start streaming processing
-        try:
-            response_stream = process_order_stream(
-                user_input, session_history_state, llm,
-                rag_retriever, effective_rag_key, session_id, app_state
-            )
+        response_stream = process_order_stream(
+            user_input, session_history_state, llm,
+            rag_retriever, effective_rag_key, session_id, app_state
+        )
+        
+        accumulated_text = ""
+        updated_history = session_history_state[:]
+        
+        for event in response_stream:
+            if event['type'] == 'text_chunk':
+                # Yield text chunk for immediate display
+                accumulated_text += event['content']
+                yield {
+                    'type': 'text_chunk',
+                    'content': event['content'],
+                    'partial': event['partial']
+                }
             
-            accumulated_text = ""
-            updated_history = session_history_state[:]
-            
-            for event in response_stream:
-                if event['type'] == 'text_chunk':
-                    # Yield text chunk for immediate display
-                    accumulated_text += event['content']
-                    yield {
-                        'type': 'text_chunk',
-                        'content': event['content'],
-                        'partial': event['partial']
-                    }
+            elif event['type'] == 'sentence':
+                # Generate audio for complete sentence
+                if cartesia_client:
+                    try:
+                        audio_data = get_voice_audio(
+                            event['content'], cartesia_client
+                        )
+                        if audio_data:
+                            yield {
+                                'type': 'audio_chunk',
+                                'content': audio_data,
+                                'sentence': event['content']
+                            }
+                    except Exception as tts_err:
+                        logger.warning(f"TTS generation failed: {tts_err}")
+                        
+            elif event['type'] == 'complete':
+                # Final response ready
+                final_text = event['content']
+                emotion_state = event['emotion_state']
                 
-                elif event['type'] == 'sentence':
-                    # Generate audio for complete sentence
-                    if cartesia_client:
-                        try:
-                            audio_data = get_voice_audio(
-                                event['content'], cartesia_client
-                            )
-                            if audio_data:
-                                yield {
-                                    'type': 'audio_chunk',
-                                    'content': audio_data,
-                                    'sentence': event['content']
-                                }
-                        except Exception as tts_err:
-                            logger.warning(f"TTS generation failed: {tts_err}")
-                            
-                elif event['type'] == 'complete':
-                    # Final response ready
-                    final_text = event['content']
-                    emotion_state = event['emotion_state']
-                    
-                    # Update history
-                    updated_history.append({'role': 'user', 'content': user_input})
-                    updated_history.append({'role': 'assistant', 'content': final_text})
+                # Update history
+                updated_history.append({'role': 'user', 'content': user_input})
+                updated_history.append({'role': 'assistant', 'content': final_text})
                 
                 # Get final payment state
-                    final_payment_state = get_payment_state(session_id, app_state)
-                    new_tab = final_payment_state['tab_total']
-                    new_balance = final_payment_state['balance']
-                    new_tip_percentage = final_payment_state['tip_percentage']
-                    new_tip_amount = final_payment_state['tip_amount']
-                    
-                    # Resolve final avatar
-                    final_avatar_path = resolve_avatar_path(
-                        emotion_state, avatar_path, logger
-                    )
-                    
-                    # Create overlay HTML
-                    overlay_html = create_tab_overlay_html(
-                        tab_amount=new_tab,
-                        balance=new_balance,
-                        prev_tab=current_tab,
-                        prev_balance=current_balance,
-                        avatar_path=final_avatar_path,
+                final_payment_state = get_payment_state(session_id, app_state)
+                new_tab = final_payment_state['tab_total']
+                new_balance = final_payment_state['balance']
+                new_tip_percentage = final_payment_state['tip_percentage']
+                new_tip_amount = final_payment_state['tip_amount']
+                
+                # Resolve final avatar
+                final_avatar_path = resolve_avatar_path(
+                    emotion_state, avatar_path
+                )
+                
+                # Create overlay HTML
+                overlay_html = create_tab_overlay_html(
+                    tab_amount=new_tab,
+                    balance=new_balance,
+                    prev_tab=current_tab,
+                    prev_balance=current_balance,
+                    avatar_path=final_avatar_path,
                     tip_percentage=new_tip_percentage,
-                        tip_amount=new_tip_amount
-                    )
-                    
-                    # Yield completion event
-                    yield {
-                        'type': 'complete',
-                        'content': final_text,
-                        'history': updated_history,
-                        'order': get_current_order_state(session_id, app_state),
+                    tip_amount=new_tip_amount
+                )
+                
+                # Yield completion event
+                yield {
+                    'type': 'complete',
+                    'content': final_text,
+                    'history': updated_history,
+                    'order': get_current_order_state(session_id, app_state),
                     'overlay_html': overlay_html,
-                        'emotion_state': emotion_state,
-                        'avatar_path': final_avatar_path
-                    }
+                    'emotion_state': emotion_state,
+                    'avatar_path': final_avatar_path
+                }
                     
-                elif event['type'] == 'error':
-                    # Handle errors
-                    error_text = event['content']
-                    emotion_state = event.get('emotion_state', 'neutral')
-                    
-                    updated_history.append({'role': 'user', 'content': user_input})
-                    updated_history.append({'role': 'assistant', 'content': error_text})
-                    
-                    yield {
-                        'type': 'error',
-                        'content': error_text,
-                        'history': updated_history,
-                        'emotion_state': emotion_state
-                    }
+            elif event['type'] == 'error':
+                # Handle errors
+                error_text = event['content']
+                emotion_state = event.get('emotion_state', 'neutral')
+                
+                updated_history.append({'role': 'user', 'content': user_input})
+                updated_history.append({'role': 'assistant', 'content': error_text})
+                
+                yield {
+                    'type': 'error',
+                    'content': error_text,
+                    'history': updated_history,
+                    'emotion_state': emotion_state
+                }
 
-        except Exception as inner_e:
-            logger.exception(f"Error in streaming processing: {inner_e}")
-            error_message = "I'm sorry, an error occurred during streaming. Please try again."
-            
-            error_history = session_history_state[:]
-            error_history.append({'role': 'user', 'content': user_input})
-            error_history.append({'role': 'assistant', 'content': error_message})
-            
-            yield {
-                'type': 'error',
-                'content': error_message,
-                'history': error_history,
-                'emotion_state': 'neutral'
-            }
-
+    except SessionLimitExceededError as e:
+        # Handle session limit exceeded
+        quota_error_html = create_quota_error_html()
+        error_message = "It looks like your API key has hit its rate limit. Please check the popup for details."
+        
+        error_history = session_history_state[:]
+        error_history.append({'role': 'user', 'content': user_input})
+        error_history.append({'role': 'assistant', 'content': error_message})
+        
+        error_payload = {
+            'type': 'error',
+            'content': error_message,
+            'history': error_history,
+            'emotion_state': 'neutral',
+            'quota_error_html': quota_error_html
+        }
+        
+        yield error_payload
+        
     except Exception as e:
+        # Handle quota errors and other exceptions
         if _is_quota_error(e):
             quota_error_html = create_quota_error_html()
             error_message = "It looks like your API key has hit its rate limit. Please check the popup for details."

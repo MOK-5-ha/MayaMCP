@@ -134,23 +134,39 @@ def main():
         # Cleanup security services
         try:
             # Clean up rate limiter session data
-            rate_limiter = get_rate_limiter()
-            rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
-            stop_session_cleanup()
-            logger.info("Security services stopped")
+            try:
+                rate_limiter = get_rate_limiter()
+                rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
+            except Exception as e:
+                logger.exception(f"Error cleaning up rate limiter: {e}")
+            
+            # Always stop session cleanup regardless of rate limiter errors
+            try:
+                stop_session_cleanup()
+                logger.info("Security services stopped")
+            except Exception as e:
+                logger.exception(f"Error stopping session cleanup: {e}")
         except Exception as e:
-            logger.exception(f"Error stopping security services: {e}")
+            logger.exception(f"Unexpected error during security cleanup: {e}")
         sys.exit(0)
     except Exception as e:
         logger.exception(f"Critical error starting application: {e}")
         # Cleanup security services on error
         try:
             # Clean up rate limiter session data
-            rate_limiter = get_rate_limiter()
-            rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
-            stop_session_cleanup()
+            try:
+                rate_limiter = get_rate_limiter()
+                rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
+            except Exception as e:
+                logger.exception(f"Error cleaning up rate limiter: {e}")
+            
+            # Always stop session cleanup regardless of rate limiter errors
+            try:
+                stop_session_cleanup()
+            except Exception as e:
+                logger.exception(f"Error stopping session cleanup: {e}")
         except Exception:
-            logger.exception("Error during security cleanup")
+            logger.exception("Unexpected error during security cleanup")
         sys.exit(1)
 
 if __name__ == "__main__":

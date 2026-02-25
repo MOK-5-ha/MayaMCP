@@ -203,10 +203,7 @@ class RateLimiter:
     
     def check_limits(self, session_id: str) -> Tuple[bool, str]:
         """
-        Check both session and application rate limits atomically.
-        
-        This method addresses TOCTOU race conditions by consuming tokens
-        directly under consistent locking order rather than using pre-checks.
+        Check both application and session rate limits with consistent lock ordering.
         
         Args:
             session_id: Unique session identifier
@@ -214,12 +211,15 @@ class RateLimiter:
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
-        # Take both locks in consistent order to prevent deadlock
-        # App lock first, then session lock to maintain ordering
-        with self._app_bucket._lock:
+        # Check burst limit first (before any locks to avoid lock ordering issues)
+        if not self._check_burst_limit(session_id):
+            return False, "Too many requests in quick succession"
+        
+        # Take locks in consistent order: history_lock first, then session_lock
+        with self._history_lock:
             with self._session_lock:
-                # Check app limit directly with consume=True
-                if not self._app_bucket.consume():
+                # Check app limit by reading tokens directly without calling consume()
+                if self._app_bucket.tokens < 1:
                     return False, f"Application rate limit exceeded ({self.app_limit}/min)"
                 
                 # Get or create session bucket
@@ -231,19 +231,14 @@ class RateLimiter:
                 
                 bucket = self._session_buckets[session_id]
                 
-                # Check burst limit first
-                if not self._check_burst_limit(session_id):
-                    # Rollback app token by adding it back
-                    self._app_bucket.tokens += 1
-                    return False, "Too many requests in quick succession"
-                
-                # Check session limit directly with consume=True
-                if not bucket.consume():
-                    # Rollback app token by adding it back
-                    self._app_bucket.tokens += 1
+                # Check session limit by reading tokens directly
+                if bucket.tokens < 1:
                     return False, f"Session rate limit exceeded ({self.session_limit}/min)"
                 
-                # All checks passed, tokens consumed successfully
+                # All checks passed, consume tokens atomically
+                self._app_bucket.tokens -= 1
+                bucket.tokens -= 1
+                
                 return True, ""
     
     def _check_burst_limit(self, session_id: str) -> bool:

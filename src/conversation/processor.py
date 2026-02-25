@@ -616,7 +616,7 @@ def process_order_stream(
                     # Append sanitized text to security buffer
                     sanitized_chunk = (
                         chunk_scan_result.sanitized_text
-                        if chunk_scan_result.sanitized_text
+                        if chunk_scan_result.sanitized_text is not None
                         else text_chunk
                     )
                     security_buffer += sanitized_chunk

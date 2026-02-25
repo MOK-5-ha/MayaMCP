@@ -35,12 +35,15 @@ def test_rate_limiting():
     # Track total requests including the initial call
     total_requests = 1
 
-    # Test burst limit - run up to burst_limit + 1 to ensure denial happens
-    # Note: Due to double-counting in check_limits, each request counts twice
-    # So we expect denial after burst_limit//2 + 1 total requests
-    expected_max_requests = (limiter.burst_limit // 2) + 1
+    # TODO/FIXME: This test expects the intended burst behavior (burst_limit + 1 requests)
+    # Currently there's a double-counting bug in check_limits that causes premature denial.
+    # When the bug is fixed, this test should pass without modification.
+    # See rate limiter deadlock/lock ordering fixes for related issues.
     
-    for i in range(expected_max_requests + 1):
+    # Test burst limit - run up to burst_limit + 1 to ensure denial happens
+    expected_max_requests = limiter.burst_limit + 1
+    
+    for i in range(expected_max_requests):
         allowed, reason = check_rate_limits(session_id)
         total_requests += 1
         print(
@@ -55,7 +58,7 @@ def test_rate_limiting():
         "Rate limiting should deny a request after burst limit"
     )
     
-    # Assert that total_requests equals expected (accounting for double-counting)
+    # Assert that total_requests equals expected (intended behavior)
     assert total_requests == expected_max_requests, (
         f"Expected {expected_max_requests} total requests before denial, "
         f"but got {total_requests}"
@@ -72,14 +75,14 @@ def test_session_cleanup():
 
     try:
         # Poll for cleanup thread to be alive with timeout
-        from src.utils.state_manager import _cleanup_thread
+        import src.utils.state_manager as state_manager
         
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval
         elapsed = 0.0
         
         while elapsed < timeout:
-            if _cleanup_thread and _cleanup_thread.is_alive():
+            if state_manager._cleanup_thread and state_manager._cleanup_thread.is_alive():
                 print(f"Cleanup thread started after {elapsed:.2f}s")
                 break
             time.sleep(poll_interval)
@@ -100,7 +103,7 @@ def test_session_cleanup():
         elapsed = 0.0
         
         while elapsed < timeout:
-            if not _cleanup_thread or not _cleanup_thread.is_alive():
+            if not state_manager._cleanup_thread or not state_manager._cleanup_thread.is_alive():
                 print(f"Cleanup thread stopped after {elapsed:.2f}s")
                 break
             time.sleep(poll_interval)

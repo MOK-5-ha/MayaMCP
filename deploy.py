@@ -147,12 +147,30 @@ def serve_maya():
     # Initialize state
     initialize_state()
     
-    # Initialize session manager and start background cleanup
+    # Resolve singletons once during module init
     try:
-        from utils.session_manager import get_session_manager, cleanup_expired_sessions_background
+        from utils.session_manager import get_session_manager
+        from utils.memory_monitor import get_memory_monitor
         session_manager = get_session_manager()
-        cleanup_thread = cleanup_expired_sessions_background()
+        memory_monitor = get_memory_monitor()
+    except Exception as e:
+        logger.error(f"Failed to initialize monitors: {e}")
+        session_manager = None
+        memory_monitor = None
+    
+    # Initialize session manager and start background cleanup
+    cleanup_thread = None
+    stop_event = threading.Event()
+    
+    try:
+        from utils.session_manager import cleanup_expired_sessions_background
+        cleanup_thread = cleanup_expired_sessions_background(
+            interval_seconds=300, stop_event=stop_event, session_manager=session_manager
+        )
         logger.info("Session manager initialized with background cleanup")
+        
+        # Store thread reference for shutdown
+        cleanup_thread_ref = [cleanup_thread]
     except Exception as e:
         logger.warning(f"Failed to initialize session manager: {e}")
         cleanup_thread = None
@@ -207,16 +225,27 @@ def serve_maya():
         clear_state_fn=clear_state_with_deps,
         handle_key_submission_fn=handle_keys_with_deps,
     )
-
+    
     # Mount Gradio app with FastAPI for Modal
     from fastapi import FastAPI
     from fastapi.responses import PlainTextResponse
     from gradio.routes import mount_gradio_app
-
+    
     web_app = FastAPI()
-
+    
     # Track process start time for uptime metric
     START_TIME = time.time()
+    
+    # Store cleanup thread reference for shutdown
+    cleanup_thread_ref = [None]
+    
+    # Shutdown hook for graceful cleanup
+    def shutdown_cleanup_thread():
+        """Gracefully stop the cleanup thread."""
+        if cleanup_thread_ref[0]:
+            stop_event.set()  # Signal thread to stop
+            cleanup_thread_ref[0].join(timeout=5.0)  # Wait for graceful shutdown
+            cleanup_thread_ref[0] = None
 
     # Prometheus-style metrics endpoint
     def _metrics_text():
@@ -230,43 +259,53 @@ def serve_maya():
         lines.append(f'maya_config_max_containers {MAX_CONTAINERS}')
         
         # Enhanced memory monitoring
+        _mem_emitted = False
         try:
             from utils.memory_monitor import get_memory_monitor
             memory_monitor = get_memory_monitor()
             memory_metrics = memory_monitor.get_memory_metrics()
-            
-            lines.append('# HELP maya_container_memory_usage_bytes Container memory usage in bytes')
-            lines.append('# TYPE maya_container_memory_usage_bytes gauge')
-            lines.append(f'maya_container_memory_usage_bytes {memory_metrics["current_bytes"]}')
-            
-            lines.append('# HELP maya_container_memory_limit_bytes Container memory limit in bytes')
-            lines.append('# TYPE maya_container_memory_limit_bytes gauge')
-            lines.append(f'maya_container_memory_limit_bytes {memory_metrics["limit_bytes"]}')
-            
-            lines.append('# HELP maya_container_memory_utilization Container memory utilization ratio (0-1)')
-            lines.append('# TYPE maya_container_memory_utilization gauge')
-            lines.append(f'maya_container_memory_utilization {memory_metrics["utilization"]:.3f}')
-            
-            lines.append('# HELP maya_container_memory_available_mb Available memory in MB')
-            lines.append('# TYPE maya_container_memory_available_mb gauge')
-            lines.append(f'maya_container_memory_available_mb {memory_metrics["available_mb"]:.1f}')
-            
-            lines.append('# HELP maya_container_memory_pressure Memory pressure alert (1=pressure, 0=normal)')
-            lines.append('# TYPE maya_container_memory_pressure gauge')
-            lines.append(f'maya_container_memory_pressure {1 if memory_metrics["pressure"] else 0}')
-            
-        except Exception as e:
-            logger.warning(f"Failed to collect memory metrics: {e}")
-            # Fallback to original cgroup reading
-            cur, lim = _read_cgroup_memory()
-            if cur is not None:
+
+            cur_b = memory_metrics.get("current_bytes")
+            lim_b = memory_metrics.get("limit_bytes")
+            util  = memory_metrics.get("utilization")
+            avail = memory_metrics.get("available_mb")
+            pres  = memory_metrics.get("pressure")
+
+            if cur_b is not None:
                 lines.append('# HELP maya_container_memory_usage_bytes Container memory usage in bytes')
                 lines.append('# TYPE maya_container_memory_usage_bytes gauge')
-                lines.append(f'maya_container_memory_usage_bytes {cur}')
-            if lim is not None:
+                lines.append(f'maya_container_memory_usage_bytes {cur_b}')
+                _mem_emitted = True
+            if lim_b is not None:
                 lines.append('# HELP maya_container_memory_limit_bytes Container memory limit in bytes')
                 lines.append('# TYPE maya_container_memory_limit_bytes gauge')
-                lines.append(f'maya_container_memory_limit_bytes {lim}')
+                lines.append(f'maya_container_memory_limit_bytes {lim_b}')
+            if util is not None:
+                lines.append('# HELP maya_container_memory_utilization Container memory utilization ratio (0-1)')
+                lines.append('# TYPE maya_container_memory_utilization gauge')
+                lines.append(f'maya_container_memory_utilization {util:.3f}')
+            if avail is not None:
+                lines.append('# HELP maya_container_memory_available_mb Available memory in MB')
+                lines.append('# TYPE maya_container_memory_available_mb gauge')
+                lines.append(f'maya_container_memory_available_mb {avail:.1f}')
+            if pres is not None:
+                lines.append('# HELP maya_container_memory_pressure Memory pressure alert (1=pressure, 0=normal)')
+                lines.append('# TYPE maya_container_memory_pressure gauge')
+                lines.append(f'maya_container_memory_pressure {1 if pres else 0}')
+
+        except Exception as e:
+            logger.warning(f"Failed to collect memory metrics: {e}")
+            if not _mem_emitted:
+                # Fallback to original cgroup reading only if nothing was emitted yet
+                cur, lim = _read_cgroup_memory()
+                if cur is not None:
+                    lines.append('# HELP maya_container_memory_usage_bytes Container memory usage in bytes')
+                    lines.append('# TYPE maya_container_memory_usage_bytes gauge')
+                    lines.append(f'maya_container_memory_usage_bytes {cur}')
+                if lim is not None:
+                    lines.append('# HELP maya_container_memory_limit_bytes Container memory limit in bytes')
+                    lines.append('# TYPE maya_container_memory_limit_bytes gauge')
+                    lines.append(f'maya_container_memory_limit_bytes {lim}')
         # CPU usage seconds total
         cpu_sec = _read_cgroup_cpu_seconds()
         if cpu_sec is not None:
@@ -304,10 +343,16 @@ def serve_maya():
         lines.append(f'maya_rag_type {rag_type_value}')
         
         # Session management metrics
-        try:
-            from utils.session_manager import get_session_manager
-            session_manager = get_session_manager()
+        if session_manager is not None:
             session_stats = session_manager.get_statistics()
+            
+            # Validate and coerce utilization before formatting
+            util = session_stats.get("utilization")
+            try:
+                util_float = float(util) if util is not None else 0.0
+            except (ValueError, TypeError):
+                util_float = 0.0
+                logger.warning(f"Invalid utilization value: {util}, defaulting to 0.0")
             
             lines.append('# HELP maya_active_sessions Current number of active sessions')
             lines.append('# TYPE maya_active_sessions gauge')
@@ -319,7 +364,7 @@ def serve_maya():
             
             lines.append('# HELP maya_session_utilization Session utilization ratio (0-1)')
             lines.append('# TYPE maya_session_utilization gauge')
-            lines.append(f'maya_session_utilization {session_stats["utilization"]:.3f}')
+            lines.append(f'maya_session_utilization {util_float:.3f}')
             
             lines.append('# HELP maya_sessions_created_total Total sessions created')
             lines.append('# TYPE maya_sessions_created_total counter')
@@ -347,7 +392,7 @@ def serve_maya():
         # Check critical dependencies
         checks = []
         
-        # Enhanced session monitoring
+        # Memory health check
         try:
             from utils.memory_monitor import check_memory_health
             memory_healthy = check_memory_health()
