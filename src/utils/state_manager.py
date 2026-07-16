@@ -184,7 +184,7 @@ def is_valid_status_transition(current_status: str, new_status: str) -> bool:
     """
     Check if a payment status transition is valid.
     
-    Status transitions: pending → processing → completed (no backwards transitions)
+    Status transitions: pending -> processing -> completed (no backwards transitions)
     
     Args:
         current_status: Current payment status
@@ -349,9 +349,8 @@ def _cleanup_expired_sessions() -> None:
                     except Exception as e:
                         logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
                         
-                        # Get retry count and apply exponential backoff
+                        # Get retry count for logging and backoff
                         retry_count = _session_retry_counts.get(session_id, 0) + 1
-                        _session_retry_counts[session_id] = retry_count
                         
                         if retry_count <= MAX_SESSION_CLEANUP_RETRIES:
                             # Calculate exponential backoff: 2^retry_count * 60 seconds, capped at MAX_BACKOFF
@@ -360,6 +359,8 @@ def _cleanup_expired_sessions() -> None:
                             # Rollback: re-insert session with corrected timing
                             # Set last_access so expiry triggers after backoff period from now
                             if session_lock is not None:
+                                # Update retry count for retryable path
+                                _session_retry_counts[session_id] = retry_count
                                 _session_locks[session_id] = session_lock
                                 _session_last_access[session_id] = current_time + backoff_seconds - SESSION_EXPIRY_SECONDS
                                 
@@ -372,7 +373,6 @@ def _cleanup_expired_sessions() -> None:
                                     f"Cleanup failed for session {session_id[:8]} and session_lock is missing; "
                                     f"dropping session (retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES})"
                                 )
-                                _session_retry_counts.pop(session_id, None)
                         else:
                             # Max retries exceeded, remove session from all tracking maps
                             _session_locks.pop(session_id, None)
@@ -454,13 +454,10 @@ def is_cleanup_running() -> bool:
     Returns:
         True if cleanup thread exists and is alive, False otherwise.
     """
-    thread = getattr(state_manager_module, "_cleanup_thread", None)
+    thread = globals().get("_cleanup_thread")
     return isinstance(thread, threading.Thread) and thread.is_alive()
 
 
-# Global reference for self-introspection in getattr
-import sys
-state_manager_module = sys.modules[__name__]
 
 
 # Default State Templates

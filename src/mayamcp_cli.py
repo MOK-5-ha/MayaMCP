@@ -136,30 +136,31 @@ def main():
         try:
             rate_limiter = get_rate_limiter()
             rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
-        except Exception as cleanup_err:
+        except Exception:
             logger.exception("Error cleaning up rate limiter")
         
         # Always stop session cleanup regardless of rate limiter errors
         try:
             stop_session_cleanup()
             logger.info("Security services stopped")
-        except Exception as cleanup_err:
+        except Exception:
             logger.exception("Error stopping session cleanup")
-        sys.exit(0)
-    except Exception as e:
+        sys.exit(130)
+    except Exception:
         logger.exception("Critical error starting application")
         # Cleanup security services on error
         # Clean up rate limiter session data
         try:
             rate_limiter = get_rate_limiter()
             rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
-        except Exception as cleanup_err:
+        except Exception:
             logger.exception("Error cleaning up rate limiter")
         
         # Always stop session cleanup regardless of rate limiter errors
         try:
             stop_session_cleanup()
-        except Exception as cleanup_err:
+            logger.info("Security services stopped")
+        except Exception:
             logger.exception("Error stopping session cleanup")
         sys.exit(1)
 

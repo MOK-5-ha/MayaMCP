@@ -218,9 +218,16 @@ def get_memory_monitor() -> MemoryMonitor:
                         "Invalid MAYA_CONTAINER_MEMORY_THRESHOLD value; defaulting to 0.8"
                     )
                     threshold = 0.8
-                threshold = max(0.1, min(0.95, threshold))
-                _memory_monitor = MemoryMonitor(memory_threshold=threshold)
-                logger.info(f"Memory monitor initialized with threshold: {threshold:.1%}")
+                
+                clamped_threshold = max(0.1, min(0.95, threshold))
+                if clamped_threshold != threshold:
+                    logger.warning(
+                        f"MAYA_CONTAINER_MEMORY_THRESHOLD {threshold} is outside [0.1, 0.95] range; "
+                        f"clamping to {clamped_threshold}"
+                    )
+                
+                _memory_monitor = MemoryMonitor(memory_threshold=clamped_threshold)
+                logger.info(f"Memory monitor initialized with threshold: {clamped_threshold:.1%}")
     return _memory_monitor
 
 
