@@ -276,7 +276,22 @@ def process_order(
     combined_prompt = get_combined_prompt(current_phase, menu_text)
     
     # Combine system prompt and menu context for system instruction
-    system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text
+    # Inject current order to prevent the LLM from duplicating orders across turns
+    current_order_list = get_current_order_state(session_id, app_state)
+    if current_order_list:
+        items_str = []
+        for item in current_order_list:
+            q = item.get('quantity', 1)
+            mods = item.get('modifiers', 'no modifiers')
+            if mods != 'no modifiers':
+                items_str.append(f"{q}x {item['name']} with {mods}")
+            else:
+                items_str.append(f"{q}x {item['name']}")
+        order_context = "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
+    else:
+        order_context = "CURRENT ORDER: Empty."
+
+    system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
     # Convert Gradio history
     history_limit = 10
@@ -307,6 +322,9 @@ def process_order(
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
         try:
+            # Set current session for tool calls
+            set_current_session(session_id)
+
             # --- LLM Interaction Loop (Handles Tool Calls) ---
             rag_applied = False  # Guard flag to prevent RAG re-application
             while True:
@@ -611,7 +629,22 @@ def process_order_stream(
             combined_prompt = get_combined_prompt(current_phase, menu_text)
             
             # Combine system prompt and menu context for system instruction
-            system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text
+            # Inject current order to prevent the LLM from duplicating orders across turns
+            current_order_list = get_current_order_state(session_id, app_state)
+            if current_order_list:
+                items_str = []
+                for item in current_order_list:
+                    q = item.get('quantity', 1)
+                    mods = item.get('modifiers', 'no modifiers')
+                    if mods != 'no modifiers':
+                        items_str.append(f"{q}x {item['name']} with {mods}")
+                    else:
+                        items_str.append(f"{q}x {item['name']}")
+                order_context = "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
+            else:
+                order_context = "CURRENT ORDER: Empty."
+
+            system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
             # Get generation config and merge system instruction + tools
             from ..llm.client import get_model_config
