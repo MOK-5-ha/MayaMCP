@@ -11,7 +11,9 @@
 - **UI**: Gradio 4.x
 - **TTS**: Cartesia
 - **RAG**: FAISS (faiss-cpu), custom Memvid pipeline
+- **MCP**: Stripe integration for payments
 - **HTTP/Retry**: tenacity, requests, websockets
+- **Security**: cryptography (Fernet for BYOK encryption)
 - **Config**: python-dotenv
 
 ## Build & Installation
@@ -45,7 +47,7 @@ pytest -v
 pytest -m "not slow"
 ```
 
-Test markers: `slow`, `integration`, `unit`
+Test markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`
 
 ## Linting & Type Checking
 
@@ -64,8 +66,10 @@ Test markers: `slow`, `integration`, `unit`
 GEMINI_API_KEY=your_google_api_key
 CARTESIA_API_KEY=your_cartesia_api_key
 
-# Optional
+# Optional (for BYOK Mode and features)
 GEMINI_MODEL_VERSION=gemini-2.5-flash-lite
 TEMPERATURE=0.7
 MAX_OUTPUT_TOKENS=2048
+MAYA_MASTER_KEY=fernet_key_for_encrypting_session_data
+STRIPE_SECRET_KEY=sk_test_stripe_secret_key
 ```
