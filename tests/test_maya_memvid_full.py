@@ -69,8 +69,8 @@ def test_maya_memvid_full():
         # Initialize LLM
         print("🤖 Initializing LLM client...")
         try:
-            from google import genai
-            llm = genai.Client(api_key=api_keys["google_api_key"])
+            from src.llm.client import get_genai_client
+            llm = get_genai_client(api_key=api_keys["google_api_key"])
             print("✅ LLM client initialized")
         except Exception as e:
             if logger:
