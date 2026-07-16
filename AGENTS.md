@@ -1,5 +1,5 @@
 ## Project Overview
-MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, and simulated payments. It uses Google Gemini for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Stripe MCP for payments. The UI is built with Gradio.
+MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, and simulated payments. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Stripe MCP for payments. The UI is built with Gradio, and API resilience is handled by `tenacity`.
 
 ## Repository Layout
 ```

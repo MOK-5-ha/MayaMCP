@@ -1,6 +1,6 @@
 # MayaMCP Product Overview
 
-MayaMCP is an AI bartending agent that provides a conversational ordering experience. Originally a Kaggle Gen AI Intensive Course capstone project, now enhanced with MCP (Model Context Protocol) integration.
+MayaMCP is an AI bartending agent (v2.0.0) that provides a conversational ordering experience. Originally a Kaggle Gen AI Intensive Course capstone project, now enhanced with MCP (Model Context Protocol) integration for simulated payments.
 
 ## Core Capabilities
 
@@ -10,6 +10,8 @@ MayaMCP is an AI bartending agent that provides a conversational ordering experi
 - RAG-enhanced responses using Memvid/FAISS
 - MCP Stripe integration for payment simulation
 - Gradio web UI with agent avatar
+- BYOK (Bring Your Own Key) mode for user-provided API credentials
+- Real-time security scanning (prompt injection and toxicity detection)
 
 ## User Interactions
 

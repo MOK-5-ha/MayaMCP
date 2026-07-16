@@ -10,16 +10,20 @@ MayaMCP/
 │   ├── conversation/       # Conversation handling
 │   │   ├── phase_manager.py
 │   │   └── processor.py
+│   ├── handlers/           # Request handlers
 │   ├── llm/                # LLM integration
 │   │   ├── client.py       # Unified Google GenAI client wrapper
 │   │   ├── prompts.py      # Prompt templates
 │   │   ├── session_registry.py # Lazy loading for BYOK mode clients
 │   │   └── tools.py        # Function calling tools
+│   ├── media/              # Media utilities
 │   ├── memvid/             # Memvid RAG implementation
 │   │   ├── config.py
 │   │   ├── encoder.py
 │   │   ├── retriever.py
 │   │   └── utils.py
+│   ├── payments/           # Stripe MCP client and payment logic
+│   ├── prompt_engineering/ # Prompt templates
 │   ├── rag/                # RAG pipeline
 │   │   ├── embeddings.py
 │   │   ├── memvid_pipeline.py
@@ -39,7 +43,7 @@ MayaMCP/
 │   ├── utils/              # Shared utilities
 │   │   ├── errors.py       # Error classification helpers
 │   │   ├── helpers.py
-│   │   └── state_manager.py
+│   │   └── state_manager.py # Thread-safe payment locking
 │   ├── voice/              # TTS integration
 │   │   └── tts.py
 │   └── mayamcp_cli.py      # CLI entry point
@@ -58,8 +62,11 @@ MayaMCP/
 
 ## Key Patterns
 
-- **Unified LLM client**: `src/llm/client.py` centralizes all GenAI API interactions
-- **Graceful fallbacks**: RAG uses Memvid → FAISS → no-RAG chain
-- **Error handling**: `src/utils/errors.py` provides consistent error classification
-- **Test stubs**: `tests/conftest.py` stubs Google SDKs for offline testing
-- **Config from env**: All API keys and model settings via environment variables
+- **Unified LLM client**: `src/llm/client.py` centralizes all GenAI API interactions.
+- **Graceful fallbacks**: RAG uses Memvid → FAISS → no-RAG chain.
+- **BYOK mode**: Per-session LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
+- **Payment state**: Thread-safe per-session locking with atomic updates (`src/utils/state_manager.py`).
+- **Security scanning**: Inputs/outputs are checked for prompt injection and toxicity (`src/security/`).
+- **Error handling**: `src/utils/errors.py` provides consistent error classification.
+- **Test stubs**: `tests/conftest.py` stubs Google SDKs for offline testing.
+- **Config from env**: All API keys and model settings via environment variables.
