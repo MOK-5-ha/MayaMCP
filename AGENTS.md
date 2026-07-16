@@ -57,6 +57,7 @@ pytest -m integration     # Integration tests only
 - Markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`.
 - Property-based tests use Hypothesis.
 - Always mock external APIs (Google, Cartesia, Stripe) — never make real calls in tests.
+- **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats instead of obsolete LangChain structures.
 
 ## Linting & Type Checking
 ```bash
@@ -80,11 +81,13 @@ Optional:
 - `STRIPE_SECRET_KEY` — Stripe test mode key (`sk_test_*` only)
 
 ## Key Architecture Rules
-- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere.
+- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client(api_key=...)` instead of instantiating `genai.Client` directly (this applies to sessions, registration modules, and integration tests to ensure proper caching).
 - **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Stripe MCP → mock payment links.
 - **Security scanning**: Inputs are checked for prompt injection/toxicity before processing; outputs are checked before returning to user. See `src/security/`.
 - **Payment state**: Thread-safe per-session locking with atomic updates and version checks. Always acquire the session lock before modifying payment state. See `src/utils/state_manager.py`.
 - **BYOK mode**: Per-session LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
+- **Lazy Streaming Pipelining**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs (e.g. streaming LLM outputs to TTS). Consume them lazily (using queue-based iterators if passing items between threads) to preserve low latency.
+- **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired, preventing payload misalignment.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
@@ -92,7 +95,7 @@ Optional:
 3. Add tests in `tests/`
 
 ## Don't
-- Call Google SDK directly outside `src/llm/client.py`
+- Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client`)
 - Hardcode API keys or secrets
 - Skip error handling for external API calls
 - Break the graceful fallback chain
@@ -100,3 +103,4 @@ Optional:
 - Use Stripe live mode keys (test mode only: `sk_test_*`)
 - Modify payment state without acquiring the session lock
 - Commit changes — only stage them for owner review
+- Eagerly materialize streaming generators using `list()` or list comprehensions.
