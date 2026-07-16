@@ -133,3 +133,51 @@ def generate_streaming_audio(
     worker_thread.join(timeout=5.0)
     if worker_thread.is_alive():
         logger.warning("Audio worker thread did not complete cleanly")
+
+
+def create_pipelined_tts_generator(
+    sentence_stream: Generator[dict, None, None],
+    cartesia_client,
+    voice_id: Optional[str] = None
+) -> Generator[dict, None, None]:
+    """
+    Create a generator that handles both text streaming and TTS pipelining.
+    
+    Args:
+        sentence_stream: Generator yielding sentence events from LLM
+        cartesia_client: Initialized Cartesia client
+        voice_id: Voice ID to use
+        
+    Yields:
+        Dict with combined streaming and TTS events
+    """
+    # Drive sentence_stream and collect all its events
+    text_events = list(sentence_stream)
+    
+    # Extract sentences from the stream
+    def sentence_extractor():
+        for event in text_events:
+            if event['type'] == 'sentence':
+                yield event['content']
+            elif event['type'] == 'complete':
+                break
+    
+    # Start streaming audio generation
+    sentence_gen = sentence_extractor()
+    audio_gen = generate_streaming_audio(sentence_gen, cartesia_client, voice_id)
+    
+    audio_iter = iter(audio_gen)
+    for text_event in text_events:
+        # Yield text event first
+        yield text_event
+        
+        # If it's a sentence or complete, interleave with corresponding audio event
+        if text_event['type'] in ['sentence', 'complete']:
+            try:
+                yield next(audio_iter)
+            except StopIteration:
+                pass
+    
+    # Yield any remaining audio events
+    for audio_event in audio_iter:
+        yield audio_event

@@ -11,9 +11,8 @@ from src.llm.client import (
     build_generate_config,
     call_gemini_api,
     get_genai_client,
-    get_langchain_llm_params,
+    get_gemini_params,
     get_model_name,
-    initialize_llm,
 )
 
 
@@ -111,8 +110,8 @@ class TestLLMClient:
         mock_get_model_config.assert_called_once()
 
     @patch('src.llm.client.get_model_config')
-    def test_get_langchain_llm_params(self, mock_get_model_config):
-        """Test get_langchain_llm_params returns correct parameter dict."""
+    def test_get_gemini_params(self, mock_get_model_config):
+        """Test get_gemini_params returns correct parameter dict."""
         mock_get_model_config.return_value = {
             "model_version": "gemini-1.5-flash",
             "temperature": 0.8,
@@ -121,7 +120,7 @@ class TestLLMClient:
             "max_output_tokens": 4096
         }
 
-        result = get_langchain_llm_params()
+        result = get_gemini_params()
 
         expected = {
             "model": "gemini-1.5-flash",
@@ -131,69 +130,6 @@ class TestLLMClient:
             "max_output_tokens": 4096
         }
         assert result == expected
-
-    @patch('src.llm.client.ChatGoogleGenerativeAI')
-    @patch('src.llm.client.get_langchain_llm_params')
-    def test_initialize_llm_without_tools(self, mock_get_params, mock_chat_google):
-        """Test initialize_llm without tools."""
-        mock_params = {
-            "model": "gemini-1.5-flash",
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "top_k": 40,
-            "max_output_tokens": 2048
-        }
-        mock_get_params.return_value = mock_params
-        mock_llm = MagicMock()
-        mock_chat_google.return_value = mock_llm
-
-        api_key = "test_api_key"
-        result = initialize_llm(api_key)
-
-        mock_chat_google.assert_called_once_with(
-            model="gemini-1.5-flash",
-            temperature=0.7,
-            top_p=0.9,
-            top_k=40,
-            max_output_tokens=2048,
-            google_api_key=api_key
-        )
-        assert result == mock_llm
-
-    @patch('src.llm.client.ChatGoogleGenerativeAI')
-    @patch('src.llm.client.get_langchain_llm_params')
-    def test_initialize_llm_with_tools(self, mock_get_params, mock_chat_google):
-        """Test initialize_llm with tools."""
-        mock_params = {
-            "model": "gemini-1.5-flash",
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "top_k": 40,
-            "max_output_tokens": 2048
-        }
-        mock_get_params.return_value = mock_params
-        mock_llm = MagicMock()
-        mock_llm_with_tools = MagicMock()
-        mock_llm.bind_tools.return_value = mock_llm_with_tools
-        mock_chat_google.return_value = mock_llm
-
-        api_key = "test_api_key"
-        tools = [{"name": "tool1"}, {"name": "tool2"}]
-        result = initialize_llm(api_key, tools)
-
-        mock_llm.bind_tools.assert_called_once_with(tools)
-        assert result == mock_llm_with_tools
-
-    @patch('src.llm.client.ChatGoogleGenerativeAI')
-    @patch('src.llm.client.get_langchain_llm_params')
-    def test_initialize_llm_exception(self, mock_get_params, mock_chat_google):
-        """Test initialize_llm handles exceptions."""
-        mock_get_params.side_effect = Exception("Config error")
-
-        api_key = "test_api_key"
-
-        with pytest.raises(Exception, match="Config error"):
-            initialize_llm(api_key)
 
     @patch('src.llm.client.get_genai_client')
     @patch('src.llm.client.get_model_name')
@@ -368,37 +304,8 @@ class TestLLMClient:
         from src.llm import client
 
         assert hasattr(client, 'get_genai_client')
-        assert hasattr(client, 'ChatGoogleGenerativeAI')
+        assert hasattr(client, 'get_gemini_params')
         assert hasattr(client, 'logger')
-
-    @patch('src.llm.client.logger')
-    def test_logging_in_initialize_llm(self, mock_logger):
-        """Test logging calls in initialize_llm."""
-        with patch('src.llm.client.ChatGoogleGenerativeAI') as mock_chat_google, \
-             patch('src.llm.client.get_langchain_llm_params') as mock_get_params:
-
-            mock_params = {"model": "test", "temperature": 0.7, "top_p": 0.9,
-                          "top_k": 40, "max_output_tokens": 2048}
-            mock_get_params.return_value = mock_params
-            mock_llm = MagicMock()
-            mock_chat_google.return_value = mock_llm
-
-            # Test without tools
-            initialize_llm("test_key")
-            mock_logger.info.assert_called_with(
-                "Successfully initialized LangChain ChatGoogleGenerativeAI model without tools."
-            )
-
-            # Test with tools
-            mock_logger.reset_mock()
-            mock_llm_with_tools = MagicMock()
-            mock_llm.bind_tools.return_value = mock_llm_with_tools
-
-            tools = [{"name": "test_tool"}]
-            initialize_llm("test_key", tools)
-            mock_logger.info.assert_called_with(
-                "Successfully initialized LangChain ChatGoogleGenerativeAI model bound with 1 tool."
-            )
 
     @patch('src.llm.client.logger')
     def test_logging_in_call_gemini_api(self, mock_logger):

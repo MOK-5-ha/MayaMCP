@@ -34,7 +34,7 @@ class BatchStateCache:
         self.store = store
         self._cached_data: Optional[Dict[str, Any]] = None
         self._dirty = False  # Track if we have unsaved changes
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def _load_data(self) -> Dict[str, Any]:
         """

@@ -1,13 +1,17 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from src.conversation import processor as proc
-from langchain_core.messages import AIMessage
+class DummyResponse:
+    def __init__(self, text):
+        self.text = text
+        self.content = text
+        self.tool_calls = []
 
 class DummyLLM:
     def __init__(self, content="base response"):
         self._content = content
     def invoke(self, messages):
-        return AIMessage(content=self._content)
+        return DummyResponse(self._content)
 
 @pytest.fixture
 def mock_security():

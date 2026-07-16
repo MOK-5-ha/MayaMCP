@@ -1,7 +1,7 @@
 """Tests for batch state commits functionality."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from src.utils.batch_state import BatchStateCache, batch_state_commits, get_current_batch_cache, is_in_batch_context
 
@@ -11,7 +11,7 @@ class TestBatchStateCache:
 
     def test_init(self):
         """Test BatchStateCache initialization."""
-        store = Mock()
+        store = MagicMock()
         cache = BatchStateCache("test_session", store)
         
         assert cache.session_id == "test_session"
@@ -21,9 +21,9 @@ class TestBatchStateCache:
 
     def test_load_data_initializes_from_store(self):
         """Test that _load_data initializes from store when cache is empty."""
-        store = Mock()
+        store = MagicMock()
         
-        with patch('src.utils.batch_state._get_session_data') as mock_get_data:
+        with patch('src.utils.state_manager._get_session_data') as mock_get_data:
             mock_get_data.return_value = {"test": "data"}
             
             cache = BatchStateCache("test_session", store)
@@ -35,7 +35,7 @@ class TestBatchStateCache:
 
     def test_load_data_uses_cache(self):
         """Test that _load_data uses cached data when available."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"cached": "data"}
         
         cache = BatchStateCache("test_session", store)
@@ -46,7 +46,7 @@ class TestBatchStateCache:
 
     def test_get_session_data_returns_copy(self):
         """Test that get_session_data returns a copy of cached data."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"test": "data"}
         
         cache = BatchStateCache("test_session", store)
@@ -58,7 +58,7 @@ class TestBatchStateCache:
 
     def test_update_session_data(self):
         """Test updating session data."""
-        store = Mock()
+        store = MagicMock()
         cache = BatchStateCache("test_session", store)
         cache._cached_data = {"existing": "data"}
         
@@ -70,7 +70,7 @@ class TestBatchStateCache:
 
     def test_get_section(self):
         """Test getting a specific section of data."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"conversation": {"turn": 1}, "payment": {"balance": 100}}
         
         cache = BatchStateCache("test_session", store)
@@ -82,7 +82,7 @@ class TestBatchStateCache:
 
     def test_get_section_missing_key(self):
         """Test getting a section that doesn't exist raises KeyError."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"conversation": {"turn": 1}}
         
         cache = BatchStateCache("test_session", store)
@@ -93,7 +93,7 @@ class TestBatchStateCache:
 
     def test_update_section(self):
         """Test updating a specific section of data."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"conversation": {"turn": 1}, "payment": {"balance": 100}}
         
         cache = BatchStateCache("test_session", store)
@@ -106,7 +106,7 @@ class TestBatchStateCache:
 
     def test_flush_writes_to_store_when_dirty(self):
         """Test that flush writes to store when data is dirty."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"test": "data"}
         
         cache = BatchStateCache("test_session", store)
@@ -120,7 +120,7 @@ class TestBatchStateCache:
 
     def test_flush_skips_write_when_clean(self):
         """Test that flush skips write when data is clean."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"test": "data"}
         
         cache = BatchStateCache("test_session", store)
@@ -137,7 +137,7 @@ class TestBatchStateCommits:
 
     def test_context_manager_sets_and_clears_cache(self):
         """Test that context manager sets and clears batch cache."""
-        store = Mock()
+        store = MagicMock()
         
         with batch_state_commits("test_session", store) as cache:
             assert is_in_batch_context() is True
@@ -152,10 +152,10 @@ class TestBatchStateCommits:
 
     def test_context_manager_flushes_on_exit(self):
         """Test that context manager flushes cache on exit."""
-        store = Mock()
+        store = MagicMock()
         cached_data = {"test": "data"}
         
-        with patch('src.utils.batch_state._get_session_data') as mock_get_data:
+        with patch('src.utils.state_manager._get_session_data') as mock_get_data:
             mock_get_data.return_value = cached_data
             
             with batch_state_commits("test_session", store) as cache:
@@ -164,17 +164,18 @@ class TestBatchStateCommits:
             # Should have been flushed
             store.__setitem__.assert_called_once_with("test_session", {"test": "data", "updated": True})
 
-    def test_nested_context_uses_innermost(self):
-        """Test that nested contexts use the innermost one."""
-        store = Mock()
+    def test_nested_context_raises_runtime_error(self):
+        """Test that nested contexts raise RuntimeError."""
+        store = MagicMock()
         
         with batch_state_commits("outer", store) as outer_cache:
             assert get_current_batch_cache() is outer_cache
             
-            with batch_state_commits("inner", store) as inner_cache:
-                assert get_current_batch_cache() is inner_cache
+            with pytest.raises(RuntimeError, match="Nested batch_state_commits context detected"):
+                with batch_state_commits("inner", store):
+                    pass
             
-            # Should revert to outer after inner exits
+            # Should still be outer
             assert get_current_batch_cache() is outer_cache
         
         # Should be cleared after outer exits
@@ -182,22 +183,22 @@ class TestBatchStateCommits:
 
     def test_context_manager_clears_on_exception(self):
         """Test that context manager clears cache and propagates exceptions."""
-        store = Mock()
+        store = MagicMock()
         
-        # Mock the store's __setitem__ to track if flush writes to store
-        store.__setitem__ = Mock()
-        
-        with pytest.raises(ValueError):
-            with batch_state_commits("test_session", store) as cache:
-                # Should be in context inside the block
-                assert is_in_batch_context() is True
-                assert get_current_batch_cache() is cache
-                
-                # Make some changes to ensure there's something to flush
-                cache.update_session_data({"test_key": "test_value"})
-                
-                # Raise an exception to test cleanup
-                raise ValueError("Test exception")
+        with patch('src.utils.state_manager._get_session_data') as mock_get_data:
+            mock_get_data.return_value = {"test": "data"}
+            
+            with pytest.raises(ValueError):
+                with batch_state_commits("test_session", store) as cache:
+                    # Should be in context inside the block
+                    assert is_in_batch_context() is True
+                    assert get_current_batch_cache() is cache
+                    
+                    # Make some changes to ensure there's something to flush
+                    cache.update_session_data({"test_key": "test_value"})
+                    
+                    # Raise an exception to test cleanup
+                    raise ValueError("Test exception")
         
         # Context should be cleared after exception
         assert is_in_batch_context() is False

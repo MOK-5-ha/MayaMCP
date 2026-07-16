@@ -1,7 +1,6 @@
 """Main conversation processing logic."""
 
 from typing import List, Dict, Tuple, Any, Generator
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 import re
 import concurrent.futures
 
@@ -23,7 +22,7 @@ from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
 from ..llm.client import stream_gemini_api
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
-from ..utils.state_manager import is_order_finished, get_current_order_state
+from ..utils.state_manager import is_order_finished, get_current_order_state, _get_store_and_session
 from ..utils.rate_limiter import check_rate_limits
 from ..utils.batch_state import batch_state_commits
 from ..utils.streaming import SentenceBuffer
@@ -105,6 +104,7 @@ def process_order(
     Returns:
         Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data, emotion_state)
     """
+    session_id, app_state = _get_store_and_session(session_id, app_state)
     if not user_input_text:
         logger.warning("Received empty user input.")
         return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None, "neutral"
@@ -208,6 +208,7 @@ def process_order(
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
         
         # Return documented 6-tuple including emotion_state
+        clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
     # Fallback to traditional intent detection
@@ -246,36 +247,41 @@ def process_order(
 
         updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
         
+        clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
 
-    # Prepare message history for LangChain model
-    messages = []
-    
+    # Prepare message history
     # Get current phase and create appropriate prompt
     current_phase = phase_manager.get_current_phase()
     from ..llm.tools import get_menu
-    menu_text = get_menu.invoke({})
+    menu_text = get_menu()
     combined_prompt = get_combined_prompt(current_phase, menu_text)
     
-    # Add System Prompt
-    messages.append(SystemMessage(content=combined_prompt))
-    
-    # Add Menu (as system/context info)
-    messages.append(SystemMessage(content="\nHere is the menu:\n" + menu_text))
+    # Combine system prompt and menu context for system instruction
+    system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text
 
-    # Convert Gradio history to LangChain message types
+    # Convert Gradio history
     history_limit = 10
     limited_history = current_session_history[-history_limit:]
+    
+    messages = []
     for entry in limited_history:
         role = entry.get("role")
         content = entry.get("content", "")
-        if role == "user":
-            messages.append(HumanMessage(content=content))
-        elif role == "assistant":
-            messages.append(AIMessage(content=content)) 
+        sdk_role = "model" if role == "assistant" else "user"
+        messages.append({"role": sdk_role, "parts": [{"text": content}]})
+    messages.append({"role": "user", "parts": [{"text": user_input_text}]})
 
-    # Add the latest user input
-    messages.append(HumanMessage(content=user_input_text))
+    from ..llm.client import get_gemini_params
+    params = get_gemini_params()
+    config_dict = {
+        "temperature": params["temperature"],
+        "top_p": params["top_p"],
+        "top_k": params["top_k"],
+        "max_output_tokens": params["max_output_tokens"],
+        "tools": get_all_tools(),
+        "system_instruction": system_instruction,
+    }
 
     if should_log_sensitive():
         logger.debug(f"Processing user input for session: {user_input_text}")
@@ -286,48 +292,75 @@ def process_order(
             # --- LLM Interaction Loop (Handles Tool Calls) ---
             rag_applied = False  # Guard flag to prevent RAG re-application
             while True:
-                # Invoke the LLM with current messages
+                # Invoke the LLM
                 try:
-                    ai_response: AIMessage = llm.invoke(messages)
+                    if hasattr(llm, "invoke"):
+                        ai_response = llm.invoke(messages)
+                        ai_text = getattr(ai_response, "content", "")
+                        legacy_tool_calls = getattr(ai_response, "tool_calls", None) or []
+                        tool_calls = []
+                        for tc in legacy_tool_calls:
+                            tool_calls.append({
+                                "name": tc.get("name"),
+                                "args": tc.get("args"),
+                                "id": tc.get("id")
+                            })
+                    else:
+                        ai_response = call_gemini_api(
+                            prompt_content=messages,
+                            config=config_dict,
+                            api_key=api_key
+                        )
+                        ai_text = ai_response.text
+                        tool_calls = []
+                        if getattr(ai_response, "function_calls", None):
+                            for fc in ai_response.function_calls:
+                                tool_calls.append({
+                                    "name": fc.name,
+                                    "args": fc.args,
+                                    "id": getattr(fc, "id", None)
+                                })
                 except Exception as invoke_err:
-                        err_msg = str(invoke_err).lower()
-                        err_code = getattr(invoke_err, "status_code", None)
-                        if (
-                            err_code == 429
-                            or "429" in err_msg
-                            or "rate" in err_msg
-                            or "quota" in err_msg
-                            or ("resource" in err_msg and "exhaust" in err_msg)
-                        ):
-                            logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
-                            # Return early so the sentinel never reaches emotion
-                            # parsing, security scanning, or conversation history.
-                            # The caller (handlers.py) intercepts response_text ==
-                            # QUOTA_ERROR_SENTINEL and rebuilds the history with a
-                            # user-facing message + shows the quota popup.
-                            quota_history = current_session_history[:]
-                            quota_history.append({'role': 'user', 'content': user_input_text})
-                            return (
-                                "QUOTA_ERROR", quota_history, quota_history,
-                                get_current_order_state(session_id, app_state),
-                                None, "neutral",
-                            )
-                        else:
-                            logger.error(f"LLM invocation failed: {invoke_err}")
-                            agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
-                            break
+                    err_msg = str(invoke_err).lower()
+                    err_code = getattr(invoke_err, "status_code", None)
+                    if (
+                        err_code == 429
+                        or "429" in err_msg
+                        or "rate" in err_msg
+                        or "quota" in err_msg
+                        or ("resource" in err_msg and "exhaust" in err_msg)
+                    ):
+                        logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
+                        quota_history = current_session_history[:]
+                        quota_history.append({'role': 'user', 'content': user_input_text})
+                        return (
+                            "QUOTA_ERROR", quota_history, quota_history,
+                            get_current_order_state(session_id, app_state),
+                            None, "neutral",
+                        )
+                    else:
+                        logger.error(f"LLM invocation failed: {invoke_err}")
+                        agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
+                        break
             
                 # Append the AI's response (could be text or tool call request)
-                if not hasattr(ai_response, "content"):
+                if not hasattr(llm, "invoke") and (not ai_response or not ai_response.candidates):
                     logger.warning("LLM returned a response without content; ending loop.")
                     agent_response_text = "I'm having a moment—could you repeat that while I get my bearings?"
                     break
-                messages.append(ai_response)
+                if hasattr(llm, "invoke") and not hasattr(ai_response, "content"):
+                    logger.warning("LLM returned a response without content; ending loop.")
+                    agent_response_text = "I'm having a moment—could you repeat that while I get my bearings?"
+                    break
+
+                if hasattr(llm, "invoke"):
+                    messages.append(ai_response)
+                else:
+                    messages.append(ai_response.candidates[0].content)
     
-                tool_calls = getattr(ai_response, 'tool_calls', None)
                 if not tool_calls:
                     # No tool calls requested, this is the final response to the user
-                    agent_response_text = ai_response.content
+                    agent_response_text = ai_text
                     
                     # Determine if this is a casual conversation vs. an order/menu-related interaction
                     should_use_rag = phase_manager.should_use_rag(user_input_text)
@@ -351,56 +384,82 @@ def process_order(
                                     user_input_text += rag_context
                                     # Remove AI response and update user message with RAG-enhanced input
                                     messages.pop()  # Remove ai_response
-                                    messages[-1] = HumanMessage(content=user_input_text)  # Now this is the user message
+                                    messages[-1] = {"role": "user", "parts": [{"text": user_input_text}]}
                                     rag_applied = True  # Set guard flag
                                     # Re-process with RAG-enhanced input
-                                    # This will cause the LLM to regenerate with RAG context
                                     continue  # Restart processing loop with enhanced input
                             except Exception as memvid_error:
                                 logger.warning(f"Memvid RAG failed: {memvid_error}")
                 
-                break 
+                    break 
                     
-            # --- Tool Call Execution ---
-                # Get available tools
+                # --- Tool Call Execution ---
+                if should_log_sensitive():
+                    logger.debug(f"LLM requested tool calls: {tool_calls}")
                 tools = get_all_tools()
-                tool_map = {tool.name: tool for tool in tools}
-                tool_messages = []  # Initialize tool_messages list
+                tool_map = {t.name: t for t in tools}
                 
-                for tool_call in tool_calls:
-                    tool_name = tool_call.get("name")
-                    tool_args = tool_call.get("args", {})
-                    tool_id = tool_call.get("id") 
-    
-                    # Find the corresponding tool function
-                    selected_tool = tool_map.get(tool_name)
-    
-                    if selected_tool:
-                        if not isinstance(tool_args, dict):
-                            logger.warning(f"Malformed arguments for tool '{tool_name}': {type(tool_args)}")
-                            tool_output = f"Error: Malformed arguments for tool {tool_name}."
+                if hasattr(llm, "invoke"):
+                    tool_messages = []
+                    for tool_call in tool_calls:
+                        tool_name = tool_call.get("name")
+                        tool_args = tool_call.get("args", {})
+                        tool_id = tool_call.get("id")
+                        selected_tool = tool_map.get(tool_name)
+                        if selected_tool:
+                            if not isinstance(tool_args, dict):
+                                tool_output = f"Error: Malformed arguments for tool {tool_name}."
+                            else:
+                                try:
+                                    tool_output = selected_tool(**tool_args)
+                                    if should_log_sensitive():
+                                        logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
+                                except TypeError as te:
+                                    tool_output = f"Error: Invalid parameters for tool {tool_name}."
+                                except Exception as e:
+                                    tool_output = f"Error executing tool {tool_name}: {e}"
+                            tool_messages.append({"role": "tool", "content": str(tool_output), "tool_call_id": tool_id})
                         else:
-                            try:
-                                # Execute the tool function with its arguments
-                                tool_output = selected_tool.invoke(tool_args)
-                                if should_log_sensitive():
-                                    logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
-                            except TypeError as te:
-                                logger.warning(f"Invalid parameters for tool '{tool_name}': {te}")
-                                tool_output = f"Error: Invalid parameters for tool {tool_name}."
-                            except Exception as e:
-                                logger.error(f"Error executing tool '{tool_name}': {e}")
-                                tool_output = f"Error executing tool {tool_name}: {e}"
-    
-                        # Append the result as a ToolMessage
-                        tool_messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_id))
-                    else:
-                        logger.error(f"Tool '{tool_name}' requested by LLM not found.")
-                        tool_messages.append(ToolMessage(content=f"Error: Tool '{tool_name}' not found.", tool_call_id=tool_id))
-    
-                # Add the tool results to the message history
-                messages.extend(tool_messages)
-                # Continue the loop to send results back to LLM
+                            tool_messages.append({"role": "tool", "content": f"Error: Tool '{tool_name}' not found.", "tool_call_id": tool_id})
+                    messages.extend(tool_messages)
+                else:
+                    from google.genai import types
+                    response_parts = []
+                    for tool_call in tool_calls:
+                        tool_name = tool_call.get("name")
+                        tool_args = tool_call.get("args", {})
+                        tool_id = tool_call.get("id")
+                        selected_tool = tool_map.get(tool_name)
+                        if selected_tool:
+                            if not isinstance(tool_args, dict):
+                                tool_output = f"Error: Malformed arguments for tool {tool_name}."
+                            else:
+                                try:
+                                    tool_output = selected_tool(**tool_args)
+                                    if should_log_sensitive():
+                                        logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
+                                except TypeError as te:
+                                    tool_output = f"Error: Invalid parameters for tool {tool_name}."
+                                except Exception as e:
+                                    tool_output = f"Error executing tool {tool_name}: {e}"
+                            
+                            response_parts.append(
+                                types.Part.from_function_response(
+                                    name=tool_name,
+                                    response={"result": str(tool_output)},
+                                    id=tool_id
+                                )
+                            )
+                        else:
+                            response_parts.append(
+                                types.Part.from_function_response(
+                                    name=tool_name,
+                                    response={"result": f"Error: Tool '{tool_name}' not found."},
+                                    id=tool_id
+                                )
+                            )
+                    messages.append(types.Content(role="user", parts=response_parts))
+                
                 logger.info("Sending tool results back to LLM...")
     
             # --- End of LLM Interaction Loop ---
@@ -480,6 +539,7 @@ def process_order_stream(
     Yields:
         Dict with streaming response data
     """
+    session_id, app_state = _get_store_and_session(session_id, app_state)
     # Initialize phase manager for conversation flow
     phase_manager = ConversationPhaseManager(session_id, app_state)
     
@@ -508,18 +568,18 @@ def process_order_stream(
         }
         return
     
-    # Convert Gradio history to LangChain format with same window as non-streaming
+    # Convert Gradio history to Gemini format with same window
     history_limit = 10
     truncated_history = current_session_history[-history_limit:]
-    messages = []
+    gemini_messages = []
     for msg in truncated_history:
-        if msg['role'] == 'user':
-            messages.append(HumanMessage(content=msg['content']))
-        elif msg['role'] == 'assistant':
-            # Remove emotion state markers from history
-            clean_content = msg['content']
-            clean_content = re.sub(r'\[STATE:\s*\w+\]', '', clean_content, flags=re.IGNORECASE).strip()
-            messages.append(AIMessage(content=clean_content))
+        content = msg['content']
+        if msg['role'] == 'assistant':
+            content = re.sub(r'\[STATE:\s*\w+\]', '', content, flags=re.IGNORECASE).strip()
+            role = 'model'
+        else:
+            role = 'user'
+        gemini_messages.append({"role": role, "parts": [{"text": content}]})
 
     # Determine if this is a casual conversation vs. an order/menu-related interaction
     should_use_rag = phase_manager.should_use_rag(sanitized_input)
@@ -553,39 +613,28 @@ def process_order_stream(
                 logger.warning(f"Memvid RAG failed: {memvid_error}")
 
     # Add latest user input
-    messages.append(HumanMessage(content=sanitized_input))
+    gemini_messages.append({"role": "user", "parts": [{"text": sanitized_input}]})
 
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
         try:
             # Set current session for tool calls
-            set_current_session(session_id, app_state)
-
-            # Get generation config
-            from ..llm.client import get_model_config
-            config = get_model_config()
+            set_current_session(session_id)
 
             # Get current phase and create appropriate prompt
             current_phase = phase_manager.get_current_phase()
             from ..llm.tools import get_menu
-            menu_text = get_menu.invoke({})
+            menu_text = get_menu()
             combined_prompt = get_combined_prompt(current_phase, menu_text)
             
-            # Add System Prompt
-            messages.append(SystemMessage(content=combined_prompt))
-            
-            # Add Menu (as system/context info)
-            messages.append(SystemMessage(content="\nHere is the menu:\n" + menu_text))
+            # Combine system prompt and menu context for system instruction
+            system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text
 
-            # Convert LangChain messages to Gemini format
-            gemini_messages = []
-            for msg in messages:
-                if isinstance(msg, SystemMessage):
-                    gemini_messages.append({"role": "system", "parts": [{"text": msg.content}]})
-                elif isinstance(msg, HumanMessage):
-                    gemini_messages.append({"role": "user", "parts": [{"text": msg.content}]})
-                elif isinstance(msg, AIMessage):
-                    gemini_messages.append({"role": "model", "parts": [{"text": msg.content}]})
+            # Get generation config and merge system instruction + tools
+            from ..llm.client import get_model_config
+            config = get_model_config()
+            config["system_instruction"] = system_instruction
+            config["tools"] = get_all_tools()
 
             # Start streaming response
             text_stream = stream_gemini_api(gemini_messages, config, api_key)

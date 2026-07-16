@@ -11,8 +11,9 @@ MayaMCP/
 │   │   ├── phase_manager.py
 │   │   └── processor.py
 │   ├── llm/                # LLM integration
-│   │   ├── client.py       # Unified GenAI client wrapper
+│   │   ├── client.py       # Unified Google GenAI client wrapper
 │   │   ├── prompts.py      # Prompt templates
+│   │   ├── session_registry.py # Lazy loading for BYOK mode clients
 │   │   └── tools.py        # Function calling tools
 │   ├── memvid/             # Memvid RAG implementation
 │   │   ├── config.py
@@ -26,6 +27,11 @@ MayaMCP/
 │   │   ├── pipeline.py
 │   │   ├── retrieval.py
 │   │   └── vector_store.py
+│   ├── payments/           # Stripe MCP client and payment logic
+│   ├── security/           # Input/output scanning, encryption, scan config
+│   ├── prompt_engineering/ # Prompt templates
+│   ├── handlers/           # Request handlers
+│   ├── media/              # Media utilities
 │   ├── ui/                 # Gradio UI
 │   │   ├── components.py
 │   │   ├── handlers.py

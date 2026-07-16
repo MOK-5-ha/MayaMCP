@@ -3,15 +3,24 @@ from types import SimpleNamespace
 import pytest
 
 from src.conversation import processor as proc
-from langchain_core.messages import AIMessage
-
+class DummyResponse:
+    def __init__(self, text):
+        self.text = text
+        self.content = text
+        self.tool_calls = []
 
 class DummyLLM:
     def __init__(self, content="base response"):
         self._content = content
     def invoke(self, messages):
-        # Return a simple AIMessage with text content and no tool_calls
-        return AIMessage(content=self._content)
+        return DummyResponse(self._content)
+
+
+class StubTool:
+    def __call__(self, *args, **kwargs):
+        return "MENU: test"
+    def invoke(self, *args, **kwargs):
+        return "MENU: test"
 
 
 @pytest.fixture
@@ -19,7 +28,7 @@ def stub_get_menu(monkeypatch):
     # Ensure get_menu.invoke works without LangChain runtime complexities
     from src import llm as llm_pkg
     from src.llm import tools as tools_mod
-    stub = SimpleNamespace(invoke=lambda _: "MENU: test")
+    stub = StubTool()
     monkeypatch.setattr(tools_mod, "get_menu", stub, raising=True)
     yield
 
