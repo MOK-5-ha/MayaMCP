@@ -41,9 +41,9 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Architecture Updates
 
-- Unified Google GenAI client wrapper in `src/llm/client.py` centralizes API key usage and generation config mapping for both LangChain and direct SDK calls
+- Unified Google GenAI client wrapper in `src/llm/client.py` centralizes API key usage and generation config mapping using the native Google GenAI SDK
 - Model validation at startup warns if `GEMINI_MODEL_VERSION` is unrecognized but continues to run
-- Uses the Google AI Studio SDK (`google-generativeai`) for the free-tier Gemini API; LangChain integration via `langchain-google-genai`.
+- Uses the native Google GenAI SDK (`google-genai`) for the free-tier Gemini API, having completely migrated away from LangChain and legacy SDK wrappers.
 
 ### Model Information
 
@@ -120,7 +120,7 @@ Legacy script (optional):
 
 Note: `pip install -e .` installs dependencies from `requirements.txt` and sets up the `mayamcp` console command.
 
-Note: `pip install -r requirements.txt` installs the Google AI Studio SDK (`google-generativeai`) used throughout `src/` and the LangChain integration. If `google-genai` is present, it is not used in this project.
+Note: `pip install -r requirements.txt` installs the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project relies entirely on the native SDK and does not use LangChain.
 
 ## API Keys Required
 

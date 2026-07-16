@@ -5,8 +5,25 @@ import re
 import random
 import threading
 from enum import Enum
-from langchain_core.tools import tool
 from typing import Dict, List, Optional, Union
+
+class LocalTool:
+    def __init__(self, func):
+        self.func = func
+        self.__name__ = func.__name__
+        self.__doc__ = func.__doc__
+        self.__annotations__ = func.__annotations__
+        self.name = func.__name__
+        self.description = func.__doc__
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+    def invoke(self, kwargs_dict):
+        if not isinstance(kwargs_dict, dict):
+            return self.func()
+        return self.func(**kwargs_dict)
+
+def tool(fn):
+    return LocalTool(fn)
 from typing_extensions import TypedDict, Literal
 
 from ..config.logging_config import get_logger

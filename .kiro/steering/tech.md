@@ -7,7 +7,7 @@
 
 ## Core Dependencies
 
-- **LLM**: Google Gemini via `google-generativeai` SDK and `langchain-google-genai`
+- **LLM**: Google Gemini via native `google-genai` SDK
 - **UI**: Gradio 4.x
 - **TTS**: Cartesia
 - **RAG**: FAISS (faiss-cpu), custom Memvid pipeline

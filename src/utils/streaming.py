@@ -1,7 +1,7 @@
 """Utilities for streaming text processing and TTS pipelining."""
 
 import re
-from typing import List
+from typing import Generator, List, Optional
 
 from ..config.logging_config import get_logger
 
@@ -90,7 +90,7 @@ class SentenceBuffer:
                 if sentence:
                     sentences.append(sentence)
                 # Update search start and remove processed portion
-                self.buffer = self.buffer[actual_end:].strip()
+                self.buffer = self.buffer[actual_end:].lstrip()
                 search_start = 0  # Reset since we modified buffer
             else:
                 # False boundary - skip this boundary and continue searching
@@ -113,3 +113,74 @@ class SentenceBuffer:
     def get_partial(self) -> str:
         """Get current partial text (incomplete sentence)."""
         return self.buffer.strip()
+
+
+def create_streaming_response_generator(
+    text_stream: Generator[str, None, None],
+    sentence_buffer: Optional[SentenceBuffer] = None
+) -> Generator[dict, None, None]:
+    """
+    Create a generator that yields structured streaming responses.
+
+    Args:
+        text_stream: Generator of text chunks from LLM
+        sentence_buffer: Optional sentence buffer for TTS pipelining
+
+    Yields:
+        Dict with keys:
+        - 'type': 'text_chunk', 'sentence', or 'complete'
+        - 'content': The text content
+        - 'partial': Current partial text (for text_chunk type)
+    """
+    if sentence_buffer is None:
+        sentence_buffer = SentenceBuffer()
+
+    accumulated_text = ""
+
+    try:
+        for text_chunk in text_stream:
+            if not text_chunk:
+                continue
+
+            accumulated_text += text_chunk
+
+            # Check for complete sentences
+            sentences = sentence_buffer.add_text(text_chunk)
+
+            # Yield text chunk for immediate UI update
+            yield {
+                'type': 'text_chunk',
+                'content': text_chunk,
+                'partial': sentence_buffer.get_partial()
+            }
+
+            # Yield complete sentences for TTS
+            for sentence in sentences:
+                yield {
+                    'type': 'sentence',
+                    'content': sentence
+                }
+
+        # Flush any remaining content
+        remaining_sentences = sentence_buffer.flush()
+        for sentence in remaining_sentences:
+            yield {
+                'type': 'sentence',
+                'content': sentence
+            }
+
+        # Signal completion
+        yield {
+            'type': 'complete',
+            'content': accumulated_text,
+            'partial': ""
+        }
+
+    except Exception as e:
+        logger.error(f"Error in streaming response generator: {e}")
+        # Yield error state
+        yield {
+            'type': 'error',
+            'content': str(e),
+            'partial': sentence_buffer.get_partial()
+        }

@@ -7,7 +7,7 @@ import pytest
 import logging
 
 from src.config import get_api_keys, setup_logging
-from src.llm import initialize_llm, get_all_tools  
+from src.llm import get_all_tools  
 from src.rag import initialize_memvid_store
 
 from src.conversation.processor import process_order
@@ -69,7 +69,8 @@ def test_maya_memvid_full():
         # Initialize LLM
         print("🤖 Initializing LLM client...")
         try:
-            llm = initialize_llm(api_key=api_keys["google_api_key"], tools=tools)
+            from src.llm.client import get_genai_client
+            llm = get_genai_client(api_key=api_keys["google_api_key"])
             print("✅ LLM client initialized")
         except Exception as e:
             if logger:

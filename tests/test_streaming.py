@@ -23,7 +23,7 @@ class TestSentenceBuffer:
         # Add text with complete sentence
         sentences = buffer.add_text("Hello world. How are you?")
         assert len(sentences) == 1
-        assert sentences[0] == "Hello world. How are you?"
+        assert sentences[0] == "Hello world."
         
     def test_add_text_partial_sentence(self):
         """Test adding text that doesn't form complete sentences."""
@@ -35,8 +35,12 @@ class TestSentenceBuffer:
         
         # Add completion
         sentences = buffer.add_text("?")
-        assert len(sentences) == 1
-        assert sentences[0] == "Hello world?"
+        # End of buffer is deferred
+        assert len(sentences) == 0
+        
+        flushed = buffer.flush()
+        assert len(flushed) == 1
+        assert flushed[0] == "Hello world?"
         
     def test_flush_remaining_content(self):
         """Test flushing remaining buffer content."""
@@ -75,15 +79,17 @@ class TestStreamingResponseGenerator:
         
         # Should get text chunk events
         text_events = [e for e in events if e['type'] == 'text_chunk']
-        assert len(text_events) == 3
+        assert len(text_events) == 4
         assert text_events[0]['content'] == "Hello "
         assert text_events[1]['content'] == "world!"
         assert text_events[2]['content'] == " How are "
+        assert text_events[3]['content'] == "you?"
         
         # Should get sentence events
         sentence_events = [e for e in events if e['type'] == 'sentence']
-        assert len(sentence_events) == 1
-        assert sentence_events[0]['content'] == "Hello world! How are you?"
+        assert len(sentence_events) == 2
+        assert sentence_events[0]['content'] == "Hello world!"
+        assert sentence_events[1]['content'] == "How are you?"
         
         # Should get complete event
         complete_events = [e for e in events if e['type'] == 'complete']
@@ -213,11 +219,15 @@ class TestHandleGradioStreamingInput:
         
         # Mock streaming response
         def mock_process_order_stream(*args, **kwargs):
-            yield {'type': 'text_chunk', 'content': 'Hello '}
+            yield {'type': 'text_chunk', 'content': 'Hello ', 'partial': 'Hello '}
             yield {'type': 'sentence', 'content': 'world.'}
             yield {'type': 'complete', 'content': 'Hello world.', 'emotion_state': 'happy'}
         
-        with patch('src.conversation.processor.process_order_stream', mock_process_order_stream):
+        with patch('src.ui.handlers.process_order_stream', mock_process_order_stream), \
+             patch('src.ui.handlers.get_api_key_state', return_value={'gemini_key': 'test-gemini', 'cartesia_key': 'test-cartesia'}), \
+             patch('src.ui.handlers.get_session_llm', return_value=mock_llm), \
+             patch('src.ui.handlers.get_session_tts', return_value=mock_cartesia_client), \
+             patch('src.ui.handlers.get_voice_audio', return_value=b"audio_data"):
             generator = handle_gradio_streaming_input(
                 user_input="Hello",
                 session_history_state=[],
@@ -241,10 +251,11 @@ class TestHandleGradioStreamingInput:
             assert len(text_events) == 1
             assert text_events[0]['content'] == 'Hello '
             
-            # Should get sentences for TTS
-            sentence_events = [e for e in events if e['type'] == 'sentence']
-            assert len(sentence_events) == 1
-            assert sentence_events[0]['content'] == 'world.'
+            # Should get audio chunks for TTS
+            audio_events = [e for e in events if e['type'] == 'audio_chunk']
+            assert len(audio_events) == 1
+            assert audio_events[0]['content'] == b"audio_data"
+            assert audio_events[0]['sentence'] == 'world.'
             
             # Should get completion
             complete_events = [e for e in events if e['type'] == 'complete']
@@ -261,10 +272,14 @@ class TestHandleGradioStreamingInput:
         
         # Mock traditional response
         def mock_process_order_traditional(*args, **kwargs):
-            return "Traditional response"
+            return "Traditional response", [{"role": "assistant", "content": "Traditional response"}], [{"role": "assistant", "content": "Traditional response"}], [], None, "neutral"
         
-        with patch('src.conversation.processor.process_order', mock_process_order_traditional):
-            generator = handle_gradio_streaming_input(
+        with patch('src.ui.handlers.process_order', mock_process_order_traditional), \
+             patch('src.ui.handlers.has_valid_keys', return_value=True), \
+             patch('src.ui.handlers.get_api_key_state', return_value={'gemini_key': 'test-gemini', 'cartesia_key': 'test-cartesia'}), \
+             patch('src.ui.handlers.get_session_llm', return_value=mock_llm), \
+             patch('src.ui.handlers.get_session_tts', return_value=mock_cartesia_client):
+            result = handle_gradio_streaming_input(
                 user_input="Hello",
                 session_history_state=[],
                 current_tab=0.0,
@@ -280,12 +295,9 @@ class TestHandleGradioStreamingInput:
                 avatar_path="test_avatar.jpg"
             )
             
-            events = list(generator)
-            
-            # Should get single complete event
-            complete_events = [e for e in events if e['type'] == 'complete']
-            assert len(complete_events) == 1
-            assert complete_events[0]['content'] == 'Traditional response'
+            assert isinstance(result, tuple)
+            history = result[1]
+            assert history[-1]['content'] == 'Traditional response'
 
 
 class TestStreamGeminiAPI:
@@ -308,11 +320,12 @@ class TestStreamGeminiAPI:
         config = {"temperature": 0.7, "max_output_tokens": 100}
         
         # Test streaming
-        chunks = list(stream_gemini_api(
-            [{"role": "user", "parts": [{"text": "Hello"}]}],
-            config,
-            "test_api_key"
-        ))
+        with patch('src.llm.client.get_genai_client', return_value=mock_client):
+            chunks = list(stream_gemini_api(
+                [{"role": "user", "parts": [{"text": "Hello"}]}],
+                config,
+                "test_api_key"
+            ))
         
         assert len(chunks) == 2
         assert chunks[0].text == "Hello "
@@ -323,14 +336,15 @@ class TestStreamGeminiAPI:
         from google.genai import errors as genai_errors
         
         mock_client = MagicMock()
-        mock_client.models.generate_content_stream.side_effect = genai_errors.RateLimitError("Rate limit")
+        mock_client.models.generate_content_stream.side_effect = genai_errors.ClientError(429, {"message": "Rate limit"})
         
         config = {"temperature": 0.7}
         
         # Should raise rate limit error
-        with pytest.raises(Exception):
-            list(stream_gemini_api(
-                [{"role": "user", "parts": [{"text": "Hello"}]}],
-                config,
-                "test_api_key"
-            ))
+        with patch('src.llm.client.get_genai_client', return_value=mock_client):
+            with pytest.raises(Exception):
+                list(stream_gemini_api(
+                    [{"role": "user", "parts": [{"text": "Hello"}]}],
+                    config,
+                    "test_api_key"
+                ))

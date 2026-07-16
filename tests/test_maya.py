@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Any, Generator
 test_file_dir = Path(__file__).resolve().parent
 
 from src.config import get_api_keys, setup_logging
-from src.llm import initialize_llm, get_all_tools
+from src.llm import get_all_tools
 
 from src.voice import initialize_cartesia_client
 from src.conversation.processor import process_order
@@ -94,10 +94,8 @@ def _initialize_components(components: MayaTestComponents) -> None:
     logger.info(f"✅ Retrieved {len(tools)} LLM tools")
 
     logger.info("Initializing LLM client...")
-    components.llm = initialize_llm(
-        api_key=components.api_keys["google_api_key"],
-        tools=tools
-    )
+    from src.llm.client import get_genai_client
+    components.llm = get_genai_client(api_key=components.api_keys["google_api_key"])
     logger.info("✅ LLM client initialized")
 
 

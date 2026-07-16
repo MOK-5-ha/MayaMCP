@@ -138,10 +138,10 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
                 _session_clients[session_id] = {}
 
     # Create outside lock to avoid blocking other sessions
-    from .client import initialize_llm
+    from .client import get_genai_client
 
-    llm = initialize_llm(api_key=api_key, tools=tools)
-    logger.info("Created new LLM instance for session %s...", session_id[:8])
+    llm = get_genai_client(api_key=api_key)
+    logger.info("Created new Client instance for session %s...", session_id[:8])
 
     with _registry_lock:
         entry = _session_clients[session_id]
@@ -149,7 +149,6 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
         existing = entry.get("llm")
         if existing and entry.get("gemini_hash") == key_hash:
             # Discard the redundant instance we just built
-            # (ChatGoogleGenerativeAI is stateless — no close needed)
             return existing
         entry["llm"] = llm
         entry["gemini_hash"] = key_hash

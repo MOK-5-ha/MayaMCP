@@ -12,9 +12,9 @@ MayaMCP/
 │   │   └── processor.py
 │   ├── handlers/           # Request handlers
 │   ├── llm/                # LLM integration
-│   │   ├── client.py       # Unified GenAI client wrapper
+│   │   ├── client.py       # Unified Google GenAI client wrapper
 │   │   ├── prompts.py      # Prompt templates
-│   │   ├── session_registry.py # Lazy loading for BYOK mode
+│   │   ├── session_registry.py # Lazy loading for BYOK mode clients
 │   │   └── tools.py        # Function calling tools
 │   ├── media/              # Media utilities
 │   ├── memvid/             # Memvid RAG implementation
@@ -31,7 +31,7 @@ MayaMCP/
 │   │   ├── pipeline.py
 │   │   ├── retrieval.py
 │   │   └── vector_store.py
-│   ├── security/           # Input/output scanning and encryption
+│   ├── security/           # Input/output scanning, encryption, scan config
 │   ├── ui/                 # Gradio UI
 │   │   ├── components.py
 │   │   ├── handlers.py

@@ -6,7 +6,6 @@ from typing import Any, Dict, Generator, List, Optional
 
 from google import genai
 from google.genai import types
-from langchain_google_genai import ChatGoogleGenerativeAI
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from ..config.logging_config import get_logger
@@ -107,11 +106,22 @@ def get_genai_client(api_key: str) -> genai.Client:
 
 def build_generate_config(config_dict: Dict[str, Any]) -> types.GenerateContentConfig:
     """Map our generation config dict to a GenerateContentConfig."""
+    raw_tools = config_dict.get("tools")
+    processed_tools = None
+    if raw_tools:
+        processed_tools = []
+        for t in raw_tools:
+            if hasattr(t, "func"):
+                processed_tools.append(t.func)
+            else:
+                processed_tools.append(t)
     return types.GenerateContentConfig(
         temperature=config_dict.get("temperature"),
         top_p=config_dict.get("top_p"),
         top_k=config_dict.get("top_k"),
         max_output_tokens=config_dict.get("max_output_tokens"),
+        tools=processed_tools,
+        system_instruction=config_dict.get("system_instruction"),
     )
 
 
@@ -120,8 +130,8 @@ def get_model_name() -> str:
     return get_model_config()["model_version"]
 
 
-def get_langchain_llm_params() -> Dict[str, Any]:
-    """Return a dict of params for ChatGoogleGenerativeAI construction."""
+def get_gemini_params() -> Dict[str, Any]:
+    """Return a dict of params for Gemini construction."""
     cfg = get_model_config()
     return {
         "model": cfg["model_version"],
@@ -130,46 +140,6 @@ def get_langchain_llm_params() -> Dict[str, Any]:
         "top_k": cfg["top_k"],
         "max_output_tokens": cfg["max_output_tokens"],
     }
-
-
-def initialize_llm(api_key: str, tools: Optional[List] = None) -> ChatGoogleGenerativeAI:
-    """
-    Initialize and return the LLM used for completion.
-
-    Args:
-        api_key: Google API key
-        tools: List of tools to bind to the LLM
-
-    Returns:
-        Initialized ChatGoogleGenerativeAI instance
-    """
-    try:
-        params = get_langchain_llm_params()
-
-        # Initialize ChatGoogleGenerativeAI with the Gemini model
-        llm = ChatGoogleGenerativeAI(
-            model=params["model"],
-            temperature=params["temperature"],
-            top_p=params["top_p"],
-            top_k=params["top_k"],
-            max_output_tokens=params["max_output_tokens"],
-            google_api_key=api_key,
-        )
-
-        # Bind tools if provided
-        if tools:
-            llm = llm.bind_tools(tools)
-            tool_count = len(tools)
-            tool_word = "tool" if tool_count == 1 else "tools"
-            logger.info(f"Successfully initialized LangChain ChatGoogleGenerativeAI model bound with {tool_count} {tool_word}.")
-        else:
-            logger.info("Successfully initialized LangChain ChatGoogleGenerativeAI model without tools.")
-
-        return llm
-
-    except Exception as e:
-        logger.error(f"Error initializing LLM: {e}")
-        raise
 
 @retry(
     stop=stop_after_attempt(3),
