@@ -31,11 +31,7 @@ MayaMCP/
 │   │   ├── pipeline.py
 │   │   ├── retrieval.py
 │   │   └── vector_store.py
-│   ├── payments/           # Stripe MCP client and payment logic
 │   ├── security/           # Input/output scanning, encryption, scan config
-│   ├── prompt_engineering/ # Prompt templates
-│   ├── handlers/           # Request handlers
-│   ├── media/              # Media utilities
 │   ├── ui/                 # Gradio UI
 │   │   ├── components.py
 │   │   ├── handlers.py

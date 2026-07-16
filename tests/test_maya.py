@@ -94,8 +94,8 @@ def _initialize_components(components: MayaTestComponents) -> None:
     logger.info(f"✅ Retrieved {len(tools)} LLM tools")
 
     logger.info("Initializing LLM client...")
-    from google import genai
-    components.llm = genai.Client(api_key=components.api_keys["google_api_key"])
+    from src.llm.client import get_genai_client
+    components.llm = get_genai_client(api_key=components.api_keys["google_api_key"])
     logger.info("✅ LLM client initialized")
 
 

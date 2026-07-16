@@ -138,9 +138,9 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
                 _session_clients[session_id] = {}
 
     # Create outside lock to avoid blocking other sessions
-    from google import genai
+    from .client import get_genai_client
 
-    llm = genai.Client(api_key=api_key)
+    llm = get_genai_client(api_key=api_key)
     logger.info("Created new Client instance for session %s...", session_id[:8])
 
     with _registry_lock:

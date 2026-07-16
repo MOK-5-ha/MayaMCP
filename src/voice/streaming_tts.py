@@ -135,6 +135,28 @@ def generate_streaming_audio(
         logger.warning("Audio worker thread did not complete cleanly")
 
 
+class QueueIterator:
+    """Thread-safe queue iterator to pass sentences lazily to the audio worker thread."""
+    def __init__(self):
+        self.queue = queue.Queue()
+        self.sentinel = object()
+        
+    def put(self, item):
+        self.queue.put(item)
+        
+    def stop(self):
+        self.queue.put(self.sentinel)
+        
+    def __iter__(self):
+        return self
+        
+    def __next__(self):
+        item = self.queue.get()
+        if item is self.sentinel:
+            raise StopIteration
+        return item
+
+
 def create_pipelined_tts_generator(
     sentence_stream: Generator[dict, None, None],
     cartesia_client,
@@ -151,37 +173,34 @@ def create_pipelined_tts_generator(
     Yields:
         Dict with combined streaming and TTS events
     """
-    # Drive sentence_stream and collect all its events
-    text_events = list(sentence_stream)
-    
-    # Extract sentences from the stream
-    def sentence_extractor():
-        for event in text_events:
-            if event['type'] == 'sentence':
-                yield event['content']
-            elif event['type'] == 'complete':
-                break
-    
-    # Start streaming audio generation
-    sentence_gen = sentence_extractor()
-    audio_gen = generate_streaming_audio(sentence_gen, cartesia_client, voice_id)
-    
+    sentence_queue_iter = QueueIterator()
+    audio_gen = generate_streaming_audio(sentence_queue_iter, cartesia_client, voice_id)
     audio_iter = iter(audio_gen)
-    for text_event in text_events:
-        # Yield text event first
-        yield text_event
-        
-        # If it's a sentence or complete, interleave with corresponding audio event
-        # Skipping/draining and yielding heartbeat events before retrieving the matching audio event
-        if text_event['type'] in ['sentence', 'complete']:
-            try:
-                while True:
-                    audio_event = next(audio_iter)
-                    yield audio_event
-                    if audio_event.get('type') != 'heartbeat':
-                        break
-            except StopIteration:
-                pass
+    
+    try:
+        for text_event in sentence_stream:
+            # Yield text event first
+            yield text_event
+            
+            # Feed the audio generator as sentences arrive
+            if text_event['type'] == 'sentence':
+                sentence_queue_iter.put(text_event['content'])
+            elif text_event['type'] == 'complete':
+                sentence_queue_iter.stop()
+                
+            # If it's a sentence or complete, interleave with corresponding audio event
+            # Skipping/draining and yielding heartbeat events before retrieving the matching audio event
+            if text_event['type'] in ['sentence', 'complete']:
+                try:
+                    while True:
+                        audio_event = next(audio_iter)
+                        yield audio_event
+                        if audio_event.get('type') != 'heartbeat':
+                            break
+                except StopIteration:
+                    pass
+    finally:
+        sentence_queue_iter.stop()
     
     # Yield any remaining audio events
     for audio_event in audio_iter:

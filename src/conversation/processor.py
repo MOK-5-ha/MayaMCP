@@ -82,6 +82,24 @@ def extract_emotion(text):
         return emotion, clean_text
     return "neutral", text
 
+def _dispatch_tool(tool_name: str, tool_args: dict, tool_map: dict) -> str:
+    """Execute a single tool with args and return the string output."""
+    selected_tool = tool_map.get(tool_name)
+    if not selected_tool:
+        return f"Error: Tool '{tool_name}' not found."
+    if not isinstance(tool_args, dict):
+        return f"Error: Malformed arguments for tool {tool_name}."
+    try:
+        tool_output = selected_tool(**tool_args)
+        if should_log_sensitive():
+            logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
+        return str(tool_output)
+    except TypeError:
+        return f"Error: Invalid parameters for tool {tool_name}."
+    except Exception as e:
+        return f"Error executing tool {tool_name}: {e}"
+
+
 def process_order(
     user_input_text: str,
     current_session_history: List[Dict[str, str]],
@@ -405,22 +423,8 @@ def process_order(
                         tool_name = tool_call.get("name")
                         tool_args = tool_call.get("args", {})
                         tool_id = tool_call.get("id")
-                        selected_tool = tool_map.get(tool_name)
-                        if selected_tool:
-                            if not isinstance(tool_args, dict):
-                                tool_output = f"Error: Malformed arguments for tool {tool_name}."
-                            else:
-                                try:
-                                    tool_output = selected_tool(**tool_args)
-                                    if should_log_sensitive():
-                                        logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
-                                except TypeError as te:
-                                    tool_output = f"Error: Invalid parameters for tool {tool_name}."
-                                except Exception as e:
-                                    tool_output = f"Error executing tool {tool_name}: {e}"
-                            tool_messages.append({"role": "tool", "content": str(tool_output), "tool_call_id": tool_id})
-                        else:
-                            tool_messages.append({"role": "tool", "content": f"Error: Tool '{tool_name}' not found.", "tool_call_id": tool_id})
+                        tool_output = _dispatch_tool(tool_name, tool_args, tool_map)
+                        tool_messages.append({"role": "tool", "content": tool_output, "tool_call_id": tool_id})
                     messages.extend(tool_messages)
                 else:
                     from google.genai import types
@@ -429,35 +433,14 @@ def process_order(
                         tool_name = tool_call.get("name")
                         tool_args = tool_call.get("args", {})
                         tool_id = tool_call.get("id")
-                        selected_tool = tool_map.get(tool_name)
-                        if selected_tool:
-                            if not isinstance(tool_args, dict):
-                                tool_output = f"Error: Malformed arguments for tool {tool_name}."
-                            else:
-                                try:
-                                    tool_output = selected_tool(**tool_args)
-                                    if should_log_sensitive():
-                                        logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
-                                except TypeError as te:
-                                    tool_output = f"Error: Invalid parameters for tool {tool_name}."
-                                except Exception as e:
-                                    tool_output = f"Error executing tool {tool_name}: {e}"
-                            
-                            response_parts.append(
-                                types.Part.from_function_response(
-                                    name=tool_name,
-                                    response={"result": str(tool_output)},
-                                    id=tool_id
-                                )
+                        tool_output = _dispatch_tool(tool_name, tool_args, tool_map)
+                        response_parts.append(
+                            types.Part.from_function_response(
+                                name=tool_name,
+                                response={"result": tool_output},
+                                id=tool_id
                             )
-                        else:
-                            response_parts.append(
-                                types.Part.from_function_response(
-                                    name=tool_name,
-                                    response={"result": f"Error: Tool '{tool_name}' not found."},
-                                    id=tool_id
-                                )
-                            )
+                        )
                     messages.append(types.Content(role="user", parts=response_parts))
                 
                 logger.info("Sending tool results back to LLM...")
