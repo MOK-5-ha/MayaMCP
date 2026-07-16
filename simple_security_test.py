@@ -71,7 +71,7 @@ def test_basic_functionality():
         except ImportError as e:
             session_error = f"import failed: {e}"
         except Exception as e:
-            session_error = e
+            session_error = str(e)
         finally:
             if started:
                 try:

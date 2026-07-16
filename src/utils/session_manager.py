@@ -301,7 +301,7 @@ def cleanup_expired_sessions_background(
     Returns:
         The cleanup thread
     """
-    global _cleanup_thread, _cleanup_thread_lock
+    global _cleanup_thread
     
     with _cleanup_thread_lock:
         # Check if cleanup thread already exists and is alive
@@ -311,9 +311,6 @@ def cleanup_expired_sessions_background(
         # Create new cleanup thread
         def cleanup_loop():
             manager = session_manager or get_session_manager()
-            if manager is None:
-                logger.error("No session manager available; cleanup thread exiting")
-                return
             logger.info(f"Session cleanup thread started (interval: {interval_seconds}s)")
             
             while not stop_event.is_set():

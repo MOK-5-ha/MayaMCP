@@ -1,7 +1,7 @@
 """Unit tests for UI handlers."""
 
 from unittest.mock import Mock, patch, MagicMock
-from src.ui.handlers import handle_gradio_input, clear_chat_state, handle_gradio_input_stream
+from src.ui.handlers import handle_gradio_input, clear_chat_state, handle_gradio_input_stream, handle_gradio_streaming_input
 from src.llm.session_registry import SessionLimitExceededError
 
 
@@ -402,21 +402,35 @@ class TestClearChatState:
         result = clear_chat_state(request=_make_request(), app_state={})
         mock_reset_session_state.assert_called_once()
         assert result == ([], [], [], None)
+
+class TestHandleGradioStreamingInput:
+    """Test cases for handle_gradio_streaming_input function."""
+
     @patch('src.ui.handlers.handle_gradio_input_stream')
-    def test_handle_gradio_streaming_input_session_limit(
+    def test_handle_gradio_streaming_input_routing(
         self, mock_handle_stream
     ):
         """Test handle_gradio_streaming_input correctly routes to streaming handler."""
-        from src.ui.handlers import handle_gradio_streaming_input
-        
         mock_handle_stream.return_value = ["event"]
+        req = _make_request()
         
         result = handle_gradio_streaming_input(
-            "Hi", [], 0.0, 1000.0, None, 0.0,
-            streaming_enabled=True, request=_make_request(),
+            user_input="Hi",
+            session_history_state=[],
+            current_tab=0.0,
+            current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
+            streaming_enabled=True,
+            request=req,
             app_state={}
         )
         
+        mock_handle_stream.assert_called_once_with(
+            "Hi", [], 0.0, 1000.0, None, 0.0, req, None, None, None, {}, 'assets/bartender_avatar.jpg'
+        )
+        assert result == ["event"]
+
     @patch('src.ui.handlers.process_order_stream')
     @patch('src.ui.handlers.get_session_tts')
     @patch('src.ui.handlers.get_session_llm')
@@ -446,5 +460,8 @@ class TestClearChatState:
         
         assert event['type'] == 'error'
         assert "at capacity" in event['content']
+        # handler should append the echoed user turn and the error turn
         assert len(event['history']) == 2
+        assert event['history'][0]['role'] == 'user'
+        assert event['history'][1]['role'] == 'assistant'
         assert 'quota_error_html' not in event

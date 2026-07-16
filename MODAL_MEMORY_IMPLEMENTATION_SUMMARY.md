@@ -161,7 +161,7 @@ MODAL_MAX_CONTAINERS=10
 
 ## ⚠️ Current Limitations
 
-1. **Distributed Session Coordination**: Session registry is currently per-container, meaning each Modal container can admit up to `MAYA_SESSIONS_PER_CONTAINER` sessions independently. This makes the global `MAYA_MAX_SESSIONS` limit effectively unenforced across the deployment, potentially allowing more concurrent sessions than intended. See Future Enhancement #1 (Distributed Session Coordination) below.
+1. **Distributed Session Coordination**: Session registry is currently per-container, meaning each Modal container can admit up to `MAYA_SESSIONS_PER_CONTAINER` sessions independently. This makes the global `MAYA_MAX_SESSIONS` limit effectively unenforced across the deployment, potentially allowing more concurrent sessions than intended. See [Future Enhancement #1](#-future-enhancements) (Distributed Session Coordination) below.
 
 2. **Memory Limit Configuration**: The `MAYA_MAX_SESSION_MEMORY_MB` environment variable is not implemented in the current deployment. Memory limits are enforced only at the container level via cgroups, not at the individual session level.
 
@@ -177,7 +177,7 @@ MODAL_MAX_CONTAINERS=10
 
 ## 🔧 Future Enhancements
 
-1. **Distributed Session Coordination**: Use Modal Dict for cross-container session tracking (Related limitation: Current Limitations → Distributed Session Coordination)
+1. **Distributed Session Coordination**: Use Modal Dict for cross-container session tracking (Related limitation: See [Current Limitations](#-current-limitations) → Distributed Session Coordination)
 2. **Advanced Metrics**: Session memory usage per session (if needed)
 3. **Auto-scaling Integration**: Memory-based container scaling triggers
 4. **Performance Optimization**: Memory usage patterns and optimization recommendations

@@ -288,7 +288,12 @@ def handle_gradio_input_stream(
         logger.warning("app_state not provided, using a temporary local dict")
         app_state = {}
 
-    session_id = request.session_hash if request else "default"
+    # Extract session ID from request
+    session_id = "default"
+    if request:
+        session_id = request.session_hash
+    else:
+        logger.warning("No request object provided, using default session ID")
 
     # Get API keys
     api_key_state = get_api_key_state(session_id, app_state)

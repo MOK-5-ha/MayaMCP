@@ -32,6 +32,9 @@ _stage_debug = os.getenv("STAGE_DEBUG_SOURCE") or os.getenv("DEBUG")
 if (_stage_debug or "").strip().lower() in {"1", "true", "yes", "on"}:
     image = image.add_local_dir("src", "/root/src")
 # Resource configuration (configurable via environment variables)
+# Note: MODAL_MAX_CONTAINERS is read from the host environment at deploy time
+# and passed as a static value to the @app.function decorator. 
+# Changing runtime env vars or dashboard settings will not affect this limit.
 MEMORY_MB = int(os.environ.get("MODAL_MEMORY_MB", "4096"))
 MODAL_MAX_CONTAINERS = int(os.environ.get("MODAL_MAX_CONTAINERS", "3"))
 
@@ -40,22 +43,36 @@ if MEMORY_MB <= 0:
 if MODAL_MAX_CONTAINERS <= 0:
     raise ValueError(f"MODAL_MAX_CONTAINERS must be positive, got {MODAL_MAX_CONTAINERS}")
 
-# Create Modal secret for production from deployment environment
-maya_secrets = modal.Secret.from_dict({
-    "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", ""),
-    "CARTESIA_API_KEY": os.environ.get("CARTESIA_API_KEY", ""),
-    "MAYA_MASTER_KEY": os.environ.get("MAYA_MASTER_KEY", ""),
-})
+# Build secret list starting with the named secret for late-binding/rotation
+maya_secrets_list = [modal.Secret.from_name("maya-secrets")]
+
+# Build local overrides dict, only including non-empty host env values for required keys
+REQUIRED_KEYS = ["GEMINI_API_KEY", "CARTESIA_API_KEY", "MAYA_MASTER_KEY"]
+overrides = {}
+for key in REQUIRED_KEYS:
+    val = os.environ.get(key)
+    if val and val.strip():
+        overrides[key] = val.strip()
+    else:
+        # Warn if missing locally; we don't know if it's in the named secret yet
+        # but Modal will error at deploy/runtime if it's missing from both.
+        print(f"WEB_DEPLOY: Warning - {key} is missing from host environment. "
+              f"Container will rely on named secret 'maya-secrets'.")
+
+# If we have overrides, add them as a second secret (overwrites named secret if clash)
+if overrides:
+    maya_secrets_list.append(modal.Secret.from_dict(overrides))
+
 
 
 @app.function(
     image=image,
-    secrets=[maya_secrets],
+    secrets=maya_secrets_list,
     volumes={"/root/assets": storage},
     scaledown_window=300,
     timeout=600,
     memory=MEMORY_MB,
-    max_containers=MODAL_MAX_CONTAINERS,
+    max_containers=MODAL_MAX_CONTAINERS,  # Static deployment-time limit
 )
 @modal.asgi_app()
 def serve_maya():
@@ -238,8 +255,7 @@ def serve_maya():
     from fastapi import FastAPI
     from fastapi.responses import PlainTextResponse
     from gradio.routes import mount_gradio_app
-    
-    web_app = FastAPI()
+    from contextlib import asynccontextmanager
     
     # Track process start time for uptime metric
     START_TIME = time.time()
@@ -252,9 +268,12 @@ def serve_maya():
             cleanup_thread_ref[0].join(timeout=5.0)  # Wait for graceful shutdown
             cleanup_thread_ref[0] = None
 
-    @web_app.on_event("shutdown")
-    def on_shutdown():
+    @asynccontextmanager
+    async def app_lifespan(app: FastAPI):
+        yield
         shutdown_cleanup_thread()
+
+    web_app = FastAPI(lifespan=app_lifespan)
 
     # Prometheus-style metrics endpoint
     def _metrics_text():
@@ -290,9 +309,16 @@ def serve_maya():
                 lines.append('# TYPE maya_container_memory_limit_bytes gauge')
                 lines.append(f'maya_container_memory_limit_bytes {lim_b}')
             if mem_util is not None:
-                lines.append('# HELP maya_container_memory_utilization Container memory utilization ratio (0-1)')
-                lines.append('# TYPE maya_container_memory_utilization gauge')
-                lines.append(f'maya_container_memory_utilization {mem_util:.3f}')
+                try:
+                    mem_util_float = float(mem_util)
+                except (ValueError, TypeError):
+                    mem_util_float = None
+                    logger.warning(f"Invalid memory utilization value: {mem_util}")
+
+                if mem_util_float is not None:
+                    lines.append('# HELP maya_container_memory_utilization Container memory utilization ratio (0-1)')
+                    lines.append('# TYPE maya_container_memory_utilization gauge')
+                    lines.append(f'maya_container_memory_utilization {mem_util_float:.3f}')
             if avail is not None:
                 lines.append('# HELP maya_container_memory_available_mb Available memory in MB')
                 lines.append('# TYPE maya_container_memory_available_mb gauge')
@@ -366,11 +392,11 @@ def serve_maya():
                 
                 lines.append('# HELP maya_active_sessions Current number of active sessions')
                 lines.append('# TYPE maya_active_sessions gauge')
-                lines.append(f'maya_active_sessions {session_stats["current_sessions"]}')
+                lines.append(f'maya_active_sessions {int(session_stats.get("current_sessions", 0))}')
                 
                 lines.append('# HELP maya_max_sessions Maximum sessions per container')
                 lines.append('# TYPE maya_max_sessions gauge')
-                lines.append(f'maya_max_sessions {session_stats["max_sessions"]}')
+                lines.append(f'maya_max_sessions {int(session_stats.get("max_sessions", 0))}')
                 
                 lines.append('# HELP maya_session_utilization Session utilization ratio (0-1)')
                 lines.append('# TYPE maya_session_utilization gauge')
@@ -378,15 +404,15 @@ def serve_maya():
                 
                 lines.append('# HELP maya_sessions_created_total Total sessions created')
                 lines.append('# TYPE maya_sessions_created_total counter')
-                lines.append(f'maya_sessions_created_total {session_stats["sessions_created"]}')
+                lines.append(f'maya_sessions_created_total {int(session_stats.get("sessions_created", 0))}')
                 
                 lines.append('# HELP maya_sessions_rejected_total Total sessions rejected')
                 lines.append('# TYPE maya_sessions_rejected_total counter')
-                lines.append(f'maya_sessions_rejected_total {session_stats["sessions_rejected"]}')
+                lines.append(f'maya_sessions_rejected_total {int(session_stats.get("sessions_rejected", 0))}')
                 
                 lines.append('# HELP maya_sessions_expired_total Total sessions expired')
                 lines.append('# TYPE maya_sessions_expired_total counter')
-                lines.append(f'maya_sessions_expired_total {session_stats["sessions_expired"]}')
+                lines.append(f'maya_sessions_expired_total {int(session_stats.get("sessions_expired", 0))}')
             
         except Exception as e:
             logger.warning(f"Failed to collect session metrics: {e}")

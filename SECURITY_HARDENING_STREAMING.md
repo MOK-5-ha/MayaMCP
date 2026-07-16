@@ -224,7 +224,7 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
                 session_id[:8]
             )
             raise SessionLimitExceededError(
-                "Session rejected: session limit reached"
+                "Session rejected: memory or session limit reached"
             )
     else:
         # Legacy fallback: check session limit and reserve slot atomically
@@ -236,7 +236,7 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
                         MAX_CONCURRENT_SESSIONS
                     )
                     raise SessionLimitExceededError(
-                        f"Too many concurrent sessions: {MAX_CONCURRENT_SESSIONS}"
+                        "Too many concurrent sessions: %s" % MAX_CONCURRENT_SESSIONS
                     )
                 
                 # Reserve session slot atomically
@@ -303,9 +303,15 @@ def enforce_memory_limits():
     for session in sessions:
         memory_mb = get_session_memory(session) / (1024 * 1024)
         if memory_mb > MAX_SESSION_MEMORY_MB:
-            logger.warning(f"Session {session.session_id} exceeded memory limit: {memory_mb:.1f}MB > {MAX_SESSION_MEMORY_MB}MB")
+            logger.warning(
+                "Session %s exceeded memory limit: %.1fMB > %sMB",
+                session.session_id, memory_mb, MAX_SESSION_MEMORY_MB
+            )
             if not session.terminate_gracefully():
-                logger.error(f"Graceful termination failed for session {session.session_id}, forcing cleanup")
+                logger.error(
+                    "Graceful termination failed for session %s, forcing cleanup",
+                    session.session_id
+                )
                 session.close()
 ```
 

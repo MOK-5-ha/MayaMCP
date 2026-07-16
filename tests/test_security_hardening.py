@@ -80,9 +80,11 @@ def test_session_cleanup():
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval
         start_time = time.time()
-        while (time.time() - start_time) < timeout:
+        elapsed = 0.0
+        while elapsed < timeout:
+            elapsed = time.time() - start_time
             if state_manager.is_cleanup_running():
-                print(f"Cleanup thread started after {time.time() - start_time:.2f}s")
+                print(f"Cleanup thread started after {elapsed:.2f}s")
                 break
             time.sleep(poll_interval)
         else:
@@ -99,9 +101,11 @@ def test_session_cleanup():
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval
         start_time = time.time()
-        while (time.time() - start_time) < timeout:
+        elapsed = 0.0
+        while elapsed < timeout:
+            elapsed = time.time() - start_time
             if not state_manager.is_cleanup_running():
-                print(f"Cleanup thread stopped after {time.time() - start_time:.2f}s")
+                print(f"Cleanup thread stopped after {elapsed:.2f}s")
                 break
             time.sleep(poll_interval)
         else:

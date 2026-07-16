@@ -194,7 +194,7 @@ class TestMayaSessionManager:
         """Test session creation rejected due to memory limit."""
         mock_monitor = Mock()
         mock_monitor.get_memory_metrics.return_value = {
-            "available_mb": 10,  # Below default 50MB
+            "available_mb": 10,  # Below default 25MB (MAYA_DEFAULT_SESSION_MEMORY_MB)
             "utilization": 0.9,
             "pressure": False
         }
@@ -263,6 +263,7 @@ class TestMayaSessionManager:
         removed = manager.remove_session("test123")
         assert removed is True
         assert manager.get_session_count() == 0
+
     @patch('src.utils.session_manager.get_memory_monitor')
     def test_remove_nonexistent_session(self, mock_get_monitor):
         """Test removing a non-existent session."""
@@ -329,7 +330,8 @@ class TestMayaSessionManager:
         assert stats["max_sessions"] == 3  # Our fixed limit
         assert stats["sessions_created"] == 3
         assert "utilization" in stats
-        assert 0 <= stats["utilization"] <= 1  # Between 0% and 100%
+        assert stats["utilization"] == pytest.approx(1.0)
+        
 
 
 class TestGlobalFunctions:

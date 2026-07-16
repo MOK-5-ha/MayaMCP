@@ -184,26 +184,19 @@ maya_container_memory_utilization > 0.8
 
 ### Secret Management
 
-You can define secrets directly in your deployment script using `modal.Secret.from_dict`:
+> ⚠️ **SECURITY WARNING**: Never embed real credentials in source code. Using `modal.Secret.from_dict()` with literal values is a security anti-pattern that exposes secrets in version control.
 
-```python
-# Example of defining secrets in deploy.py
-maya_secrets = modal.Secret.from_dict({
-    "GEMINI_API_KEY": "your_production_gemini_key",
-    "CARTESIA_API_KEY": "your_production_cartesia_key",
-    "MAYA_MASTER_KEY": "your_encryption_key"
-})
-```
+**Recommended Secure Flow:**
 
-Alternatively, create them via the Modal CLI:
+1. **Create secrets via Modal CLI:**
 ```bash
-modal secret create maya-secrets GEMINI_API_KEY=... CARTESIA_API_KEY=... MAYA_MASTER_KEY=...
+modal secret create maya-secrets \
+  GEMINI_API_KEY=your_production_gemini_key \
+  CARTESIA_API_KEY=your_production_cartesia_key \
+  MAYA_MASTER_KEY=your_encryption_key
 ```
 
-### Environment Variables Security
-
-For production, use Modal secrets instead of `.env` file:
-
+2. **Reference secrets by name in deploy.py:**
 ```python
 # deploy.py - Secure configuration
 app = modal.App(name="mayamcp-production")
@@ -212,7 +205,10 @@ app = modal.App(name="mayamcp-production")
     secrets=[modal.Secret.from_name("maya-secrets")]
 )
 def secure_function():
-    pass
+    # Access secrets as environment variables
+    import os
+    gemini_key = os.environ["GEMINI_API_KEY"]
+    cartesia_key = os.environ["CARTESIA_API_KEY"]
 ```
 
 ## 🚀 Deployment Strategies
