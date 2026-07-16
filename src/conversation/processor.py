@@ -20,7 +20,7 @@ except ImportError:
 from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
-from ..llm.client import stream_gemini_api
+from ..llm.client import stream_gemini_api, call_gemini_api
 from ..utils.helpers import detect_order_inquiry, detect_speech_acts
 from ..utils.state_manager import is_order_finished, get_current_order_state, _get_store_and_session
 from ..utils.rate_limiter import check_rate_limits

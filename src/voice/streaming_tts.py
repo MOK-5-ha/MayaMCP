@@ -172,9 +172,14 @@ def create_pipelined_tts_generator(
         yield text_event
         
         # If it's a sentence or complete, interleave with corresponding audio event
+        # Skipping/draining and yielding heartbeat events before retrieving the matching audio event
         if text_event['type'] in ['sentence', 'complete']:
             try:
-                yield next(audio_iter)
+                while True:
+                    audio_event = next(audio_iter)
+                    yield audio_event
+                    if audio_event.get('type') != 'heartbeat':
+                        break
             except StopIteration:
                 pass
     
