@@ -19,8 +19,17 @@ from src.conversation.processor import process_order
 # 1. Initialize Weave
 if WANDB_API_KEY:
     os.environ["WANDB_API_KEY"] = WANDB_API_KEY
-# Force Weave to evaluate sequentially to respect API rate limits
-os.environ["WEAVE_PARALLELISM"] = "1"
+
+# Check Gemini Tier to determine parallelism and rate limits
+is_paid_tier = os.getenv("GEMINI_TIER", "free").lower() == "paid"
+
+if not is_paid_tier:
+    # Free tier: 15 RPM limits, force sequential evaluation
+    os.environ["WEAVE_PARALLELISM"] = "1"
+else:
+    # Paid tier: allows high concurrency
+    os.environ["WEAVE_PARALLELISM"] = "10"
+
 weave.init("mayamcp-evals")
 
 # 2. Define the Evaluation Dataset
@@ -84,9 +93,11 @@ class MayaWeaveModel(weave.Model):
         responses = []
         final_order = []
         
+        is_paid_tier = os.getenv("GEMINI_TIER", "free").lower() == "paid"
         for turn in turns:
-            # Respect rate limits between turns
-            time.sleep(2)
+            # Respect rate limits between turns for free tier
+            if not is_paid_tier:
+                time.sleep(2)
             
             response, _, history, order, _, _ = process_order(
                 turn,
