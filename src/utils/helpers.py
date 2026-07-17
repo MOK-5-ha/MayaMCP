@@ -1,6 +1,6 @@
 """Helper functions for conversation management."""
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple, Optional
 import re
 from ..config.logging_config import get_logger
 
@@ -268,3 +268,46 @@ def is_casual_conversation(user_input: str) -> bool:
             return False
     
     return True
+
+
+def extract_emotion(text: str) -> Tuple[str, str]:
+    """
+    Extract emotion state from text, e.g. [STATE: happy].
+    
+    Returns a tuple of (emotion, clean_text).
+    """
+    match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
+    if match:
+        emotion = match.group(1).lower()
+        clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
+        return emotion, clean_text
+    return "neutral", text
+
+
+def append_to_history(
+    history: List[Dict[str, str]], user_text: str, assistant_text: str
+) -> List[Dict[str, str]]:
+    """
+    Append user and assistant messages to history and return a new list.
+    """
+    updated = list(history)
+    updated.append({'role': 'user', 'content': user_text})
+    updated.append({'role': 'assistant', 'content': assistant_text})
+    return updated
+
+
+def get_overlay_payment_data(
+    payment_state: Dict[str, Any]
+) -> Tuple[float, float, Optional[int], float]:
+    """
+    Get payment data formatted for tab overlay.
+    
+    Returns:
+        Tuple of (tab_total, balance, tip_percentage, tip_amount)
+    """
+    return (
+        payment_state['tab_total'],
+        payment_state['balance'],
+        payment_state['tip_percentage'],
+        payment_state['tip_amount']
+    )

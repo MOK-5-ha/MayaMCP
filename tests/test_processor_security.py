@@ -16,7 +16,8 @@ class DummyLLM:
 @pytest.fixture
 def mock_security():
     with patch("src.conversation.processor.scan_input") as mock_input, \
-         patch("src.conversation.processor.scan_output") as mock_output:
+         patch("src.conversation.processor.scan_output") as mock_output, \
+         patch("src.conversation.processor.check_rate_limits") as mock_rate_limit:
         
         # Default valid
         mock_input.return_value.is_valid = True
@@ -24,6 +25,8 @@ def mock_security():
         
         mock_output.return_value.is_valid = True
         mock_output.return_value.sanitized_text = "valid output"
+        
+        mock_rate_limit.return_value = (True, "")
         
         yield mock_input, mock_output
 

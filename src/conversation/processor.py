@@ -21,11 +21,12 @@ from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
 from ..llm.client import stream_gemini_api, call_gemini_api
-from ..utils.helpers import detect_order_inquiry, detect_speech_acts
+from ..utils.helpers import detect_order_inquiry, detect_speech_acts, extract_emotion, append_to_history
 from ..utils.state_manager import is_order_finished, get_current_order_state, _get_store_and_session
 from ..utils.rate_limiter import check_rate_limits
 from ..utils.batch_state import batch_state_commits
 from ..utils.streaming import SentenceBuffer
+from ..utils.errors import is_quota_error
 from .phase_manager import ConversationPhaseManager
 
 logger = get_logger(__name__)
@@ -72,15 +73,6 @@ def _process_drink_context(drink_context: str) -> str:
     
     # Fallback to first token if no priority match
     return drink_tokens[0] if drink_tokens else ""
-
-def extract_emotion(text):
-    """Helper to extract emotion state from text."""
-    match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
-    if match:
-        emotion = match.group(1).lower()
-        clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
-        return emotion, clean_text
-    return "neutral", text
 
 def _dispatch_tool(tool_name: str, tool_args: dict, tool_map: dict) -> str:
     """Execute a single tool with args and return the string output."""
@@ -133,9 +125,7 @@ def process_order(
         logger.warning(f"Input blocked by security scanner: {scan_result.blocked_reason}")
         blocked_msg = scan_result.blocked_reason
         
-        updated_history = current_session_history[:]
-        updated_history.append({'role': 'user', 'content': user_input_text})
-        updated_history.append({'role': 'assistant', 'content': blocked_msg})
+        updated_history = append_to_history(current_session_history, user_input_text, blocked_msg)
         
         return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
 
@@ -145,9 +135,7 @@ def process_order(
         logger.warning(f"Rate limit exceeded: {rate_reason}")
         rate_error_msg = f"Rate limit exceeded: {rate_reason}"
         
-        updated_history = current_session_history[:]
-        updated_history.append({'role': 'user', 'content': user_input_text})
-        updated_history.append({'role': 'assistant', 'content': rate_error_msg})
+        updated_history = append_to_history(current_session_history, user_input_text, rate_error_msg)
         
         return rate_error_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
 
@@ -212,10 +200,6 @@ def process_order(
         # Parse emotion from response
         emotion_state, agent_response_text = extract_emotion(agent_response_text)
         
-        # Update history for Gradio display
-        updated_history_for_gradio = current_session_history[:] 
-        updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
-        
         # Security Scan: Output
         output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
         if not output_scan_result.is_valid:
@@ -223,7 +207,7 @@ def process_order(
             agent_response_text = output_scan_result.sanitized_text
             emotion_state = "neutral"
 
-        updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
+        updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
         
         # Return documented 6-tuple including emotion_state
         clear_current_session()
@@ -252,10 +236,6 @@ def process_order(
         # Parse emotion from response
         emotion_state, agent_response_text = extract_emotion(agent_response_text)
         
-        # Update history for Gradio display
-        updated_history_for_gradio = current_session_history[:] 
-        updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
-        
         # Security Scan: Output
         output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
         if not output_scan_result.is_valid:
@@ -263,7 +243,7 @@ def process_order(
             agent_response_text = output_scan_result.sanitized_text
             emotion_state = "neutral"
 
-        updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
+        updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
         
         clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
@@ -339,15 +319,7 @@ def process_order(
                                     "id": getattr(fc, "id", None)
                                 })
                 except Exception as invoke_err:
-                    err_msg = str(invoke_err).lower()
-                    err_code = getattr(invoke_err, "status_code", None)
-                    if (
-                        err_code == 429
-                        or "429" in err_msg
-                        or "rate" in err_msg
-                        or "quota" in err_msg
-                        or ("resource" in err_msg and "exhaust" in err_msg)
-                    ):
+                    if is_quota_error(invoke_err):
                         logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
                         quota_history = current_session_history[:]
                         quota_history.append({'role': 'user', 'content': user_input_text})
@@ -469,10 +441,6 @@ def process_order(
             # Parse emotion from response
             emotion_state, agent_response_text = extract_emotion(agent_response_text)
     
-            # Update history for Gradio display
-            updated_history_for_gradio = current_session_history[:] 
-            updated_history_for_gradio.append({'role': 'user', 'content': user_input_text})
-            
             # Security Scan: Output
             output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
             if not output_scan_result.is_valid:
@@ -480,7 +448,7 @@ def process_order(
                 agent_response_text = output_scan_result.sanitized_text
                 emotion_state = "neutral"
     
-            updated_history_for_gradio.append({'role': 'assistant', 'content': agent_response_text})
+            updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
     
             return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
@@ -488,9 +456,7 @@ def process_order(
             logger.exception(f"Critical error in process_order: {str(e)}")
             error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
             # Return original state on critical error
-            safe_history = current_session_history[:]
-            safe_history.append({'role': 'user', 'content': user_input_text})
-            safe_history.append({'role': 'assistant', 'content': error_message})
+            safe_history = append_to_history(current_session_history, user_input_text, error_message)
             return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None, "neutral"
         finally:
             # Always clear session context after processing completes
