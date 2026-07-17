@@ -229,8 +229,8 @@ def process_order(
         clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
-    # Fallback to traditional intent detection
-    elif intent_match['intent'] and intent_match['confidence'] >= 0.5:
+    # Fallback to traditional intent detection (only if not asking about tips)
+    elif intent_match['intent'] and intent_match['confidence'] >= 0.5 and 'tip' not in user_input_text.lower():
         logger.info(f"Detected order intent: {intent_match['intent']} with confidence {intent_match['confidence']}")
         
         # Directly call the appropriate tool based on intent
