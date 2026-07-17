@@ -100,6 +100,22 @@ def _dispatch_tool(tool_name: str, tool_args: dict, tool_map: dict) -> str:
         return f"Error executing tool {tool_name}: {e}"
 
 
+def _build_order_context(session_id: str, app_state: dict) -> str:
+    """Helper to build a summary string of the current order for the system instruction."""
+    order_list = get_current_order_state(session_id, app_state)
+    if not order_list:
+        return "CURRENT ORDER: Empty."
+    items_str = []
+    for item in order_list:
+        q = item.get('quantity', 1)
+        mods = item.get('modifiers', 'no modifiers')
+        entry = f"{q}x {item['name']}"
+        if mods != 'no modifiers':
+            entry += f" with {mods}"
+        items_str.append(entry)
+    return "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
+
+
 def process_order(
     user_input_text: str,
     current_session_history: List[Dict[str, str]],
@@ -230,7 +246,7 @@ def process_order(
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
     # Fallback to traditional intent detection (only if not asking about tips)
-    elif intent_match['intent'] and intent_match['confidence'] >= 0.5 and 'tip' not in user_input_text.lower():
+    elif intent_match['intent'] and intent_match['confidence'] >= 0.5 and not re.search(r'\btips?\b', user_input_text, re.IGNORECASE):
         logger.info(f"Detected order intent: {intent_match['intent']} with confidence {intent_match['confidence']}")
         
         # Directly call the appropriate tool based on intent
@@ -277,19 +293,7 @@ def process_order(
     
     # Combine system prompt and menu context for system instruction
     # Inject current order to prevent the LLM from duplicating orders across turns
-    current_order_list = get_current_order_state(session_id, app_state)
-    if current_order_list:
-        items_str = []
-        for item in current_order_list:
-            q = item.get('quantity', 1)
-            mods = item.get('modifiers', 'no modifiers')
-            if mods != 'no modifiers':
-                items_str.append(f"{q}x {item['name']} with {mods}")
-            else:
-                items_str.append(f"{q}x {item['name']}")
-        order_context = "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
-    else:
-        order_context = "CURRENT ORDER: Empty."
+    order_context = _build_order_context(session_id, app_state)
 
     system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
@@ -630,19 +634,7 @@ def process_order_stream(
             
             # Combine system prompt and menu context for system instruction
             # Inject current order to prevent the LLM from duplicating orders across turns
-            current_order_list = get_current_order_state(session_id, app_state)
-            if current_order_list:
-                items_str = []
-                for item in current_order_list:
-                    q = item.get('quantity', 1)
-                    mods = item.get('modifiers', 'no modifiers')
-                    if mods != 'no modifiers':
-                        items_str.append(f"{q}x {item['name']} with {mods}")
-                    else:
-                        items_str.append(f"{q}x {item['name']}")
-                order_context = "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
-            else:
-                order_context = "CURRENT ORDER: Empty."
+            order_context = _build_order_context(session_id, app_state)
 
             system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
