@@ -15,6 +15,8 @@ from ..utils.state_manager import (
     has_valid_keys,
     DEFAULT_PAYMENT_STATE
 )
+from ..utils.errors import is_quota_error
+from ..utils.helpers import append_to_history, get_overlay_payment_data
 from ..utils.batch_state import batch_state_commits
 from .tab_overlay import (
     create_tab_overlay_html,
@@ -23,18 +25,6 @@ from .api_key_modal import QUOTA_ERROR_SENTINEL, create_quota_error_html
 
 logger = get_logger(__name__)
 
-
-def _is_quota_error(error: Exception) -> bool:
-    """Check whether an exception looks like a Gemini quota / rate-limit error."""
-    msg = str(error).lower()
-    code = getattr(error, "status_code", None)
-    return (
-        code == 429
-        or "429" in msg
-        or "rate" in msg
-        or "quota" in msg
-        or ("resource" in msg and "exhaust" in msg)
-    )
 
 
 def resolve_avatar_path(
@@ -110,9 +100,7 @@ def handle_gradio_input(
 
     # --- Get per-session API keys ---
     if not has_valid_keys(session_id, app_state):
-        safe_history = session_history_state[:]
-        safe_history.append({'role': 'user', 'content': user_input})
-        safe_history.append({'role': 'assistant', 'content': 'Please provide your API keys first.'})
+        safe_history = append_to_history(session_history_state, user_input, 'Please provide your API keys first.')
         overlay_html = create_tab_overlay_html(
             tab_amount=current_tab, balance=current_balance,
             prev_tab=current_tab, prev_balance=current_balance,
@@ -157,9 +145,7 @@ def handle_gradio_input(
             if response_text == QUOTA_ERROR_SENTINEL:
                 quota_error_html = create_quota_error_html()
                 response_text = "It looks like your API key has hit its rate limit. Please check the popup for details."
-                updated_history = session_history_state[:]
-                updated_history.append({'role': 'user', 'content': user_input})
-                updated_history.append({'role': 'assistant', 'content': response_text})
+                updated_history = append_to_history(session_history_state, user_input, response_text)
                 updated_history_for_gradio = updated_history
 
         # --- Get Voice Audio ---
@@ -177,10 +163,7 @@ def handle_gradio_input(
 
         # Get updated payment state for overlay
         payment_state = get_payment_state(session_id, app_state)
-        new_tab = payment_state['tab_total']
-        new_balance = payment_state['balance']
-        new_tip_percentage = payment_state['tip_percentage']
-        new_tip_amount = payment_state['tip_amount']
+        new_tab, new_balance, new_tip_percentage, new_tip_amount = get_overlay_payment_data(payment_state)
 
         # Resolve Avatar based on Emotion State
         final_avatar_path = resolve_avatar_path(emotion_state, avatar_path)
@@ -208,16 +191,14 @@ def handle_gradio_input(
             logger.warning(f"Session limit exceeded: {e}")
             friendly = "The bar is at capacity right now! Please try again in a moment."
             # No quota error popup for session limit exceeded
-        elif _is_quota_error(e):
+        elif is_quota_error(e):
             quota_error_html = create_quota_error_html()
             friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."
         else:
             logger.exception(f"Error during process_order: {e}")
             friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
 
-        safe_history = session_history_state[:]
-        safe_history.append({'role': 'user', 'content': user_input})
-        safe_history.append({'role': 'assistant', 'content': friendly})
+        safe_history = append_to_history(session_history_state, user_input, friendly)
         overlay_html = create_tab_overlay_html(
             tab_amount=current_tab, balance=current_balance,
             prev_tab=current_tab, prev_balance=current_balance,
@@ -327,6 +308,8 @@ def handle_gradio_input_stream(
         )
         
         updated_history = session_history_state[:]
+        # Note: updated_history will be fully populated when completion or error event is received.
+        # This keeps compatibility with the streaming generator structure.
         
         for event in response_stream:
             if event['type'] == 'text_chunk':
@@ -359,15 +342,11 @@ def handle_gradio_input_stream(
                 emotion_state = event['emotion_state']
                 
                 # Update history
-                updated_history.append({'role': 'user', 'content': user_input})
-                updated_history.append({'role': 'assistant', 'content': final_text})
+                updated_history = append_to_history(session_history_state, user_input, final_text)
                 
                 # Get final payment state
                 final_payment_state = get_payment_state(session_id, app_state)
-                new_tab = final_payment_state['tab_total']
-                new_balance = final_payment_state['balance']
-                new_tip_percentage = final_payment_state['tip_percentage']
-                new_tip_amount = final_payment_state['tip_amount']
+                new_tab, new_balance, new_tip_percentage, new_tip_amount = get_overlay_payment_data(final_payment_state)
                 
                 # Resolve final avatar
                 final_avatar_path = resolve_avatar_path(
@@ -401,8 +380,7 @@ def handle_gradio_input_stream(
                 error_text = event['content']
                 emotion_state = event.get('emotion_state', 'neutral')
                 
-                updated_history.append({'role': 'user', 'content': user_input})
-                updated_history.append({'role': 'assistant', 'content': error_text})
+                updated_history = append_to_history(session_history_state, user_input, error_text)
                 
                 yield {
                     'type': 'error',
@@ -416,9 +394,7 @@ def handle_gradio_input_stream(
         logger.warning(f"Session limit exceeded: {e}")
         error_message = "The bar is at capacity right now! Please try again in a moment."
         
-        error_history = session_history_state[:]
-        error_history.append({'role': 'user', 'content': user_input})
-        error_history.append({'role': 'assistant', 'content': error_message})
+        error_history = append_to_history(session_history_state, user_input, error_message)
         
         error_payload = {
             'type': 'error',
@@ -431,7 +407,7 @@ def handle_gradio_input_stream(
         
     except Exception as e:
         # Handle quota errors and other exceptions
-        if _is_quota_error(e):
+        if is_quota_error(e):
             quota_error_html = create_quota_error_html()
             error_message = "It looks like your API key has hit its rate limit. Please check the popup for details."
         else:
@@ -439,9 +415,7 @@ def handle_gradio_input_stream(
             error_message = "I'm sorry, an unexpected error occurred. Please try again."
             quota_error_html = None
         
-        error_history = session_history_state[:]
-        error_history.append({'role': 'user', 'content': user_input})
-        error_history.append({'role': 'assistant', 'content': error_message})
+        error_history = append_to_history(session_history_state, user_input, error_message)
         
         error_payload = {
             'type': 'error',

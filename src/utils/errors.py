@@ -36,3 +36,17 @@ def classify_and_log_genai_error(e: Exception, logger: _LoggerLike, context: str
             # Last resort: ignore logging failure
             pass
 
+
+def is_quota_error(error: Exception) -> bool:
+    """Check whether an exception looks like a Gemini quota / rate-limit error."""
+    msg = str(error).lower()
+    code = getattr(error, "status_code", None)
+    return (
+        code == 429
+        or "429" in msg
+        or "rate" in msg
+        or "quota" in msg
+        or ("resource" in msg and "exhaust" in msg)
+    )
+
+
