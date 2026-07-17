@@ -136,6 +136,9 @@ The implementation includes:
 
 ## Other TODOs
 
+- [ ] Expand Weave evaluation dataset in `scripts/run_weave_evals.py`
+  - Add more conversation flow test cases (e.g., testing memory retrieval and complex payment edge cases).
+
 - [ ] Add Grafana dashboard JSON for MayaMCP metrics
   - Create a dashboard JSON (store at `monitoring/grafana/maya-mcp-dashboard.json`).
   - Panels to include (Prometheus metrics exposed at `/metrics`):
