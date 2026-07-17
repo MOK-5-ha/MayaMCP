@@ -20,50 +20,61 @@ def test_rate_limiting():
 
     # Validate rate limiter configuration
     assert limiter is not None, "Rate limiter should be initialized"
-    assert limiter.session_limit > 0, "Session limit should be positive"
-    assert limiter.app_limit > 0, "App limit should be positive"
-    assert limiter.burst_limit > 0, "Burst limit should be positive"
-    print(
-        f"Rate limiter config: session={limiter.session_limit}/min, "
-        f"app={limiter.app_limit}/min, burst={limiter.burst_limit}"
-    )
-
-    # Test normal operation
-    allowed, reason = check_rate_limits(session_id)
-    print(f"First request - Allowed: {allowed}, Reason: '{reason}'")
-    assert allowed, "First request should be allowed"
-
-    # Track total requests including the initial call
-    total_requests = 1
-
-    # TODO/FIXME: This test expects the intended burst behavior (burst_limit + 1 requests)
-    # Currently there's a double-counting bug in check_limits that causes premature denial.
-    # When the bug is fixed, this test should pass without modification.
-    # See rate limiter deadlock/lock ordering fixes for related issues.
     
-    # Test burst limit - run up to burst_limit + 1 to ensure denial happens
-    expected_max_requests = limiter.burst_limit + 1
+    # Backup existing limits and temporarily set to small values for fast test run
+    old_session_limit = limiter.session_limit
+    old_app_limit = limiter.app_limit
+    old_burst_limit = limiter.burst_limit
     
-    for i in range(expected_max_requests):
-        allowed, reason = check_rate_limits(session_id)
-        total_requests += 1
+    limiter.session_limit = 5
+    limiter.app_limit = 10
+    limiter.burst_limit = 3
+
+    try:
+        assert limiter.session_limit > 0, "Session limit should be positive"
+        assert limiter.app_limit > 0, "App limit should be positive"
+        assert limiter.burst_limit > 0, "Burst limit should be positive"
         print(
-            f"Request {total_requests} - Allowed: {allowed}, "
-            f"Reason: '{reason}'"
+            f"Rate limiter config: session={limiter.session_limit}/min, "
+            f"app={limiter.app_limit}/min, burst={limiter.burst_limit}"
         )
-        if not allowed:
-            break
 
-    # Assert that a denial actually occurred
-    assert not allowed, (
-        "Rate limiting should deny a request after burst limit"
-    )
-    
-    # Assert that total_requests equals expected (intended behavior)
-    assert total_requests == expected_max_requests, (
-        f"Expected {expected_max_requests} total requests before denial, "
-        f"but got {total_requests}"
-    )
+        # Test normal operation
+        allowed, reason = check_rate_limits(session_id)
+        print(f"First request - Allowed: {allowed}, Reason: '{reason}'")
+        assert allowed, "First request should be allowed"
+
+        # Track total requests including the initial call
+        total_requests = 1
+
+        # Test burst limit - run up to burst_limit + 1 to ensure denial happens
+        expected_max_requests = limiter.burst_limit + 1
+        
+        for i in range(expected_max_requests):
+            allowed, reason = check_rate_limits(session_id)
+            total_requests += 1
+            print(
+                f"Request {total_requests} - Allowed: {allowed}, "
+                f"Reason: '{reason}'"
+            )
+            if not allowed:
+                break
+
+        # Assert that a denial actually occurred
+        assert not allowed, (
+            "Rate limiting should deny a request after burst limit"
+        )
+        
+        # Assert that total_requests equals expected (intended behavior)
+        assert total_requests == expected_max_requests, (
+            f"Expected {expected_max_requests} total requests before denial, "
+            f"but got {total_requests}"
+        )
+    finally:
+        # Restore limits to prevent blocking subsequent tests in the session
+        limiter.session_limit = old_session_limit
+        limiter.app_limit = old_app_limit
+        limiter.burst_limit = old_burst_limit
 
 
 def test_session_cleanup():

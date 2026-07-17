@@ -58,6 +58,7 @@ pytest -m integration     # Integration tests only
 - Property-based tests use Hypothesis.
 - Always mock external APIs (Google, Cartesia, Stripe) — never make real calls in tests.
 - **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats instead of obsolete LangChain structures.
+- **Rate Limit Testing**: Never allow global app rate limits to restrict the standard test suite, as it causes false-negative token exhaustion errors. Set rate limit environment variables to high values (e.g., `9999`) in `tests/conftest.py`. When testing the rate limiter itself, use context-manager overrides to temporarily enforce limits strictly within those specific tests.
 
 ## Linting & Type Checking
 ```bash
@@ -88,6 +89,7 @@ Optional:
 - **BYOK mode**: Per-session LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
 - **Lazy Streaming Pipelining**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs (e.g. streaming LLM outputs to TTS). Consume them lazily (using queue-based iterators if passing items between threads) to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired, preventing payload misalignment.
+- **Intent Routing Safety**: When implementing deterministic intent routing (e.g., bypassing the LLM for hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`) as it is prone to false positives. Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to guarantee precise matching.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`

@@ -859,7 +859,9 @@ def add_to_order(
 @tool
 def get_order() -> str:
     """Returns the current list of items in the order for the agent to see."""
-    order_list = get_current_order_state()
+    session_id = get_current_session()
+    store = get_global_store()
+    order_list = get_current_order_state(session_id, store)
     
     if not order_list:
         return "The order is currently empty."
@@ -892,7 +894,9 @@ def get_order() -> str:
 @tool
 def confirm_order() -> str:
     """Displays the current order to the user and asks for confirmation."""
-    order_list = get_current_order_state()
+    session_id = get_current_session()
+    store = get_global_store()
+    order_list = get_current_order_state(session_id, store)
     
     if not order_list:
         return "There is nothing in the order to confirm. Please add items first."
@@ -922,7 +926,8 @@ def place_order() -> str:
         logger.warning("place_order called without session context")
         return "Error: No active session. Please refresh and try again."
     
-    order_list = get_current_order_state()
+    store = get_global_store()
+    order_list = get_current_order_state(session_id, store)
     
     if not order_list:
         return "Cannot place an empty order. Please add items first."
@@ -969,7 +974,9 @@ def clear_order() -> str:
 @tool
 def get_bill() -> str:
     """Calculates the total bill for all items ordered in this session."""
-    order_history = get_order_history()
+    session_id = get_current_session()
+    store = get_global_store()
+    order_history = get_order_history(session_id, store)
     
     if not order_history['items']:
         return "You haven't ordered anything yet."
@@ -1014,7 +1021,8 @@ def pay_bill() -> str:
         logger.warning("pay_bill called without session context")
         return "Error: No active session. Please refresh and try again."
     
-    order_history = get_order_history()
+    store = get_global_store()
+    order_history = get_order_history(session_id, store)
     
     if not order_history['items']:
         return "You haven't ordered anything yet."
@@ -1051,7 +1059,8 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
         logger.warning("add_tip called without session context")
         return "Error: No active session. Please refresh and try again."
     
-    order_history = get_order_history()
+    store = get_global_store()
+    order_history = get_order_history(session_id, store)
     
     if not order_history['items']:
         return "You haven't ordered anything yet, so there's nothing to tip on."

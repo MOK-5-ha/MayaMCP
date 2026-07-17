@@ -100,6 +100,22 @@ def _dispatch_tool(tool_name: str, tool_args: dict, tool_map: dict) -> str:
         return f"Error executing tool {tool_name}: {e}"
 
 
+def _build_order_context(session_id: str, app_state: dict) -> str:
+    """Helper to build a summary string of the current order for the system instruction."""
+    order_list = get_current_order_state(session_id, app_state)
+    if not order_list:
+        return "CURRENT ORDER: Empty."
+    items_str = []
+    for item in order_list:
+        q = item.get('quantity', 1)
+        mods = item.get('modifiers', 'no modifiers')
+        entry = f"{q}x {item['name']}"
+        if mods != 'no modifiers':
+            entry += f" with {mods}"
+        items_str.append(entry)
+    return "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
+
+
 def process_order(
     user_input_text: str,
     current_session_history: List[Dict[str, str]],
@@ -229,8 +245,8 @@ def process_order(
         clear_current_session()
         return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
     
-    # Fallback to traditional intent detection
-    elif intent_match['intent'] and intent_match['confidence'] >= 0.5:
+    # Fallback to traditional intent detection (only if not asking about tips)
+    elif intent_match['intent'] and intent_match['confidence'] >= 0.5 and not re.search(r'\btips?\b', user_input_text, re.IGNORECASE):
         logger.info(f"Detected order intent: {intent_match['intent']} with confidence {intent_match['confidence']}")
         
         # Directly call the appropriate tool based on intent
@@ -276,7 +292,10 @@ def process_order(
     combined_prompt = get_combined_prompt(current_phase, menu_text)
     
     # Combine system prompt and menu context for system instruction
-    system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text
+    # Inject current order to prevent the LLM from duplicating orders across turns
+    order_context = _build_order_context(session_id, app_state)
+
+    system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
     # Convert Gradio history
     history_limit = 10
@@ -307,6 +326,9 @@ def process_order(
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
         try:
+            # Set current session for tool calls
+            set_current_session(session_id)
+
             # --- LLM Interaction Loop (Handles Tool Calls) ---
             rag_applied = False  # Guard flag to prevent RAG re-application
             while True:
@@ -611,7 +633,10 @@ def process_order_stream(
             combined_prompt = get_combined_prompt(current_phase, menu_text)
             
             # Combine system prompt and menu context for system instruction
-            system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text
+            # Inject current order to prevent the LLM from duplicating orders across turns
+            order_context = _build_order_context(session_id, app_state)
+
+            system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
             # Get generation config and merge system instruction + tools
             from ..llm.client import get_model_config

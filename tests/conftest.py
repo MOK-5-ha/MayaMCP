@@ -5,8 +5,14 @@ This ensures tests run even if google-genai is not installed locally.
 
 import importlib.util as _importlib_util
 import sys
+import os
 from types import ModuleType
 from types import SimpleNamespace as NS
+
+# Set high rate limits for test environment to avoid test failures due to token depletion
+os.environ["MAYA_SESSION_RATE_LIMIT"] = "9999"
+os.environ["MAYA_APP_RATE_LIMIT"] = "9999"
+os.environ["MAYA_BURST_LIMIT"] = "9999"
 
 import pytest
 
