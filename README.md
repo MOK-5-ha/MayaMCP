@@ -33,11 +33,15 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Project Structure
 
+- `assets/`: Static files (avatar, media)
 - `config/`: Configuration files separate from code
-- `src/`: Core source code with modular organization
-- `data/`: Organized storage for different data types
-- `examples/`: Implementation references
+- `docs/`: Additional documentation (ADRs, emotion system)
+- `monitoring/`: Grafana dashboards and monitoring configurations
 - `notebooks/`: Experimentation and analysis
+- `scripts/`: Utility scripts, including Weave evaluations
+- `src/`: Core source code with modular organization
+  - `src/utils/`: Errors, helpers (centralized DRY logic), and state management
+- `tests/`: pytest suite (unit, integration, property-based)
 
 ## Architecture Updates
 
@@ -355,6 +359,22 @@ Tests are designed to run in CI environments with:
 - Mocked third-party services for integration tests
 - Configurable test execution based on available resources
 - Proper exit codes for build pipeline integration
+
+### Evaluations (Weave)
+
+The project includes an LLM-as-judge evaluation pipeline using [Weave by Weights & Biases](https://wandb.ai/site/weave).
+
+1. Set your `WANDB_API_KEY` in the `.env` file.
+2. Run evaluations using the provided script:
+   ```bash
+   python scripts/run_weave_evals.py
+   ```
+
+**Tier-Based Concurrency**: 
+- If you are on the Gemini Free Tier, evaluations run sequentially to respect the 15 RPM limit (set `GEMINI_TIER=free`).
+- If you are on a Paid Tier, evaluations will run concurrently for faster execution (set `GEMINI_TIER=paid`).
+
+**Note on Mocking**: When running standard pytest suites, always ensure the Native SDK and global `RateLimiter` are mocked properly (see `tests/conftest.py` for examples) to avoid accumulating state and hitting burst limits.
 
 ### Troubleshooting
 

@@ -51,6 +51,9 @@ pytest --cov              # With coverage
 pytest -m "not slow"      # Skip slow tests
 pytest -m unit            # Unit tests only
 pytest -m integration     # Integration tests only
+
+# Weave Evaluations (LLM-as-judge)
+python scripts/run_weave_evals.py
 ```
 - Tests live in `tests/` with `test_*.py` naming.
 - `tests/conftest.py` provides fixtures and SDK stubs for offline testing.
