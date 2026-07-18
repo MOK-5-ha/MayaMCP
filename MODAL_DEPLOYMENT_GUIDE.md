@@ -144,41 +144,6 @@ curl https://your-workspace--mayamcp.modal.run/healthz
 }
 ```
 
-### Metrics Endpoint
-
-Comprehensive metrics available at `/metrics`:
-
-```bash
-# Get all metrics
-curl https://your-workspace--mayamcp.modal.run/metrics
-
-# Key metrics to monitor:
-# - maya_container_memory_usage_bytes
-# - maya_container_memory_utilization
-# - maya_active_sessions
-# - maya_session_utilization
-# - maya_sessions_created_total
-# - maya_sessions_rejected_total
-# - maya_sessions_expired_total
-```
-
-### Grafana Dashboard Integration
-
-```promql
-# Example Prometheus queries for Grafana
-
-# Container Memory Usage
-maya_container_memory_utilization * 100
-
-# Session Utilization
-maya_session_utilization * 100
-
-# Session Rejection Rate
-rate(maya_sessions_rejected_total[5m]) * 60
-
-# Memory Pressure Alerts
-maya_container_memory_utilization > 0.8
-```
 
 ## 🔒 Security Configuration
 
