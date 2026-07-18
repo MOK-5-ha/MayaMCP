@@ -1,6 +1,7 @@
 """Shared error classification and logging helpers."""
-from typing import Protocol
 import re
+from typing import Protocol
+
 
 # We accept any logger-like object that supports .warning and .error
 class _LoggerLike(Protocol):

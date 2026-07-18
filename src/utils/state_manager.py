@@ -4,8 +4,10 @@ import os
 import re
 import threading
 import time
-from typing import Dict, List, Any, Optional, MutableMapping, Tuple, Literal
+from typing import Any, Dict, List, Literal, MutableMapping, Optional, Tuple
+
 from typing_extensions import TypedDict
+
 from ..config.logging_config import get_logger
 from ..security.encryption import get_encryption_manager
 
@@ -18,7 +20,7 @@ except ImportError:
     # Fallback if batch_state module is not available
     def get_current_batch_cache():
         return None
-    
+
     def is_in_batch_context():
         return False
 
@@ -93,33 +95,33 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
     # Check required fields if not partial
     if not allow_partial:
         required_fields = {'balance', 'tab_total', 'tip_percentage', 'tip_amount',
-                          'stripe_payment_id', 'payment_status', 'idempotency_key', 
+                          'stripe_payment_id', 'payment_status', 'idempotency_key',
                           'version', 'needs_reconciliation'}
         missing = required_fields - set(state.keys())
         if missing:
             raise PaymentStateValidationError(f"Missing required fields: {missing}")
-    
+
     # Validate balance >= 0
     if 'balance' in state:
         if not isinstance(state['balance'], (int, float)):
             raise PaymentStateValidationError("balance must be a number")
         if state['balance'] < 0:
             raise PaymentStateValidationError(f"balance must be >= 0, got {state['balance']}")
-    
+
     # Validate tab_total >= 0
     if 'tab_total' in state:
         if not isinstance(state['tab_total'], (int, float)):
             raise PaymentStateValidationError("tab_total must be a number")
         if state['tab_total'] < 0:
             raise PaymentStateValidationError(f"tab_total must be >= 0, got {state['tab_total']}")
-    
+
     # Validate version >= 0
     if 'version' in state:
         if not isinstance(state['version'], int):
             raise PaymentStateValidationError("version must be an integer")
         if state['version'] < 0:
             raise PaymentStateValidationError(f"version must be >= 0, got {state['version']}")
-    
+
     # Validate stripe_payment_id pattern
     if 'stripe_payment_id' in state:
         stripe_id = state['stripe_payment_id']
@@ -130,7 +132,7 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
                 raise PaymentStateValidationError(
                     f"stripe_payment_id must match pattern ^(plink_|pi_)[a-zA-Z0-9]+$, got {stripe_id}"
                 )
-    
+
     # Validate idempotency_key pattern
     if 'idempotency_key' in state:
         idem_key = state['idempotency_key']
@@ -141,7 +143,7 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
                 raise PaymentStateValidationError(
                     f"idempotency_key must match pattern {{session_id}}_{{unix_timestamp}}, got {idem_key}"
                 )
-    
+
     # Validate payment_status
     if 'payment_status' in state:
         valid_statuses = {'pending', 'processing', 'completed'}
@@ -149,12 +151,12 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
             raise PaymentStateValidationError(
                 f"payment_status must be one of {valid_statuses}, got {state['payment_status']}"
             )
-    
+
     # Validate needs_reconciliation is boolean
     if 'needs_reconciliation' in state:
         if not isinstance(state['needs_reconciliation'], bool):
             raise PaymentStateValidationError("needs_reconciliation must be a boolean")
-    
+
     # Validate tip_percentage (None or one of {10, 15, 20})
     if 'tip_percentage' in state:
         tip_pct = state['tip_percentage']
@@ -162,21 +164,21 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
             raise PaymentStateValidationError(
                 f"tip_percentage must be None or one of {VALID_TIP_PERCENTAGES}, got {tip_pct}"
             )
-    
+
     # Validate tip_amount >= 0
     if 'tip_amount' in state:
         if not isinstance(state['tip_amount'], (int, float)):
             raise PaymentStateValidationError("tip_amount must be a number")
         if state['tip_amount'] < 0:
             raise PaymentStateValidationError(f"tip_amount must be >= 0, got {state['tip_amount']}")
-    
+
     # Mutual constraint: needs_reconciliation == False when payment_status == 'completed'
     if 'payment_status' in state and 'needs_reconciliation' in state:
         if state['payment_status'] == 'completed' and state['needs_reconciliation']:
             raise PaymentStateValidationError(
                 "needs_reconciliation must be False when payment_status is 'completed'"
             )
-    
+
     return True
 
 
@@ -195,7 +197,7 @@ def is_valid_status_transition(current_status: str, new_status: str) -> bool:
     """
     if current_status == new_status:
         return True  # No change is always valid
-    
+
     allowed = VALID_STATUS_TRANSITIONS.get(current_status, set())
     return new_status in allowed
 
@@ -314,13 +316,13 @@ def _cleanup_expired_sessions() -> None:
         try:
             current_time = time.time()
             expired_sessions = []
-            
+
             with _session_locks_mutex:
                 # Find expired sessions
                 for session_id, last_access in _session_last_access.items():
                     if current_time - last_access > SESSION_EXPIRY_SECONDS:
                         expired_sessions.append(session_id)
-                
+
                 # Clean up each expired session atomically
                 for session_id in expired_sessions:
                     try:
@@ -328,11 +330,11 @@ def _cleanup_expired_sessions() -> None:
                         session_lock = _session_locks.get(session_id)
                         if session_lock:
                             session_lock.acquire()
-                        
+
                         # Remove all session state atomically
                         _session_locks.pop(session_id, None)
                         _session_last_access.pop(session_id, None)
-                        
+
                         # Attempt client cleanup (may fail, but session state is already removed)
                         try:
                             from ..llm.session_registry import cleanup_sessions
@@ -345,17 +347,17 @@ def _cleanup_expired_sessions() -> None:
                         except Exception as e:
                             logger.error(f"Error during session registry cleanup for {session_id}: {e}")
                             # Session state is already removed, but we log the failure
-                            
+
                     except Exception as e:
                         logger.error(f"Error during atomic cleanup of session {session_id}: {e}")
-                        
+
                         # Get retry count for logging and backoff
                         retry_count = _session_retry_counts.get(session_id, 0) + 1
-                        
+
                         if retry_count <= MAX_SESSION_CLEANUP_RETRIES:
                             # Calculate exponential backoff: 2^retry_count * 60 seconds, capped at MAX_BACKOFF
                             backoff_seconds = min(2 ** (retry_count - 1) * 60, MAX_BACKOFF)
-                            
+
                             # Rollback: re-insert session with corrected timing
                             # Set last_access so expiry triggers after backoff period from now
                             if session_lock is not None:
@@ -363,7 +365,7 @@ def _cleanup_expired_sessions() -> None:
                                 _session_retry_counts[session_id] = retry_count
                                 _session_locks[session_id] = session_lock
                                 _session_last_access[session_id] = current_time + backoff_seconds - SESSION_EXPIRY_SECONDS
-                                
+
                                 logger.warning(
                                     f"Cleanup failed for session {session_id[:8]}, "
                                     f"retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES} in {backoff_seconds}s"
@@ -378,7 +380,7 @@ def _cleanup_expired_sessions() -> None:
                             _session_locks.pop(session_id, None)
                             _session_last_access.pop(session_id, None)
                             _session_retry_counts.pop(session_id, None)
-                            
+
                             logger.error(
                                 f"Max cleanup retries exceeded for session {session_id[:8]}, "
                                 f"removing from all tracking (retry {retry_count}/{MAX_SESSION_CLEANUP_RETRIES})"
@@ -390,10 +392,10 @@ def _cleanup_expired_sessions() -> None:
                                 session_lock.release()
                             except Exception:
                                 logger.warning(f"Failed to release session lock for {session_id}")
-            
+
         except Exception as e:
             logger.error(f"Error in session cleanup task: {e}")
-        
+
         # Wait for next cleanup interval or stop event
         _cleanup_stop_event.wait(CLEANUP_INTERVAL_SECONDS)
 
@@ -405,11 +407,11 @@ def start_session_cleanup() -> None:
     Should be called during application initialization.
     """
     global _cleanup_thread
-    
+
     if _cleanup_thread is None or not _cleanup_thread.is_alive():
         # Clear any previous stop event before starting new thread
         _cleanup_stop_event.clear()
-        
+
         _cleanup_thread = threading.Thread(
             target=_cleanup_expired_sessions,
             name="session-cleanup",
@@ -426,11 +428,11 @@ def stop_session_cleanup() -> None:
     Should be called during application shutdown.
     """
     global _cleanup_thread
-    
+
     if _cleanup_thread and _cleanup_thread.is_alive():
         _cleanup_stop_event.set()
         _cleanup_thread.join(timeout=10)
-        
+
         # Verify thread actually stopped
         if _cleanup_thread.is_alive():
             logger.error("Session cleanup thread failed to stop within timeout")
@@ -554,13 +556,13 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     needs_update = False
 
     # Handle migration for session data (Requirement: 2.2, 7.2, 7.3, 3.1)
-    
+
     # 1. Ensure 'api_keys' exists
     if 'api_keys' not in session_data:
         logger.info(f"Adding api_keys state to existing session {session_id}")
         session_data['api_keys'] = copy.deepcopy(DEFAULT_API_KEY_STATE)
         needs_update = True
-        
+
     # 2. Ensure 'payment' exists
     if 'payment' not in session_data:
         logger.info(f"Adding payment state to existing session {session_id}")
@@ -576,7 +578,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         if 'tip_amount' not in payment:
             payment['tip_amount'] = 0.00
             payment_needs_update = True
-        
+
         if payment_needs_update:
             logger.info(f"Adding missing tip fields to existing session {session_id}")
             needs_update = True
@@ -603,7 +605,7 @@ def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, A
             batch_cache.set_cached_data(data, dirty=True)
             logger.debug(f"Saved session data to batch cache for {session_id}")
             return
-    
+
     # Fall back to immediate write if not in batch context
     store[session_id] = data
 
@@ -646,7 +648,7 @@ def update_conversation_state(session_id: Optional[str] = None, store: Optional[
         logger.warning("update_conversation_state called with updates=None")
         return
     session_id, store = _get_store_and_session(session_id, store)
-    
+
     lock = get_session_lock(session_id)
     with lock:
         data = _get_session_data(session_id, store)
@@ -657,50 +659,50 @@ def update_conversation_state(session_id: Optional[str] = None, store: Optional[
 def update_order_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None, action: str = "", item_data: Optional[Any] = None) -> None:
     """Update order state based on action."""
     session_id, store = _get_store_and_session(session_id, store)
-    
+
     lock = get_session_lock(session_id)
     with lock:
         session_data = _get_session_data(session_id, store)
         history = session_data['history']
         current_order = session_data['current_order']
-        
+
         if action == "add_item" and item_data:
             # Add item to current order
             current_order['order'].append(item_data)
-            
+
             # Add to order history
             history['items'].append(item_data.copy())
             history['total_cost'] += item_data['price']
-            
+
             logger.info(f"Added item to order for {session_id}: {item_data['name']}")
-            
+
         elif action == "place_order":
             # Mark order as finished and clear current order
             current_order['finished'] = True
             current_order['order'] = []
-            
+
             logger.info(f"Order placed for {session_id}")
-            
+
         elif action == "clear_order":
             # Clear current order
             current_order['order'] = []
             current_order['finished'] = False
-            
+
             logger.info(f"Order cleared for {session_id}")
-            
+
         elif action == "add_tip" and item_data:
             # Add tip to order history
             history['tip_amount'] = item_data['amount']
             history['tip_percentage'] = item_data['percentage']
-            
+
             logger.info(f"Tip added for {session_id}: ${item_data['amount']:.2f}")
-            
+
         elif action == "pay_bill":
             # Mark bill as paid
             history['paid'] = True
-            
+
             logger.info(f"Bill paid for {session_id}")
-            
+
         # Save changes
         _save_session_data(session_id, store, session_data)
 
@@ -748,14 +750,14 @@ def calculate_tip(tab_total: float, percentage: int) -> float:
     """
     if percentage not in VALID_TIP_PERCENTAGES:
         raise ValueError(f"percentage must be one of {VALID_TIP_PERCENTAGES}, got {percentage}")
-    
+
     tip = tab_total * (percentage / 100)
     return round(tip, 2)
 
 
 def set_tip(
-    session_id: str, 
-    store: MutableMapping, 
+    session_id: str,
+    store: MutableMapping,
     percentage: Optional[int]
 ) -> Tuple[float, float]:
     """
@@ -778,15 +780,15 @@ def set_tip(
     # Validate percentage
     if percentage is not None and percentage not in VALID_TIP_PERCENTAGES:
         raise ValueError(f"percentage must be None or one of {VALID_TIP_PERCENTAGES}, got {percentage}")
-    
+
     lock = get_session_lock(session_id)
-    
+
     with lock:
         data = _get_session_data(session_id, store)
         payment = data['payment']
         tab_total = payment['tab_total']
         current_percentage = payment['tip_percentage']
-        
+
         # Toggle behavior: if same percentage is selected, remove tip
         if percentage is not None and percentage == current_percentage:
             payment['tip_percentage'] = None
@@ -803,9 +805,9 @@ def set_tip(
             payment['tip_percentage'] = percentage
             payment['tip_amount'] = tip_amount
             logger.info(f"Tip set for {session_id}: {percentage}% = ${tip_amount:.2f}")
-        
+
         _save_session_data(session_id, store, data)
-        
+
         return (payment['tip_amount'], tab_total + payment['tip_amount'])
 
 
@@ -839,7 +841,7 @@ def get_payment_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     return data['payment'].copy()
 
 
-def update_payment_state(session_id: str, store: MutableMapping, 
+def update_payment_state(session_id: str, store: MutableMapping,
                          updates: Dict[str, Any]) -> None:
     """
     Update payment state with validation.
@@ -853,12 +855,12 @@ def update_payment_state(session_id: str, store: MutableMapping,
         PaymentStateValidationError: If updates would result in invalid state.
     """
     session_id, store = _get_store_and_session(session_id, store)
-    
+
     lock = get_session_lock(session_id)
     with lock:
         data = _get_session_data(session_id, store)
         current_payment = data['payment']
-        
+
         # Check status transition validity if status is being updated
         if 'payment_status' in updates:
             current_status = current_payment['payment_status']
@@ -867,14 +869,14 @@ def update_payment_state(session_id: str, store: MutableMapping,
                 raise PaymentStateValidationError(
                     f"Invalid status transition from '{current_status}' to '{new_status}'"
                 )
-        
+
         # Create merged state for validation
         merged_state = current_payment.copy()
         merged_state.update(updates)
-        
+
         # Validate the merged state
         validate_payment_state(merged_state)
-        
+
         # Apply updates
         current_payment.update(updates)
         _save_session_data(session_id, store, data)
@@ -887,7 +889,7 @@ CONCURRENT_MODIFICATION = "CONCURRENT_MODIFICATION"
 
 
 def atomic_order_update(
-    session_id: str, 
+    session_id: str,
     store: MutableMapping,
     item_price: float,
     expected_version: Optional[int] = None
@@ -917,13 +919,13 @@ def atomic_order_update(
         No automatic retry is performed.
     """
     lock = get_session_lock(session_id)
-    
+
     with lock:
         data = _get_session_data(session_id, store)
         payment = data['payment']
         current_balance = payment['balance']
         current_version = payment['version']
-        
+
         # Check version if expected_version is provided
         if expected_version is not None and current_version != expected_version:
             logger.warning(
@@ -931,7 +933,7 @@ def atomic_order_update(
                 f"expected {expected_version}, got {current_version}"
             )
             return (False, CONCURRENT_MODIFICATION, current_balance)
-        
+
         # Check sufficient funds
         if current_balance < item_price:
             logger.info(
@@ -939,24 +941,24 @@ def atomic_order_update(
                 f"balance={current_balance}, price={item_price}"
             )
             return (False, INSUFFICIENT_FUNDS, current_balance)
-        
+
         # Atomically update balance, tab, and version
         new_balance = current_balance - item_price
         new_tab = payment['tab_total'] + item_price
         new_version = current_version + 1
-        
+
         payment['balance'] = new_balance
         payment['tab_total'] = new_tab
         payment['version'] = new_version
-        
+
         _save_session_data(session_id, store, data)
-        
+
         logger.info(
             f"Order update for {session_id}: "
             f"price={item_price}, new_balance={new_balance}, "
             f"new_tab={new_tab}, version={new_version}"
         )
-        
+
         return (True, "", new_balance)
 
 
@@ -972,12 +974,12 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
         True if successful, False if an exception occurs.
     """
     lock = get_session_lock(session_id)
-    
+
     with lock:
         try:
             data = _get_session_data(session_id, store)
             payment = data['payment']
-            
+
             # Reset tab, tip, and mark as completed
             payment['tab_total'] = 0.00
             payment['tip_percentage'] = None
@@ -985,13 +987,13 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
             payment['payment_status'] = 'completed'
             payment['needs_reconciliation'] = False
             payment['version'] += 1
-            
+
             _save_session_data(session_id, store, data)
-            
+
             logger.info(f"Payment completed for {session_id}")
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to complete payment for {session_id}: {str(e)}")
             return False
@@ -1013,11 +1015,11 @@ def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
     """
     lock = get_session_lock(session_id)
     encryption_manager = get_encryption_manager()
-    
+
     with lock:
         data = _get_session_data(session_id, store)
         state = data['api_keys'].copy()
-        
+
         # Decrypt keys if present
         # We catch broad exceptions from decryption but log specific details
         # to avoid crashing on corrupted or key-mismatched data.
@@ -1027,14 +1029,14 @@ def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
             except Exception as e:
                 logger.warning(f"Failed to decrypt gemini_key for {session_id}: {str(e)}")
                 state['gemini_key'] = None
-                 
+
         if state.get('cartesia_key'):
             try:
                 state['cartesia_key'] = encryption_manager.decrypt(state['cartesia_key'])
             except Exception as e:
                 logger.warning(f"Failed to decrypt cartesia_key for {session_id}: {str(e)}")
                 state['cartesia_key'] = None
-                 
+
     return state
 
 
@@ -1057,15 +1059,15 @@ def set_api_keys(
 
     with lock:
         data = _get_session_data(session_id, store)
-        
+
         # Encrypt keys before storage
         stripped_gemini = gemini_key.strip() if gemini_key else None
         encrypted_gemini = encryption_manager.encrypt(stripped_gemini) if stripped_gemini else None
-        
+
         encrypted_cartesia = None
         if cartesia_key and cartesia_key.strip():
              encrypted_cartesia = encryption_manager.encrypt(cartesia_key.strip())
-             
+
         data['api_keys'] = {
             'gemini_key': encrypted_gemini,
             'cartesia_key': encrypted_cartesia,

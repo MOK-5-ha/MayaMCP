@@ -25,18 +25,12 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
   - Tip selection (10%, 15%, 20%) with toggle behavior
   - Stripe payment links via MCP server (with mock fallback)
   - Low balance warnings (orange < $50, red at $0)
-- **Emotion-Based Animations**
-  - Dynamic avatar switching based on Maya's emotional state
-  - Supports: Neutral, Happy, Flustered, Thinking, Mixing, Upset
-  - **State Persistence**: Avatar maintains expression during improper inputs or errors
-  - Context-aware emotional triggers (compliments, insults, tips, order placement)
 
 ## Project Structure
 
 - `assets/`: Static files (avatar, media)
 - `config/`: Configuration files separate from code
-- `docs/`: Additional documentation (ADRs, emotion system)
-- `monitoring/`: Grafana dashboards and monitoring configurations
+- `docs/`: Additional documentation (ADRs)
 - `notebooks/`: Experimentation and analysis
 - `scripts/`: Utility scripts, including Weave evaluations
 - `src/`: Core source code with modular organization
@@ -468,33 +462,4 @@ Use this quick checklist when deploying on Modal:
 - Expected startup logs
   - `Configured resources: MODAL_MEMORY_MB=..., MODAL_MAX_CONTAINERS=...`
   - `Container memory usage at start: ...`
-- Monitoring
-  - Scrape `GET /metrics` (Prometheus format) for:
-    - `maya_config_memory_mb`
-    - `maya_config_max_containers`
-    - `maya_container_memory_usage_bytes`
-    - `maya_container_memory_limit_bytes`
 
-### Prometheus scrape configuration example
-
-Add a job to your Prometheus `scrape_configs` that points to your deployed Modal app URL and the `/metrics` path. Replace `<modal-app-host>` with the hostname Modal gives you (no protocol):
-
-```yaml
-# prometheus.yml
-scrape_configs:
-  - job_name: 'maya-mcp'
-    scrape_interval: 15s
-    static_configs:
-      - targets: ['<modal-app-host>']
-    metrics_path: /metrics
-    scheme: https
-```
-
-Exposed metrics (subset):
-
-- `maya_config_memory_mb` (gauge)
-- `maya_config_max_containers` (gauge)
-- `maya_container_memory_usage_bytes` (gauge)
-- `maya_container_memory_limit_bytes` (gauge)
-- `maya_container_cpu_usage_seconds_total` (counter)
-- `maya_process_uptime_seconds` (gauge)

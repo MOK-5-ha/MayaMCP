@@ -3,7 +3,7 @@ Configuration for Memvid integration
 Simplified from original memvid config
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 # QR Code settings (simplified)
 QR_VERSION = 10  # Smaller version for simpler setup

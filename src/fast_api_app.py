@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
+
 try:
     from google.cloud import logging as google_cloud_logging
 except ImportError:

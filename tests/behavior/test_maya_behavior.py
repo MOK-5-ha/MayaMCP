@@ -124,17 +124,13 @@ def step_user_says(ctx, message):
         session_id=ctx.session_id,
         app_state=ctx.app_state
     )
-    ctx.response, ctx.history, _, ctx.order, _, ctx.emotion = res
+    ctx.response, ctx.history, _, ctx.order, _ = res
 
 @then("Maya should respond empathetically")
 def step_respond_empathetically(ctx):
     assert len(ctx.response) > 0
     # Empathetic check (rough)
     assert any(word in ctx.response.lower() for word in ["sorry", "tough", "listen", "empathy", "bartender", "stressful", "hear"])
-
-@then(parsers.parse("Maya's emotional state should be \"{emotion1}\" or \"{emotion2}\""))
-def step_check_emotion(ctx, emotion1, emotion2):
-    assert ctx.emotion in [emotion1, emotion2]
 
 @then(parsers.parse("Maya should call the order tool for \"{item}\""))
 def step_call_order_tool(ctx, item):

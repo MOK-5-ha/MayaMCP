@@ -1,7 +1,10 @@
 # ADR 001: Avatar Video Format (MP4 vs GIF)
 
-**Status**: Accepted  
+**Status**: Deprecated (Feature Removed)  
 **Date**: 2025-12-16  
+
+> Note: The video avatar logic was removed in favor of a static image to improve performance.
+
 **Context**: Generation of animated scenes for Maya's emotional states using Google Whisk.
 
 ## Decision

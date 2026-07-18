@@ -1,7 +1,8 @@
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
+
 from .config import ScanConfig
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
             if pattern.search(text):
                 logger.warning(f"Blocked by fallback regex scanner: {pattern.pattern}")
                 return ScanResult(
-                    is_valid=False, 
+                    is_valid=False,
                     sanitized_text="",
                     blocked_reason=INPUT_BLOCKED_INJECTION,
                     scanner_scores={"fallback_regex": 1.0}
@@ -71,23 +72,23 @@ def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
         return ScanResult(is_valid=True, sanitized_text=text)
 
     scanner_scores = {}
-    
+
     # 1. Prompt Injection
     if config.prompt_injection_enabled:
         try:
             # Note: In a real app we might cache these scanners
             scanner = PromptInjection(threshold=config.prompt_injection_threshold)
             sanitized, is_valid, score = scanner.scan(text)
-            
+
             # llm-guard returns score: float or list/dict depending on version/scanner
             # Assuming float for simple case, or we grab the relevant value
             # Usually scan returns (sanitized_prompt, results_valid, results_score)
-            
+
             # Note: scanner.scan signature in llm-guard:
             # scan(prompt: str) -> (str, bool, float)
-            
+
             scanner_scores["prompt_injection"] = score
-            
+
             if not is_valid:
                 return ScanResult(
                     is_valid=False,
@@ -105,7 +106,7 @@ def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
             scanner = Toxicity(threshold=config.toxicity_threshold)
             sanitized, is_valid, score = scanner.scan(text)
             scanner_scores["toxicity"] = score
-            
+
             if not is_valid:
                 return ScanResult(
                     is_valid=False,

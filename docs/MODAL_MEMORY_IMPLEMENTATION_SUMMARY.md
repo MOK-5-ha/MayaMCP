@@ -17,7 +17,6 @@ This document summarizes the implementation of Modal-based memory monitoring and
 - **Memory metrics**: Container usage, limits, utilization, availability, pressure
 - **Session metrics**: Active sessions, max sessions, utilization, creation/rejection/expired counts
 - **Fallback handling**: Graceful degradation if memory monitoring unavailable
-- **Prometheus format**: Standard metrics for monitoring systems
 
 ### Health Check Integration (`deploy.py`)
 - **Memory health checks**: Container memory pressure detection in health endpoint
@@ -88,7 +87,6 @@ MAYA_MAX_SESSION_MEMORY_MB=100  # NOT IMPLEMENTED: legacy placeholder
 
 ### 3. Enhanced Observability
 - **Comprehensive metrics**: Memory and session statistics
-- **Prometheus compatibility**: Standard monitoring integration
 - **Health checks**: Memory pressure detection in service health
 - **Operational insights**: Session creation, rejection, expiration tracking
 
@@ -111,7 +109,6 @@ MAYA_MAX_SESSION_MEMORY_MB=100  # NOT IMPLEMENTED: legacy placeholder
 - **Metrics endpoint**: `/metrics` provides comprehensive data
 - **Health endpoint**: `/healthz` includes memory pressure checks
 - **Alerting**: Memory pressure triggers health check failures
-- **Dashboard ready**: Standard Prometheus format for Grafana integration
 
 ## 📊 Configuration Guidance
 

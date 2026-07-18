@@ -7,7 +7,6 @@ Feature: Maya Bartending Agent Behavior
     Given the session is initialized with a balance of 50.00
     When the user says "Man, work has been really stressful today. I just need a drink and someone to talk to."
     Then Maya should respond empathetically
-    And Maya's emotional state should be "neutral" or "thinking"
 
   Scenario: Order a drink with sufficient balance
     Given the session is initialized with a balance of 50.00

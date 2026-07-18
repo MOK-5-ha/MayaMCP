@@ -1,10 +1,12 @@
 """UI component setup and management."""
 
-import requests
 import io
-from PIL import Image
 from typing import Optional, Tuple
+
 import gradio as gr
+import requests
+from PIL import Image
+
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -39,7 +41,7 @@ def setup_avatar(
             logger.warning(f"Failed to download avatar. Status code: {response.status_code}")
             # Create a blank avatar as fallback
             avatar_image = Image.new('RGB', (300, 300), color=(73, 109, 137))
-            
+
     except Exception as e:
         logger.error(f"Error downloading avatar: {e}")
         # Create a blank avatar as fallback
@@ -50,7 +52,7 @@ def setup_avatar(
         avatar_image.save(save_path)
         logger.info(f"Avatar saved to {save_path}")
         return save_path
-        
+
     except Exception as e:
         logger.error(f"Error saving avatar: {e}")
         # Return a fallback path
@@ -74,7 +76,7 @@ def create_streaming_components(
         height=489,
         type="messages"
     )
-    
+
     # Traditional audio output (fallback)
     agent_audio_output = gr.Audio(
         label="Agent Voice",
@@ -84,7 +86,7 @@ def create_streaming_components(
         show_label=True,
         interactive=False
     )
-    
+
     # Streaming text display for real-time text
     streaming_text_display = gr.Textbox(
         label="Streaming Response",
@@ -94,7 +96,7 @@ def create_streaming_components(
         interactive=False,
         visible=False
     )
-    
+
     # Streaming audio player for immediate playback
     streaming_audio_player = gr.Audio(
         label="Live Voice",
@@ -105,13 +107,13 @@ def create_streaming_components(
         interactive=False,
         visible=False
     )
-    
+
     # Message input
     msg_input = gr.Textbox(
         label="Your Order / Message",
         placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')"
     )
-    
+
     return (
         chatbot_display,
         agent_audio_output,

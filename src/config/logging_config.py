@@ -11,9 +11,10 @@ import os
 import re
 from typing import Optional
 
+
 class RedactingFormatter(logging.Formatter):
     """Formatter that redacts sensitive information from log records."""
-    
+
     def __init__(self, fmt=None, datefmt=None, style='%'):
         super().__init__(fmt, datefmt, style)
         self._patterns = [
@@ -51,21 +52,21 @@ def setup_logging(
     if level is None:
         debug_mode = os.getenv("DEBUG", "False").lower() == "true"
         level = "DEBUG" if debug_mode else "INFO"
-    
+
     # Default format string
     if format_string is None:
         format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    
+
     # Configure logging
     handler = logging.StreamHandler()
     handler.setFormatter(RedactingFormatter(format_string))
-    
+
     logging.basicConfig(
         level=getattr(logging, level.upper()),
         handlers=[handler],
         force=True  # Override any existing configuration
     )
-    
+
     # Return logger for the main module
     return logging.getLogger("mayamcp")
 

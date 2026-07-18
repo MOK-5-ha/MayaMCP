@@ -2,12 +2,11 @@
 Memvid-based vector store replacement for Maya's RAG system
 """
 
-import os
-from typing import List, Tuple, Optional
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 from ..config.logging_config import get_logger
-from ..memvid import MemvidEncoder, MemvidRetriever, get_memvid_config
+from ..memvid import MemvidEncoder, MemvidRetriever
 
 logger = get_logger(__name__)
 
@@ -41,32 +40,32 @@ def initialize_memvid_store(documents: Optional[List[str]] = None, force_rebuild
     else:
         # Ensure we have a copy if a list was passed
         documents = list(documents)
-    
+
     # Set up file paths
     assets_dir = Path("assets")
     assets_dir.mkdir(exist_ok=True)
-    
+
     video_path = assets_dir / "maya_memory.mp4"
     index_path = assets_dir / "maya_memory_index.json"
-    
+
     # Check if we need to build the video memory
     need_rebuild = force_rebuild or not video_path.exists() or not index_path.exists()
-    
+
     if need_rebuild:
         logger.info("Building Maya's video memory...")
-        
+
         # Create encoder and add documents
         encoder = MemvidEncoder()
         encoder.add_chunks(documents)
-        
+
         # Build video memory
         success = encoder.build_memory_files(str(assets_dir / "maya_memory"))
-        
+
         if not success:
             logger.error("Failed to build video memory, falling back to text-only mode")
             # Create a simple text-based fallback
             _create_text_fallback(documents, assets_dir)
-    
+
     # Initialize retriever
     try:
         retriever = MemvidRetriever(str(video_path), str(index_path))
@@ -80,7 +79,7 @@ def initialize_memvid_store(documents: Optional[List[str]] = None, force_rebuild
 def _create_text_fallback(documents: List[str], assets_dir: Path):
     """Create a simple text-based fallback when video creation fails"""
     import json
-    
+
     # Create a simple index file for fallback
     fallback_index = {
         "chunks": [
@@ -91,44 +90,44 @@ def _create_text_fallback(documents: List[str], assets_dir: Path):
         "fps": 15,
         "fallback_mode": True
     }
-    
+
     with open(assets_dir / "maya_memory_index.json", 'w') as f:
         json.dump(fallback_index, f, indent=2)
-    
+
     # Create an empty video file for compatibility
     (assets_dir / "maya_memory.mp4").touch()
 
 class FallbackRetriever:
     """Fallback retriever when Memvid is not available"""
-    
+
     def __init__(self, documents: List[str]):
         self.documents = documents
         logger.info(f"Using fallback retriever with {len(documents)} documents")
-    
+
     def search(self, query: str, top_k: int = 5) -> List[str]:
         """Simple keyword-based search"""
         query_lower = query.lower()
         query_words = query_lower.split()  # Pre-compute split operation
         scored_docs = []
-        
+
         for doc in self.documents:
             # Simple scoring based on keyword matches
             doc_lower = doc.lower()  # Pre-compute lowercase once per document
             score = sum(1 for word in query_words if word in doc_lower)
             if score > 0:
                 scored_docs.append((score, doc))
-        
+
         # Sort by score and return top results
         scored_docs.sort(reverse=True, key=lambda x: x[0])
-        
+
         results = [doc for score, doc in scored_docs[:top_k]]
-        
+
         # If no matches, return first few documents
         if not results:
             results = self.documents[:min(top_k, len(self.documents))]
-        
+
         return results
-    
+
     def get_stats(self):
         return {
             "total_documents": len(self.documents),

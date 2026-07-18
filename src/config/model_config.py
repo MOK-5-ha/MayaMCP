@@ -1,9 +1,9 @@
 """Model configuration for MayaMCP."""
 
 import os
-from typing import Dict, Any, List
-from .logging_config import get_logger
+from typing import Any, Dict, List
 
+from .logging_config import get_logger
 
 logger = get_logger(__name__)
 

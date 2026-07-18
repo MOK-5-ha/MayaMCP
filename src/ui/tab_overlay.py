@@ -5,7 +5,8 @@ and remaining balance, with animated count-up effects when values change.
 It also includes tip button functionality for adding gratuity.
 """
 
-from typing import Optional, Literal
+from typing import Optional
+
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -69,17 +70,17 @@ def create_tip_buttons_html(
     """
     is_disabled = tab_amount <= 0
     display_style = "none" if is_disabled else "flex"
-    
+
     buttons_html = []
     for percentage in TIP_PERCENTAGES:
         is_selected = selected_percentage == percentage
         bg_color = TIP_BUTTON_HIGHLIGHT_COLOR if is_selected else TIP_BUTTON_DEFAULT_BG
         border_color = TIP_BUTTON_HIGHLIGHT_COLOR if is_selected else "#555555"
-        
+
         disabled_attr = 'disabled="disabled"' if is_disabled else ""
         cursor_style = "not-allowed" if is_disabled else "pointer"
         opacity = "0.5" if is_disabled else "1"
-        
+
         button_html = f'''
         <button 
             class="tip-button" 
@@ -101,7 +102,7 @@ def create_tip_buttons_html(
             "
         >{percentage}%</button>'''
         buttons_html.append(button_html)
-    
+
     return f'''
     <div class="tip-buttons-row" style="
         display: {display_style};
@@ -181,51 +182,29 @@ def create_tab_overlay_html(
     """
     balance_color = get_balance_color(balance)
     avatar_src = avatar_path or "assets/bartender_avatar.jpg"
-    
+
     # Generate tip buttons HTML
     tip_buttons_html = create_tip_buttons_html(
         tab_amount=tab_amount,
         selected_percentage=tip_percentage,
         on_tip_click_callback=on_tip_click_callback
     )
-    
+
     # Calculate total with tip
     total_with_tip = tab_amount + tip_amount
-    
+
     # Tip and total row - only shown when tip is selected
     tip_display_style = "flex" if tip_percentage is not None else "none"
-    
-    # Determine media type and poster
-    import os
-    is_video = avatar_src.lower().endswith(('.mp4', '.webm', '.mov'))
-    
-    # Logic for transition: Default -> Poster (Fade In) -> Video
-    # We set the container background to the default avatar.
-    # The new media (video/image) fades in over it.
-    
+
+    # Avatar is strictly static image rendering
     DEFAULT_AVATAR = "assets/bartender_avatar.jpg"
-    
-    poster_attr = ""
-    if is_video:
-        # Try to find a companion image for the poster
-        base_name = os.path.splitext(avatar_src)[0]
-        for ext in ['.png', '.jpg', '.jpeg']:
-            possible_poster = f"{base_name}{ext}"
-            if os.path.exists(possible_poster):
-                poster_attr = f'poster="file/{possible_poster}"'
-                break
-    
+
     style_animation = "animation: fadeIn 1.5s ease-in-out forwards;"
-    if not is_video and "bartender_avatar" in avatar_src and "image" not in avatar_src:
-        # Don't animate the default avatar if we are just showing it natively
-        # Note: "bartender_avatar.jpg" is the target string now
+    if "bartender_avatar" in avatar_src and "image" not in avatar_src:
         style_animation = ""
 
-    if is_video:
-        media_html = f'<video src="file/{avatar_src}" {poster_attr} autoplay loop muted playsinline class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}"></video>'
-    else:
-        media_html = f'<img src="file/{avatar_src}" alt="Maya" class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}">'
-    
+    media_html = f'<img src="file/{avatar_src}" alt="Maya" class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}">'
+
     html = f'''
 <style>
 @keyframes fadeIn {{
@@ -490,9 +469,9 @@ def create_tab_overlay_html(
 # =============================================================================
 # This mirrors the JavaScript AnimationQueue behavior for property-based testing
 
-from dataclasses import dataclass, field
-from typing import List, Callable, Optional
 import time
+from dataclasses import dataclass, field
+from typing import Callable, List, Optional
 
 
 @dataclass
@@ -513,20 +492,20 @@ class AnimationQueue:
     
     Requirements: 5.3
     """
-    
+
     MAX_DEPTH = 5
     COLLAPSE_WINDOW_MS = 100
-    
+
     def __init__(self):
         self._queue: List[TabUpdate] = []
         self._is_running: bool = False
         self._last_enqueue_time: float = 0
-        
+
         # Callbacks
         self.on_animation_start: Optional[Callable[[TabUpdate], None]] = None
         self.on_animation_complete: Optional[Callable[[TabUpdate], None]] = None
         self.on_animation_cancel: Optional[Callable[[], None]] = None
-    
+
     def enqueue(self, update: TabUpdate) -> None:
         """Add an update to the animation queue.
         
@@ -534,7 +513,7 @@ class AnimationQueue:
         Queue max depth is 5 (oldest dropped if exceeded).
         """
         now = time.time() * 1000  # Convert to milliseconds
-        
+
         # Collapse strategy: if within 100ms of last update, merge
         time_since_last = now - self._last_enqueue_time
         if self._queue and time_since_last < self.COLLAPSE_WINDOW_MS:
@@ -555,9 +534,9 @@ class AnimationQueue:
                 # Drop oldest if at max depth
                 self._queue.pop(0)
             self._queue.append(update)
-        
+
         self._last_enqueue_time = now
-    
+
     def process_next(self) -> Optional[TabUpdate]:
         """Process and return the next update from the queue.
         
@@ -566,27 +545,27 @@ class AnimationQueue:
         if not self._queue:
             self._is_running = False
             return None
-        
+
         self._is_running = True
         return self._queue.pop(0)
-    
+
     def cancel_all(self) -> None:
         """Cancel all pending animations and clear the queue."""
         if self.on_animation_cancel:
             self.on_animation_cancel()
-        
+
         self._queue.clear()
         self._is_running = False
-    
+
     def get_queue_length(self) -> int:
         """Return the current queue length."""
         return len(self._queue)
-    
+
     @property
     def is_running(self) -> bool:
         """Return whether an animation is currently running."""
         return self._is_running
-    
+
     def reset(self) -> None:
         """Reset the queue to initial state (for testing)."""
         self._queue.clear()

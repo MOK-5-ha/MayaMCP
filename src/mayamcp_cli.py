@@ -10,25 +10,30 @@ import sys
 from functools import partial
 
 from config import (
-    setup_logging, 
-    get_api_keys, 
+    get_api_keys,
+    setup_logging,
 )
-from config.logging_config import get_logger
-from llm import get_all_tools
 from config.model_config import get_model_config, is_valid_gemini_model
+from llm import get_all_tools
 from rag import initialize_memvid_store
-from ui import launch_bartender_interface, handle_gradio_input, clear_chat_state, handle_gradio_streaming_input
+from ui import (
+    clear_chat_state,
+    handle_gradio_input,
+    handle_gradio_streaming_input,
+    launch_bartender_interface,
+)
 from ui.api_key_modal import handle_key_submission
 from utils import initialize_state
-from utils.state_manager import start_session_cleanup, stop_session_cleanup
 from utils.rate_limiter import get_rate_limiter
+from utils.state_manager import start_session_cleanup, stop_session_cleanup
+
 
 def main():
     """Main application entry point."""
     # Setup logging
     logger = setup_logging()
     logger.info("Starting MayaMCP - AI Bartending Agent (BYOK mode)")
-    
+
     try:
         # Load API keys (optional now -- used only for RAG initialisation)
         api_keys = get_api_keys()
@@ -52,7 +57,7 @@ def main():
         # Initialize application state
         initialize_state()
         logger.info("Application state initialized")
-        
+
         # Start security services
         start_session_cleanup()
         get_rate_limiter()  # Initialize singleton
@@ -74,14 +79,14 @@ def main():
                 logger.warning(f"Memvid initialization failed: {e}. Continuing without RAG.")
         else:
             logger.info("Skipping RAG initialization (no server-side Gemini key)")
-        
+
         # NOTE: LLM and TTS are NOT initialised here.
         # Each user session provides their own keys (BYOK).
         # Per-session clients are lazily created via src/llm/session_registry.
 
         # Initialize app state for local run (ephemeral, in-memory)
         app_state = {}
-        
+
         # Create partially applied handler functions with dependencies
         handle_input_with_deps = partial(
             handle_gradio_input,
@@ -108,7 +113,7 @@ def main():
             handle_key_submission,
             app_state=app_state
         )
-        
+
         # Launch the Gradio interface
         logger.info("Launching Gradio interface...")
         try:
@@ -128,7 +133,7 @@ def main():
         except Exception:
             logger.exception("Failed to launch Gradio interface")
             raise
-        
+
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
         # Cleanup security services
@@ -138,7 +143,7 @@ def main():
             rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
         except Exception:
             logger.exception("Error cleaning up rate limiter")
-        
+
         # Always stop session cleanup regardless of rate limiter errors
         try:
             stop_session_cleanup()
@@ -155,7 +160,7 @@ def main():
             rate_limiter.cleanup_expired_sessions(max_age_seconds=0)
         except Exception:
             logger.exception("Error cleaning up rate limiter")
-        
+
         # Always stop session cleanup regardless of rate limiter errors
         try:
             stop_session_cleanup()

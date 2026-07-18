@@ -1,7 +1,8 @@
 """API key modal UI components for BYOK authentication."""
 
+from typing import MutableMapping, Optional, Tuple
+
 import gradio as gr
-from typing import Optional, Tuple, MutableMapping
 
 from ..config.logging_config import get_logger
 from ..llm.key_validator import validate_gemini_key
@@ -110,10 +111,10 @@ def handle_key_submission(
 
     try:
         is_valid, error_msg = validate_gemini_key(gemini_key.strip())
-    except Exception as e:
+    except Exception:
         logger.exception("Exception during Gemini key validation")
         return (
-            f"**Error:** Unable to validate API key. Please check your connection and try again.",
+            "**Error:** Unable to validate API key. Please check your connection and try again.",
             gr.Column(visible=True),
             gr.Column(visible=False),
             False,

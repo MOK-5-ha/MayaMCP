@@ -3,13 +3,15 @@ Encryption utilities for securing sensitive data.
 
 Uses Fernet (symmetric encryption) from the cryptography library.
 """
-import os
 import base64
+import os
 import threading
 from typing import Optional
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -20,11 +22,11 @@ class EncryptionManager:
     
     Uses a master key from environment or generates a temporary one.
     """
-    
+
     _instance = None
     _cipher_suite: Optional[Fernet] = None
     _init_lock = threading.Lock()
-    
+
     def __new__(cls):
         # First check (no lock) for performance
         if cls._instance is None:
@@ -32,15 +34,15 @@ class EncryptionManager:
             with cls._init_lock:
                 # Second check (with lock) to prevent race condition
                 if cls._instance is None:
-                    instance = super(EncryptionManager, cls).__new__(cls)
+                    instance = super().__new__(cls)
                     instance._initialize()
                     cls._instance = instance  # Only assign after successful init
         return cls._instance
-    
+
     def _initialize(self):
         """Initialize the Fernet cipher suite."""
         master_key = os.getenv("MAYA_MASTER_KEY")
-        
+
         if not master_key:
             logger.warning(
                 "MAYA_MASTER_KEY not found in environment. "
@@ -61,7 +63,7 @@ class EncryptionManager:
             except Exception:
                 # If not a valid Fernet key, treat as passphrase and derive
                 key = self._derive_key(master_key)
-                
+
         self._cipher_suite = Fernet(key)
 
     def _derive_key(self, passphrase: str) -> bytes:
@@ -89,7 +91,7 @@ class EncryptionManager:
                 f"Cannot initialize encryption: salt file '{salt_file}' is inaccessible. "
                 "Set MAYA_SALT_FILE to a writable path or fix permissions."
             ) from e
-            
+
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -98,7 +100,7 @@ class EncryptionManager:
         )
         key_raw = kdf.derive(passphrase.encode())
         return base64.urlsafe_b64encode(key_raw)
-        
+
     def encrypt(self, data: str) -> str:
         """
         Encrypt a string.
@@ -113,14 +115,14 @@ class EncryptionManager:
             return ""
         if not self._cipher_suite:
             self._initialize() # Should happen in __new__ but just in case
-             
+
         try:
             encrypted_bytes = self._cipher_suite.encrypt(data.encode())
             return encrypted_bytes.decode()
         except Exception as e:
             logger.error(f"Encryption failed: {e}")
             raise
-            
+
     def decrypt(self, token: str) -> str:
         """
         Decrypt a string.
@@ -142,7 +144,7 @@ class EncryptionManager:
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise
-            
+
 def get_encryption_manager() -> EncryptionManager:
     """Factory function to get the singleton manager."""
     return EncryptionManager()
