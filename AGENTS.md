@@ -102,6 +102,7 @@ Optional:
 - **ContextVars and Thread Boundaries**: When using `ThreadPoolExecutor` or spawning new threads within ADK workflows, thread-local `ContextVar` states (like `session_id`) are not automatically propagated. You must explicitly initialize the context inside the thread worker closure (e.g., `set_current_session(session_id)`) before invoking ADK tools or database helpers.
 - **ADK Streaming Payload Gathering**: When accumulating chunks from ADK's `Runner.run_async` SSE events, do not restrict data collection exclusively to `event.partial == True`. Final text chunks may arrive without the partial flag, leading to dropped content. Process any `text_chunk` that contains valid string data.
 - **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
+- **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and `a2a-sdk`. The `JSONRPCApplication` within the `a2a` server specifically requires `sse-starlette` to function. If test collection errors occur related to ADK routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
