@@ -121,8 +121,7 @@ Legacy script (optional):
 
 Note: `pip install -e .` installs dependencies from `requirements.txt` and sets up the `mayamcp` console command.
 
-Note: `pip install -r requirements.txt` installs the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project relies entirely on the native SDK and does not use LangChain.
-
+Note: `pip install -r requirements.txt` installs the Agent Development Kit (`google-adk`) and the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project has been fully migrated to ADK 2.0 and does not use LangChain.
 ## API Keys Required
 
 ### Google Gemini API
@@ -302,13 +301,13 @@ Prerequisites: Python 3.12+ and pip installed; activate your virtual environment
 
 ### Test Organization
 
-- **Unit Tests**: Test individual functions and classes in isolation
-- **Integration Tests**: Test component interactions and end-to-end workflows
-- **Behavior-Driven Development (BDD)**: Test complex agentic interactions using Gherkin syntax via `pytest-bdd` (in `tests/behavior/`)
-- **Headless Evaluations**: Offline and tracked dataset evaluations using Weights & Biases Weave (`scripts/run_weave_evals.py`)
-- **Memvid Tests**: Test RAG functionality and document retrieval
-- **LLM Tests**: Test language model integration and prompt handling
-- **UI Tests**: Test user interface components and handlers
+- **Unit Tests**: Test individual functions and classes in isolation (using `DummyLLM` and ADK test doubles instead of legacy `MagicMock`).
+- **Integration Tests**: Test component interactions and end-to-end workflows.
+- **Behavior-Driven Development (BDD)**: Test complex agentic interactions using Gherkin syntax via `pytest-bdd` (in `tests/behavior/`).
+- **Headless Evaluations**: Offline and tracked dataset evaluations using Weights & Biases Weave (`scripts/run_weave_evals.py`).
+- **Memvid Tests**: Test RAG functionality and document retrieval.
+- **LLM Tests**: Test ADK Agent integration and tool execution.
+- **UI Tests**: Test user interface components and handlers.
 
 ### Test Configuration
 
