@@ -149,7 +149,9 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
 
         @property
         def api_client(self) -> Client:
-            return Client(api_key=self._api_key)
+            if not hasattr(self, '_client'):
+                self._client = Client(api_key=self._api_key)
+            return self._client
 
     llm = BYOKGemini(api_key=api_key, model=get_model_name())
     logger.info("Created new BYOKGemini instance for session %s...", session_id[:8])

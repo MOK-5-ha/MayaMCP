@@ -11,6 +11,34 @@ from src.llm.tools import (
     _session_context
 )
 
+from google.adk.models import Gemini
+from google.genai import types
+
+class DummyLLM(Gemini):
+    def __init__(self, should_fail=False, **kwargs):
+        super().__init__(model="gemini-2.5-flash", **kwargs)
+        self._should_fail = should_fail
+        
+    async def generate_content_async(self, request, stream=False):
+        if self._should_fail:
+            raise Exception("Test error")
+        class MockCandidate:
+            def __init__(self):
+                self.finish_reason = types.FinishReason.STOP
+                self.finish_message = ""
+                self.content = types.Content(role="model", parts=[types.Part.from_text(text="Test response")])
+            def __getattr__(self, name):
+                return None
+        class MockResponse:
+            def __init__(self):
+                self.candidates = [MockCandidate()]
+                from types import SimpleNamespace as NS
+                self.usage_metadata = NS(prompt_token_count=10, candidates_token_count=10, total_token_count=20)
+                self.grounding_metadata = None
+                self.citation_metadata = None
+            def __getattr__(self, name):
+                return None
+        return MockResponse()
 
 class TestSessionContextBasics:
     """Test basic session context operations."""
@@ -143,7 +171,7 @@ class TestSessionContextInProcessor:
         mock_phase_manager.return_value = mock_pm_instance
         
         # Create a mock LLM
-        mock_llm = MagicMock()
+        mock_llm = DummyLLM()
         
         # Clear any existing session
         clear_current_session()
@@ -185,8 +213,7 @@ class TestSessionContextInProcessor:
         mock_phase_manager.return_value = mock_pm_instance
         
         # Create a mock LLM that raises an exception
-        mock_llm = MagicMock()
-        mock_llm.invoke.side_effect = Exception("Test error")
+        mock_llm = DummyLLM(should_fail=True)
         
         # Clear any existing session
         clear_current_session()

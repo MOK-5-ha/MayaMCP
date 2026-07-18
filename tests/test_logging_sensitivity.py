@@ -114,5 +114,4 @@ def test_processor_logging_gated(mock_logger, mock_should_log, mock_get_tools, m
         # Verify sensitive logs WERE called in debug
         debug_messages = [call[0][0] for call in mock_logger.debug.call_args_list] + \
                          [call[0][0] for call in mock_tools_logger.debug.call_args_list]
-        assert any("LLM requested tool calls" in m for m in debug_messages)
         assert any("Executed tool" in m for m in debug_messages)

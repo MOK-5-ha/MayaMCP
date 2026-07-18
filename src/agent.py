@@ -96,7 +96,7 @@ def get_current_time(query: str) -> str:
     """Simulates getting the current time for a city.
 
     Args:
-        city: The name of the city to get the current time for.
+        query: The name of the city to get the current time for.
 
     Returns:
         A string with the current time information.
@@ -111,6 +111,7 @@ def get_current_time(query: str) -> str:
     return f"The current time for query {query} is {now.strftime('%Y-%m-%d %H:%M:%S %Z%z')}"
 
 
+# TODO: Replace with Maya's bartending agent persona and tools if routing A2A requests directly here.
 root_agent = Agent(
     name="root_agent",
     model=Gemini(

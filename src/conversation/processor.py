@@ -140,8 +140,7 @@ def process_order(
     """
     session_id, app_state = _get_store_and_session(session_id, app_state)
     from google.adk.models import Gemini
-    from unittest.mock import Mock
-    if llm is None or (not isinstance(llm, Gemini) and not isinstance(llm, Mock)):
+    if llm is None or not isinstance(llm, Gemini):
         from ..llm.session_registry import get_session_llm
         llm = get_session_llm(session_id, api_key=api_key)
     if not user_input_text:
@@ -394,7 +393,6 @@ def process_order(
                 agent_response_text = _run_coro(_execute_runner())
                 if should_log_sensitive():
                     logger.debug(f"Original response: {agent_response_text}")
-                    logger.debug("LLM requested tool calls: mock")
             except Exception as invoke_err:
                 if is_quota_error(invoke_err):
                     logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
@@ -640,7 +638,7 @@ def process_order_stream(
                         'content': "Sorry, I'm having a bit of trouble completing that response.",
                         'emotion_state': 'neutral'
                     }
-                    break
+                    return
 
                 if msg_type == 'error':
                     if is_quota_error(data):
@@ -657,7 +655,7 @@ def process_order_stream(
                             'content': "I'm sorry, an unexpected error occurred during processing. Please try again later.",
                             'emotion_state': 'neutral'
                         }
-                    break
+                    return
 
                 elif msg_type == 'done':
                     break

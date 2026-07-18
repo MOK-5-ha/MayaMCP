@@ -240,17 +240,6 @@ def get_global_store() -> Dict:
     return _global_store
 
 
-def _safe_get_menu() -> str:
-    res = get_menu()
-    if hasattr(res, "mock_add_spec") or str(type(res)).find("mock") != -1:
-        if hasattr(get_menu, "invoke"):
-            get_menu.invoke({})
-            inv_res = get_menu.invoke.return_value
-            if not (hasattr(inv_res, "mock_add_spec") or str(type(inv_res)).find("mock") != -1):
-                return inv_res
-        return "Martini - $13.00\nOld Fashioned - $12.00\nBeer - $5.00\nWater - $1.00"
-    return res
-
 
 @tool
 def add_to_order_with_balance(
@@ -289,7 +278,7 @@ def add_to_order_with_balance(
     store = get_global_store()
 
     # Parse menu to get item price
-    menu_str = _safe_get_menu()
+    menu_str = get_menu()
     menu_items = _parse_menu_items(menu_str)
     item_lower = item_name.lower()
 
@@ -838,7 +827,7 @@ def add_to_order(
             return f"Error: {result['message']}"
 
     # Legacy behavior: no session context, no balance checking
-    menu_str = _safe_get_menu()
+    menu_str = get_menu()
     menu_items = _parse_menu_items(menu_str)
     item_lower = item_name.lower()
 
