@@ -75,10 +75,16 @@ class MayaSessionManager:
         Returns:
             True if session can be admitted, False otherwise
         """
+        available = memory_metrics.get("available_mb")
+        if available is None:
+            available = float('inf')
+        pressure = memory_metrics.get("pressure")
+        if pressure is None:
+            pressure = False
         return (
-            memory_metrics["available_mb"] >= stats["default_session_memory_mb"]
+            available >= stats["default_session_memory_mb"]
             and stats["current_sessions"] < stats["max_sessions"]
-            and not memory_metrics["pressure"]
+            and not pressure
         )
     
     def create_session(self, session_id: str, api_key_hash: str = "") -> bool:

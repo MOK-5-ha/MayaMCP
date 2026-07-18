@@ -41,9 +41,9 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Architecture Updates
 
-- Unified Google GenAI client wrapper in `src/llm/client.py` centralizes API key usage and generation config mapping using the native Google GenAI SDK
-- Model validation at startup warns if `GEMINI_MODEL_VERSION` is unrecognized but continues to run
-- Uses the native Google GenAI SDK (`google-genai`) for the free-tier Gemini API, having completely migrated away from LangChain and legacy SDK wrappers.
+- **Google ADK 2.0 Integration**: Completely migrated the conversational orchestrator to Google's Agent Development Kit (ADK) using `google-adk`. Replaced legacy `langchain` and native `google-genai` wrappers with ADK's `Agent`, `Runner`, and `Gemini` models.
+- **Unified GenAI Client**: Centralized API key and session registry management using ADK's lazy-loading patterns to support Bring Your Own Key (BYOK) dynamic initialization.
+- Model validation at startup warns if `GEMINI_MODEL_VERSION` is unrecognized but continues to run.
 
 ### Model Information
 
@@ -86,6 +86,7 @@ cd MayaMCP
 # API Keys
 GEMINI_API_KEY=your_google_api_key_here
 CARTESIA_API_KEY=your_cartesia_api_key_here
+WANDB_API_KEY=your_wandb_api_key_here  # Optional: For Weights & Biases Weave evaluations
 
 # Model Configuration (optional)
 GEMINI_MODEL_VERSION=gemini-3.0-flash
@@ -303,6 +304,8 @@ Prerequisites: Python 3.12+ and pip installed; activate your virtual environment
 
 - **Unit Tests**: Test individual functions and classes in isolation
 - **Integration Tests**: Test component interactions and end-to-end workflows
+- **Behavior-Driven Development (BDD)**: Test complex agentic interactions using Gherkin syntax via `pytest-bdd` (in `tests/behavior/`)
+- **Headless Evaluations**: Offline and tracked dataset evaluations using Weights & Biases Weave (`scripts/run_weave_evals.py`)
 - **Memvid Tests**: Test RAG functionality and document retrieval
 - **LLM Tests**: Test language model integration and prompt handling
 - **UI Tests**: Test user interface components and handlers
@@ -390,7 +393,17 @@ pytest -q
 - TTS resilience: If Cartesia TTS fails, Maya responds with text-only; retry logic for transient errors
 - User experience: Errors never break the conversational flow; logs include enough context for debugging without exposing sensitive information
 
-## Deployment on Modal
+## Deployment
+
+### Agents-CLI & Docker
+
+This project fully supports Google ADK `agents-cli` for streamlined deployment and testing.
+The repository includes an `agents-cli-manifest.yaml` and a `Dockerfile` for easy containerization.
+
+- Start a new ADK workspace: `agents-cli scaffold enhance .`
+- Build and run via Docker: `docker build -t mayamcp . && docker run -p 7860:7860 mayamcp`
+
+### Deployment on Modal
 
 This project includes a Modal Labs deployment (see `deploy.py`). You can use the Modal CLI to develop and deploy:
 

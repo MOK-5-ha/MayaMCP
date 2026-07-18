@@ -17,10 +17,16 @@ os.environ["MAYA_BURST_LIMIT"] = "9999"
 import pytest
 
 # Create 'google' package if missing
+try:
+    import google
+except ImportError:
+    pass
+
 if 'google' not in sys.modules:
     google_module = ModuleType('google')
     google_module.__path__ = []  # Required for importlib.util.find_spec
     sys.modules['google'] = google_module
+
 
 # Stub google.genai SDK only if the real package is NOT installed
 if _importlib_util.find_spec('google.genai') is None:
@@ -144,7 +150,72 @@ if _importlib_util.find_spec('google.genai') is None:
 
 # Autouse fixture: no-op (kept for compatibility).
 @pytest.fixture(autouse=True)
-def _compat_fixture():
+def mock_google_genai_client(monkeypatch):
+    import os
+    from types import SimpleNamespace as NS
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
+    monkeypatch.setenv("CARTESIA_API_KEY", "dummy-key")
+
+    try:
+        import google.genai
+        from google.genai import types
+        
+        class MockCandidate:
+            def __init__(self, text):
+                self.finish_reason = types.FinishReason.STOP
+                self.finish_message = ""
+                self.content = types.Content(role="model", parts=[types.Part.from_text(text=text)])
+
+            def __getattr__(self, name):
+                return None
+
+        class MockResponse:
+            def __init__(self, text):
+                self.candidates = [MockCandidate(text)]
+                self.usage_metadata = NS(prompt_token_count=10, candidates_token_count=10, total_token_count=20)
+                self.grounding_metadata = None
+                self.citation_metadata = None
+
+            @property
+            def text(self):
+                try:
+                    return self.candidates[0].content.parts[0].text
+                except Exception:
+                    return ""
+
+            def __getattr__(self, name):
+                return None
+
+        class MockModelsAsync:
+            async def generate_content_stream(self, model, contents, config=None):
+                async def _stream():
+                    yield MockResponse("This is a mock streaming response from Gemini.")
+                return _stream()
+            
+            async def generate_content(self, model, contents, config=None):
+                return MockResponse("This is a mock response from Gemini.")
+
+        class MockModelsSync:
+            def generate_content(self, model, contents, config=None):
+                return MockResponse("This is a mock response from Gemini.")
+            
+            def generate_content_stream(self, model, contents, config=None):
+                yield MockResponse("This is a mock response from Gemini.")
+
+            def embed_content(self, model, contents, config=None):
+                if isinstance(contents, list):
+                    return types.EmbedContentResponse(embeddings=[types.Embedding(values=[0.1]*768) for _ in contents])
+                return types.EmbedContentResponse(embeddings=[types.Embedding(values=[0.1]*768)])
+
+        class MockAio:
+            def __init__(self):
+                self.models = MockModelsAsync()
+
+        monkeypatch.setattr(google.genai.Client, 'models', property(lambda self: MockModelsSync()))
+        monkeypatch.setattr(google.genai.Client, 'aio', property(lambda self: MockAio()))
+    except Exception:
+        pass
+    
     yield
 
 

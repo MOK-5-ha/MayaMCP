@@ -7,11 +7,35 @@ class DummyResponse:
         self.content = text
         self.tool_calls = []
 
-class DummyLLM:
-    def __init__(self, content="base response"):
+from google.adk.models import Gemini
+from google.adk.models.llm_response import LlmResponse
+from google.genai import types
+
+class DummyLLM(Gemini):
+    def __init__(self, content="base response", **kwargs):
+        super().__init__(model="gemini-2.5-flash", **kwargs)
         self._content = content
-    def invoke(self, messages):
-        return DummyResponse(self._content)
+        
+    async def generate_content_async(self, request, stream=False):
+        class MockCandidate:
+            def __init__(self, text):
+                self.finish_reason = types.FinishReason.STOP
+                self.finish_message = ""
+                self.content = types.Content(role="model", parts=[types.Part.from_text(text=text)])
+            def __getattr__(self, name):
+                return None
+
+        class MockResponse:
+            def __init__(self, text):
+                self.candidates = [MockCandidate(text)]
+                from types import SimpleNamespace as NS
+                self.usage_metadata = NS(prompt_token_count=10, candidates_token_count=10, total_token_count=20)
+                self.grounding_metadata = None
+                self.citation_metadata = None
+            def __getattr__(self, name):
+                return None
+
+        yield LlmResponse.create(MockResponse(self._content))
 
 @pytest.fixture
 def mock_security():
