@@ -9,14 +9,11 @@ src/
 ├── llm/             # Gemini client, prompts, function tools, session registry
 ├── memvid/          # Memvid RAG implementation
 ├── payments/        # Stripe MCP client and payment logic
-├── prompt_engineering/  # Prompt templates
 ├── rag/             # RAG pipeline (embeddings, retrieval, vector store)
 ├── security/        # Input/output scanning, encryption, scan config
 ├── ui/              # Gradio components, handlers, tab overlay, BYOK modal
 ├── utils/           # Errors, helpers, state management
-├── voice/           # Cartesia TTS integration
-├── handlers/        # Request handlers
-└── media/           # Media utilities
+└── voice/           # Cartesia TTS integration
 tests/               # pytest suite (unit, integration, property-based)
 assets/              # Static files (avatar, media)
 deploy.py            # Modal Labs deployment
