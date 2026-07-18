@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 _session_clients: Dict[str, Dict[str, Any]] = {}
 _registry_lock = threading.Lock()
 
-# Per-session admission locks to prevent blocking the global registry 
+# Per-session admission locks to prevent blocking the global registry
 # during memory-aware admission control (which may involve slow probes)
 _admission_locks: Dict[str, threading.Lock] = {}
 _admission_locks_lock = threading.Lock()
@@ -93,19 +93,19 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     # Memory-aware session admission control
     if _session_manager_available:
         session_manager = get_session_manager()
-        
-        # Acquire per-session lock for admission control. This prevents 
+
+        # Acquire per-session lock for admission control. This prevents
         # multiple threads from triggering session creation for the same ID
         # while NOT holding the global _registry_lock.
         admission_lock = _get_admission_lock(session_id)
-        
+
         with admission_lock:
             # Double-check if session already admitted while we waited for admission_lock
             with _registry_lock:
                 entry = _session_clients.get(session_id)
                 if entry and entry.get("llm") and entry.get("gemini_hash") == key_hash:
                     return entry["llm"]
-            
+
             # Now attempt admission with session manager WITHOUT holding _registry_lock.
             # This allows other sessions to access the registry while we probe memory.
             if not session_manager.create_session(session_id, key_hash):
@@ -116,7 +116,7 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
                 raise SessionLimitExceededError(
                     "Session rejected: insufficient memory or session limit reached"
                 )
-            
+
             # Reserve session slot atomically if not already present
             with _registry_lock:
                 if session_id not in _session_clients:
@@ -140,6 +140,7 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     # Create outside lock to avoid blocking other sessions
     from google.adk.models import Gemini
     from google.genai import Client
+
     from .client import get_model_name
 
     class BYOKGemini(Gemini):
@@ -266,7 +267,7 @@ def cleanup_sessions(session_ids: List[str]) -> None:
                         "Failed to close TTS client for session %s",
                         session_id[:8],
                     )
-    
+
     # Log summary of cleaned up sessions
     if evicted:
         cleaned_session_ids = ", ".join(sid[:8] for sid, _ in evicted)
@@ -280,7 +281,7 @@ def cleanup_sessions(session_ids: List[str]) -> None:
                 session_manager.remove_session(session_id)
         except Exception as e:
             logger.warning("Failed to remove session from manager: %s", e)
-    
+
     # Finally, remove admission locks
     _remove_admission_locks(session_ids)
 
@@ -314,7 +315,7 @@ def clear_session_clients(session_id: str) -> None:
                 )
 
     logger.info("Cleared cached clients for session %s...", session_id[:8])
-    
+
     # Remove admission lock
     _remove_admission_locks([session_id])
 

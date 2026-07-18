@@ -36,7 +36,7 @@ class MemoryMonitor:
             # Current usage
             current = None
             limit = None
-            
+
             for p in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.usage_in_bytes"):
                 if os.path.exists(p):
                     with open(p) as f:
@@ -47,7 +47,7 @@ class MemoryMonitor:
                             logger.warning(f"Invalid cgroup current-usage value: {raw}")
                             continue
                         break  # got a valid current value, stop looking
-            
+
             # Memory limit
             for p in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.limit_in_bytes"):
                 if os.path.exists(p):
@@ -89,7 +89,7 @@ class MemoryMonitor:
             return current_bytes / limit_bytes
         else:
             return None
-    
+
     def is_memory_available(self, required_mb: float = 100) -> bool:
         """
         Check if sufficient memory is available for new session.
@@ -102,7 +102,7 @@ class MemoryMonitor:
             return True
         available_mb = (limit_bytes - current_bytes) / (1024 * 1024)
         return available_mb >= required_mb
-    
+
     def check_memory_pressure(self) -> Dict[str, Any]:
         """
         Check for memory pressure and return status.
@@ -117,7 +117,7 @@ class MemoryMonitor:
             else:
                 utilization = 0.0
                 pressure = False
-            
+
             # Check cooldown period to avoid alert spam
             current_time = time.time()
             if pressure and (current_time - self._last_alert_time) > self._alert_cooldown:
@@ -126,7 +126,7 @@ class MemoryMonitor:
                         logger.debug(f"Memory check: {current_mb:.1f}MB/{limit_mb:.1f}MB "
                                    f"({utilization:.1%}), available: {limit_mb - current_mb:.1f}MB")
                         self._last_alert_time = current_time
-            
+
             available_mb = limit_mb - current_mb
             return {
                 "pressure": pressure,
@@ -166,10 +166,10 @@ class MemoryMonitor:
                 "pressure": None,
                 "monitoring_available": False
             }
-        
+
         current_mb = current_bytes / (1024 * 1024)
         limit_mb = limit_bytes / (1024 * 1024)
-        
+
         # Prevent division by zero
         if limit_mb <= 0:
             return {
@@ -182,11 +182,11 @@ class MemoryMonitor:
                 "pressure": True,
                 "monitoring_available": False
             }
-        
+
         utilization = current_mb / limit_mb
         available_mb = limit_mb - current_mb
         pressure = utilization >= self.memory_threshold
-        
+
         return {
             "current_bytes": current_bytes,
             "limit_bytes": limit_bytes,
@@ -218,14 +218,14 @@ def get_memory_monitor() -> MemoryMonitor:
                         "Invalid MAYA_CONTAINER_MEMORY_THRESHOLD value; defaulting to 0.8"
                     )
                     threshold = 0.8
-                
+
                 clamped_threshold = max(0.1, min(0.95, threshold))
                 if clamped_threshold != threshold:
                     logger.warning(
                         f"MAYA_CONTAINER_MEMORY_THRESHOLD {threshold} is outside [0.1, 0.95] range; "
                         f"clamping to {clamped_threshold}"
                     )
-                
+
                 _memory_monitor = MemoryMonitor(memory_threshold=clamped_threshold)
                 logger.info(f"Memory monitor initialized with threshold: {clamped_threshold:.1%}")
     return _memory_monitor

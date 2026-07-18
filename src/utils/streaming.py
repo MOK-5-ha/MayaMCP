@@ -5,7 +5,6 @@ from typing import Generator, List, Optional
 
 from ..config.logging_config import get_logger
 
-
 logger = get_logger(__name__)
 
 
@@ -21,13 +20,13 @@ class SentenceBuffer:
         self.buffer = ""
         # Simple sentence boundary regex - will be filtered with _is_false_boundary
         self.sentence_endings = re.compile(r'[.!?]+(?=\s|$)')
-        
+
         # Common abbreviations that should not be treated as sentence boundaries
         self._abbreviations = {
             'mr', 'mrs', 'dr', 'prof', 'st', 'mt', 'vs', 'etc', 'eg', 'ie',
             'approx', 'lit', 'fig', 'vol', 'no', 'jr', 'sr', 'inc', 'ltd'
         }
-    
+
     def _is_false_boundary(self, text_before: str, text_after: str) -> bool:
         """
         Check if a sentence boundary match is a false positive.
@@ -43,7 +42,7 @@ class SentenceBuffer:
         # At end of buffer - defer decision until more text arrives
         if not text_after:
             return True
-        
+
         if text_after and text_after[0] == ' ':
             # Get the word before the period from text_before
             # text_before ends with punctuation, so we need to find the last word
@@ -54,7 +53,7 @@ class SentenceBuffer:
                 last_word = last_word_with_punct.rstrip('.!?')
                 if last_word.lower() in self._abbreviations:
                     return True
-        
+
         return False
 
     def add_text(self, text_chunk: str) -> List[str]:
@@ -79,10 +78,10 @@ class SentenceBuffer:
 
             # Calculate actual position in buffer
             actual_end = match.end()
-            
+
             # Extract sentence up to and including the ending punctuation
             sentence = self.buffer[:actual_end].strip()
-            
+
             # Check if this is a false boundary before accepting
             text_before = self.buffer[:actual_end]
             text_after = self.buffer[actual_end:]

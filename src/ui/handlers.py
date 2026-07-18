@@ -1,27 +1,31 @@
 """Gradio event handlers."""
 
-from typing import List, Dict, Tuple, Any, MutableMapping, Optional
-import os
+from typing import Any, Dict, List, MutableMapping, Optional, Tuple
+
 import gradio as gr
+
 from ..config.logging_config import get_logger
 from ..conversation.processor import process_order, process_order_stream
-from ..voice.tts import get_voice_audio
-from ..llm.session_registry import get_session_llm, get_session_tts, SessionLimitExceededError
-from ..utils.state_manager import (
-    reset_session_state,
-    get_current_order_state,
-    get_payment_state,
-    get_api_key_state,
-    has_valid_keys,
-    DEFAULT_PAYMENT_STATE
+from ..llm.session_registry import (
+    SessionLimitExceededError,
+    get_session_llm,
+    get_session_tts,
 )
+from ..utils.batch_state import batch_state_commits
 from ..utils.errors import is_quota_error
 from ..utils.helpers import append_to_history, get_overlay_payment_data
-from ..utils.batch_state import batch_state_commits
+from ..utils.state_manager import (
+    get_api_key_state,
+    get_current_order_state,
+    get_payment_state,
+    has_valid_keys,
+    reset_session_state,
+)
+from ..voice.tts import get_voice_audio
+from .api_key_modal import QUOTA_ERROR_SENTINEL, create_quota_error_html
 from .tab_overlay import (
     create_tab_overlay_html,
 )
-from .api_key_modal import QUOTA_ERROR_SENTINEL, create_quota_error_html
 
 logger = get_logger(__name__)
 
@@ -60,7 +64,7 @@ def handle_gradio_input(
     # Extract session ID from request
     session_id = "default"
     if request:
-        session_id = request.session_hash
+        session_id = request.session_hash or "default"
         logger.debug(f"Handling request for session: {session_id}")
     else:
         logger.warning("No request object provided, using default session ID")
@@ -192,10 +196,10 @@ def clear_chat_state(
     """
     session_id = "default"
     if request:
-        session_id = request.session_hash
-    
+        session_id = request.session_hash or "default"
+
     logger.info(f"Clear button clicked for session {session_id} - Resetting session state.")
-    
+
     if app_state is None:
          logger.warning("app_state not provided for clear_chat_state, using ephemeral dict")
          app_state = {}
@@ -240,7 +244,7 @@ def handle_gradio_input_stream(
     # Extract session ID from request
     session_id = "default"
     if request:
-        session_id = request.session_hash
+        session_id = request.session_hash or "default"
     else:
         logger.warning("No request object provided, using default session ID")
 
@@ -274,11 +278,11 @@ def handle_gradio_input_stream(
             user_input, session_history_state, llm,
             rag_retriever, effective_rag_key, session_id, app_state
         )
-        
+
         updated_history = session_history_state[:]
         # Note: updated_history will be fully populated when completion or error event is received.
         # This keeps compatibility with the streaming generator structure.
-        
+
         for event in response_stream:
             if event['type'] == 'text_chunk':
                 # Yield text chunk for immediate display
@@ -287,7 +291,7 @@ def handle_gradio_input_stream(
                     'content': event['content'],
                     'partial': event['partial']
                 }
-            
+
             elif event['type'] == 'sentence':
                 # Generate audio for complete sentence
                 if cartesia_client:
@@ -303,21 +307,21 @@ def handle_gradio_input_stream(
                             }
                     except Exception as tts_err:
                         logger.warning(f"TTS generation failed: {tts_err}")
-                        
+
             elif event['type'] == 'complete':
                 # Final response ready
                 final_text = event['content']
-                
+
                 # Update history
                 updated_history = append_to_history(session_history_state, user_input, final_text)
-                
+
                 # Get final payment state
                 final_payment_state = get_payment_state(session_id, app_state)
                 new_tab, new_balance, new_tip_percentage, new_tip_amount = get_overlay_payment_data(final_payment_state)
-                
+
                 # Avatar is now static
                 final_avatar_path = avatar_path
-                
+
                 # Create overlay HTML
                 overlay_html = create_tab_overlay_html(
                     tab_amount=new_tab,
@@ -328,7 +332,7 @@ def handle_gradio_input_stream(
                     tip_percentage=new_tip_percentage,
                     tip_amount=new_tip_amount
                 )
-                
+
                 # Yield completion event
                 yield {
                     'type': 'complete',
@@ -338,13 +342,13 @@ def handle_gradio_input_stream(
                     'overlay_html': overlay_html,
                     'avatar_path': final_avatar_path
                 }
-                    
+
             elif event['type'] == 'error':
                 # Handle errors
                 error_text = event['content']
-                
+
                 updated_history = append_to_history(session_history_state, user_input, error_text)
-                
+
                 yield {
                     'type': 'error',
                     'content': error_text,
@@ -355,17 +359,17 @@ def handle_gradio_input_stream(
         # Handle session limit exceeded
         logger.warning(f"Session limit exceeded: {e}")
         error_message = "The bar is at capacity right now! Please try again in a moment."
-        
+
         error_history = append_to_history(session_history_state, user_input, error_message)
-        
+
         error_payload = {
             'type': 'error',
             'content': error_message,
             'history': error_history
         }
-        
+
         yield error_payload
-        
+
     except Exception as e:
         # Handle quota errors and other exceptions
         if is_quota_error(e):
@@ -375,19 +379,19 @@ def handle_gradio_input_stream(
             logger.exception(f"Critical error in handle_gradio_input_stream: {e}")
             error_message = "I'm sorry, an unexpected error occurred. Please try again."
             quota_error_html = None
-        
+
         error_history = append_to_history(session_history_state, user_input, error_message)
-        
+
         error_payload = {
             'type': 'error',
             'content': error_message,
             'history': error_history
         }
-        
+
         # Add quota error HTML if applicable
         if quota_error_html:
             error_payload['quota_error_html'] = quota_error_html
-        
+
         yield error_payload
 
 

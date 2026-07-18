@@ -27,7 +27,7 @@ def _handle_genai_fallback_error(e: Exception, logger: logging.Logger, context: 
     # Fallback classification using attributes to avoid brittle string matching
     code = getattr(e, "status_code", None)
     error_code = getattr(e, "error_code", None)
-    
+
     # Detect timeouts via common exception types
     # Check for built-in timeout
     is_timeout = isinstance(e, TimeoutError)
@@ -249,38 +249,38 @@ def stream_gemini_api(
         try:
             # Open fresh stream
             response_stream = _open_gemini_stream()
-            
+
             # Iterate through stream with error handling
             for chunk in response_stream:
                 yield chunk
-                
+
             # Stream completed successfully
             break
-            
+
         except (GenaiRateLimitError, GenaiTimeoutError, TimeoutError) as e:
             attempt += 1
             if attempt >= max_attempts:
                 logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
                 raise
-            
+
             logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}): {e}. Retrying...")
             # Note: We don't resume from offset as Gemini doesn't support it,
             # but we track attempts for logging/debugging
-            
+
         except (GenaiAuthError, GenaiPermissionDeniedError,
                 GenaiUnauthenticatedError) as e:
             # Don't retry auth errors
             logger.error(f"Authentication error in Gemini stream: {e}")
             raise
-            
+
         except Exception as e:
             # Classify and handle other errors
             _handle_genai_fallback_error(e, logger, "Gemini API stream iteration")
-            
+
             # Determine retry behavior based on error type
             code = getattr(e, "status_code", None)
             error_code = getattr(e, "error_code", None)
-            
+
             # Detect timeouts via common exception types
             is_timeout = isinstance(e, TimeoutError)
             if not is_timeout and httpx is not None:

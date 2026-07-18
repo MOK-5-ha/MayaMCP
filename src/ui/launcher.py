@@ -1,12 +1,18 @@
 """Gradio interface launcher."""
 
+from typing import Callable, Dict, List, MutableMapping, Optional
+
 import gradio as gr
-from typing import Optional, Callable, List, Dict, Any, MutableMapping
+
 from ..config.logging_config import get_logger
-from .components import setup_avatar, create_streaming_components, create_streaming_toggle
-from .tab_overlay import create_tab_overlay_html
-from .api_key_modal import create_help_instructions_md, handle_key_submission
 from ..utils.state_manager import DEFAULT_PAYMENT_STATE
+from .api_key_modal import create_help_instructions_md, handle_key_submission
+from .components import (
+    create_streaming_components,
+    create_streaming_toggle,
+    setup_avatar,
+)
+from .tab_overlay import create_tab_overlay_html
 
 logger = get_logger(__name__)
 
@@ -74,15 +80,11 @@ def launch_bartender_interface(
         except Exception as e:
             logger.exception(f"Failed to setup avatar: {e}")
             avatar_path = None
-    
+
     # Use default avatar path if not provided
     if not avatar_path:
-        import os
-        if os.path.exists("assets/bartender_avatar.mp4"):
-             avatar_path = "assets/bartender_avatar.mp4"
-        else:
-             avatar_path = "assets/bartender_avatar.jpg"
-            
+        avatar_path = "assets/bartender_avatar.jpg"
+
     effective_avatar_path = avatar_path
 
     # Create the interface
@@ -95,7 +97,7 @@ def launch_bartender_interface(
         history_state = gr.State([])
         order_state = gr.State([])
         keys_validated_state = gr.State(False)
-        
+
         # --- Payment State Variables (Requirements: 2.2, 6.2, 7.2, 7.3) ---
         tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])
         balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])
@@ -212,9 +214,9 @@ def launch_bartender_interface(
             tip_amount_state, avatar_state, quota_error_display,
             streaming_text_display, streaming_audio_player
         ]
-        
+
         def handle_input_wrapper(
-            user_input: str, history: List[Dict[str, str]], 
+            user_input: str, history: List[Dict[str, str]],
             tab: float, balance: float, tip_pct: Optional[int], tip_amt: float,
             avatar: str, streaming_enabled: bool, request: gr.Request,
             tools=None, rag_retriever=None, rag_api_key: Optional[str] = None,
@@ -231,10 +233,10 @@ def launch_bartender_interface(
                     user_input, history, tab, balance, tip_pct, tip_amt,
                     request, tools, rag_retriever, rag_api_key, app_state, avatar
                 )
-        
+
         msg_input.submit(handle_input_wrapper, submit_inputs, submit_outputs)
         submit_btn.click(handle_input_wrapper, submit_inputs, submit_outputs)
-        
+
         # --- Tip Button JavaScript Callback ---
         tip_button_js = """
         function handleTipClick(percentage) {
@@ -259,7 +261,7 @@ def launch_bartender_interface(
             avatar_state, streaming_text_display, streaming_audio_player,
             quota_error_display
         ]
-        
+
         def clear_with_overlay(request: gr.Request):
             result = clear_state_fn(request)
             overlay_html = create_avatar_with_overlay(
@@ -288,9 +290,9 @@ def launch_bartender_interface(
                 None,  # streaming_audio_player (empty)
                 ""   # quota_error_display (empty)
             )
-        
+
         clear_btn.click(clear_with_overlay, [], clear_outputs)
-        
+
         # --- Tip Button Click Handler ---
         def handle_tip_click_wrapper(
             tip_percentage_str: str,
@@ -317,7 +319,7 @@ def launch_bartender_interface(
                     overlay_html, current_tab, current_balance,
                     current_tab, current_balance, current_tip_pct, 0.0, current_avatar
                 )
-            
+
             try:
                 percentage = int(tip_percentage_str.strip())
             except ValueError:
@@ -336,7 +338,7 @@ def launch_bartender_interface(
                     overlay_html, current_tab, current_balance,
                     current_tab, current_balance, current_tip_pct, 0.0, current_avatar
                 )
-            
+
             overlay_html = create_avatar_with_overlay(
                 avatar_path=current_avatar,
                 tab_amount=current_tab,
@@ -346,13 +348,13 @@ def launch_bartender_interface(
                 tip_percentage=current_tip_pct,
                 tip_amount=0.0
             )
-            
+
             return (
                 "", history, history, None,
                 overlay_html, current_tab, current_balance,
                 current_tab, current_balance, current_tip_pct, 0.0, current_avatar
             )
-        
+
         # Wire tip click input to handler
         tip_click_outputs = [
             tip_click_input, chatbot_display, history_state, agent_audio_output,
@@ -362,7 +364,7 @@ def launch_bartender_interface(
         tip_click_inputs = [
             tip_click_input, tip_percentage_state, tab_state, balance_state, history_state, avatar_state
         ]
-        
+
         tip_click_input.change(
             handle_tip_click_wrapper,
             tip_click_inputs,

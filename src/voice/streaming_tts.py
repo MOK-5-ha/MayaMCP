@@ -1,9 +1,9 @@
 """Streaming TTS functionality for pipelined audio generation."""
 
-import threading
-from typing import Generator, Optional, Callable
 import queue
+import threading
 import time
+from typing import Callable, Generator, Optional
 
 from ..config.logging_config import get_logger
 from .tts import get_voice_audio
@@ -37,7 +37,7 @@ def generate_streaming_audio(
     audio_queue = queue.Queue()
     generation_complete = threading.Event()
     stop_requested = threading.Event()
-    
+
     def audio_worker():
         """Background thread to generate audio from sentences."""
         try:
@@ -46,30 +46,30 @@ def generate_streaming_audio(
                 if stop_requested.is_set():
                     logger.debug("Audio worker stopping due to cancellation request")
                     break
-                    
+
                 if not sentence or not sentence.strip():
                     continue
-                    
+
                 logger.debug(f"Generating TTS for sentence: '{sentence[:50]}...'")
-                
+
                 # Generate audio for this sentence
                 audio_data = get_voice_audio(sentence, cartesia_client, voice_id)
-                
+
                 # Check for cancellation immediately after blocking TTS call
                 if stop_requested.is_set():
                     logger.debug("Audio worker stopping due to cancellation request after TTS call")
                     break
-                
+
                 if audio_data:
                     audio_chunk = {
                         'type': 'audio_chunk',
                         'content': audio_data,
                         'sentence': sentence
                     }
-                    
+
                     if on_audio_ready:
                         on_audio_ready(audio_data)
-                    
+
                     audio_queue.put(audio_chunk)
                 else:
                     # TTS failed for this sentence
@@ -79,14 +79,14 @@ def generate_streaming_audio(
                         'content': None,
                         'sentence': sentence
                     })
-            
+
             # Signal completion (unless stopped early)
             if not stop_requested.is_set():
                 audio_queue.put({'type': 'generation_complete', 'content': None})
             else:
                 # Signal cancellation
                 audio_queue.put({'type': 'generation_cancelled', 'content': None})
-            
+
         except Exception as e:
             logger.error(f"Error in audio worker thread: {e}")
             audio_queue.put({
@@ -96,24 +96,24 @@ def generate_streaming_audio(
             })
         finally:
             generation_complete.set()
-    
+
     # Start audio generation in background thread
     worker_thread = threading.Thread(target=audio_worker, daemon=True)
     worker_thread.start()
-    
+
     # Yield results as they become available
     try:
         last_heartbeat_time = time.time()
-        
+
         while not generation_complete.is_set() or not audio_queue.empty():
             try:
                 # Wait for audio chunk with timeout
                 chunk = audio_queue.get(timeout=0.1)
                 yield chunk
-                
+
                 if chunk['type'] in ('generation_complete', 'generation_cancelled'):
                     break
-                    
+
             except queue.Empty:
                 # Check if enough time has passed to emit a heartbeat
                 current_time = time.time()
@@ -121,14 +121,14 @@ def generate_streaming_audio(
                     yield {'type': 'heartbeat', 'content': None}
                     last_heartbeat_time = current_time
                 # Otherwise, just continue waiting without yielding
-                
+
     except Exception as e:
         logger.error(f"Error in streaming audio generator: {e}")
         yield {'type': 'generator_error', 'content': str(e)}
     finally:
         # Signal worker to stop on cleanup
         stop_requested.set()
-    
+
     # Wait for worker thread to complete
     worker_thread.join(timeout=5.0)
     if worker_thread.is_alive():
@@ -140,16 +140,16 @@ class QueueIterator:
     def __init__(self):
         self.queue = queue.Queue()
         self.sentinel = object()
-        
+
     def put(self, item):
         self.queue.put(item)
-        
+
     def stop(self):
         self.queue.put(self.sentinel)
-        
+
     def __iter__(self):
         return self
-        
+
     def __next__(self):
         item = self.queue.get()
         if item is self.sentinel:
@@ -176,18 +176,18 @@ def create_pipelined_tts_generator(
     sentence_queue_iter = QueueIterator()
     audio_gen = generate_streaming_audio(sentence_queue_iter, cartesia_client, voice_id)
     audio_iter = iter(audio_gen)
-    
+
     try:
         for text_event in sentence_stream:
             # Yield text event first
             yield text_event
-            
+
             # Feed the audio generator as sentences arrive
             if text_event['type'] == 'sentence':
                 sentence_queue_iter.put(text_event['content'])
             elif text_event['type'] == 'complete':
                 sentence_queue_iter.stop()
-                
+
             # If it's a sentence or complete, interleave with corresponding audio event
             # Skipping/draining and yielding heartbeat events before retrieving the matching audio event
             if text_event['type'] in ['sentence', 'complete']:
@@ -201,7 +201,7 @@ def create_pipelined_tts_generator(
                     pass
     finally:
         sentence_queue_iter.stop()
-    
+
     # Yield any remaining audio events
     for audio_event in audio_iter:
         yield audio_event

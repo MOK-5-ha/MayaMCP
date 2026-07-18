@@ -14,9 +14,8 @@ Requirements:
 """
 
 import asyncio
-import logging
 import time
-from typing import Dict, Optional, Any, Tuple
+from typing import Dict, Optional, Tuple
 
 from ..config.logging_config import get_logger
 
@@ -79,7 +78,7 @@ class StripeMCPClient:
         max_retries: Maximum retry attempts for payment link creation
         timeout: Overall timeout for operations
     """
-    
+
     def __init__(
         self,
         test_mode: bool = True,
@@ -97,15 +96,15 @@ class StripeMCPClient:
         self.test_mode = test_mode
         self.max_retries = max_retries
         self.timeout = timeout
-        
+
         # Availability cache
         self._availability_cache: Optional[Tuple[bool, float]] = None
-        
+
         logger.info(
             f"StripeMCPClient initialized: test_mode={test_mode}, "
             f"max_retries={max_retries}, timeout={timeout}"
         )
-    
+
     def generate_idempotency_key(self, session_id: str) -> str:
         """
         Generate idempotency key for Stripe requests.
@@ -126,7 +125,7 @@ class StripeMCPClient:
         idempotency_key = f"{session_id}_{unix_timestamp}"
         logger.debug(f"Generated idempotency key: {idempotency_key}")
         return idempotency_key
-    
+
     def is_available(self) -> bool:
         """
         Check if Stripe MCP server is available.
@@ -145,14 +144,14 @@ class StripeMCPClient:
         Requirements: 3.4
         """
         current_time = time.time()
-        
+
         # Check cache
         if self._availability_cache is not None:
             cached_result, cache_time = self._availability_cache
             if current_time - cache_time < AVAILABILITY_CACHE_TTL:
                 logger.debug(f"Using cached availability result: {cached_result}")
                 return cached_result
-        
+
         # Perform availability check
         try:
             is_available = self._probe_stripe_server()
@@ -163,7 +162,7 @@ class StripeMCPClient:
             logger.warning(f"Stripe MCP availability check failed: {e}")
             self._availability_cache = (False, current_time)
             return False
-    
+
     def _probe_stripe_server(self) -> bool:
         """
         Perform lightweight probe of Stripe MCP server.
@@ -179,7 +178,7 @@ class StripeMCPClient:
         # This will be replaced with actual MCP integration
         logger.debug("Stripe MCP probe: returning True (stub implementation)")
         return True
-    
+
     async def create_payment_link(
         self,
         amount: float,
@@ -212,7 +211,7 @@ class StripeMCPClient:
         """
         if max_retries is None:
             max_retries = self.max_retries
-        
+
         # Check availability first to avoid unnecessary retries
         if not self.is_available():
             logger.warning(
@@ -220,10 +219,10 @@ class StripeMCPClient:
                 f"session_key={idempotency_key}"
             )
             return self._create_mock_payment(amount, description)
-        
+
         start_time = time.time()
         last_error: Optional[Exception] = None
-        
+
         for attempt in range(max_retries + 1):  # Initial + retries
             # Check overall timeout
             elapsed = time.time() - start_time
@@ -233,7 +232,7 @@ class StripeMCPClient:
                     f"attempts={attempt}, idempotency_key={idempotency_key}"
                 )
                 break
-            
+
             try:
                 result = await self._call_stripe_create_link(
                     amount, description, idempotency_key
@@ -243,34 +242,34 @@ class StripeMCPClient:
                     f"payment_id={result.get('payment_id')}, attempt={attempt + 1}"
                 )
                 return result
-                
+
             except Exception as e:
                 last_error = e
                 logger.warning(
                     f"Payment link creation attempt {attempt + 1} failed: {e}"
                 )
-                
+
                 # Wait before retry (if not last attempt)
                 if attempt < max_retries:
                     delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
                     remaining_time = self.timeout - (time.time() - start_time)
-                    
+
                     if remaining_time > delay:
                         logger.debug(f"Waiting {delay}s before retry {attempt + 2}")
                         await asyncio.sleep(delay)
                     else:
                         logger.debug("Not enough time for retry, breaking")
                         break
-        
+
         # All retries exhausted - fall back to mock payment
         logger.warning(
             f"Payment link creation failed after {max_retries + 1} attempts. "
             f"idempotency_key={idempotency_key}, last_error={last_error}. "
             f"Falling back to mock payment."
         )
-        
+
         return self._create_mock_payment(amount, description)
-    
+
     async def _call_stripe_create_link(
         self,
         amount: float,
@@ -297,25 +296,25 @@ class StripeMCPClient:
         # TODO: Implement actual MCP server call via kiroPowers
         # For now, simulate a successful response for development
         # This will be replaced with actual MCP integration
-        
+
         # Convert amount to cents for Stripe
         amount_cents = int(round(amount * 100))
-        
+
         # Simulate Stripe payment link response
         mock_payment_id = f"plink_test_{idempotency_key[-8:]}"
         mock_url = f"https://checkout.stripe.com/c/pay/{mock_payment_id}"
-        
+
         logger.debug(
             f"Stripe MCP call (stub): amount={amount_cents}, "
             f"description={description}, idempotency_key={idempotency_key}"
         )
-        
+
         return {
             "url": mock_url,
             "payment_id": mock_payment_id,
             "is_simulated": False
         }
-    
+
     def _create_mock_payment(
         self,
         amount: float,
@@ -334,17 +333,17 @@ class StripeMCPClient:
             Dict with mock url, payment_id, is_simulated=True
         """
         mock_id = f"mock_{int(time.time())}"
-        
+
         logger.info(
             f"Created mock payment: id={mock_id}, amount=${amount:.2f}"
         )
-        
+
         return {
             "url": f"https://example.com/mock-payment/{mock_id}",
             "payment_id": mock_id,
             "is_simulated": True
         }
-    
+
     async def check_payment_status(
         self,
         payment_id: str,
@@ -377,10 +376,10 @@ class StripeMCPClient:
         """
         start_time = time.time()
         attempt = 0
-        
+
         while True:
             elapsed = time.time() - start_time
-            
+
             # Check wall-clock deadline
             if elapsed >= deadline:
                 logger.warning(
@@ -388,7 +387,7 @@ class StripeMCPClient:
                     f"payment_id={payment_id}, elapsed={elapsed:.1f}s"
                 )
                 return "timeout"
-            
+
             # Check max attempts
             if attempt >= MAX_POLL_ATTEMPTS:
                 logger.warning(
@@ -396,18 +395,18 @@ class StripeMCPClient:
                     f"payment_id={payment_id}, attempts={attempt}"
                 )
                 return "timeout"
-            
+
             try:
                 status = await asyncio.wait_for(
                     self._poll_payment_status(payment_id),
                     timeout=poll_timeout
                 )
-                
+
                 logger.debug(
                     f"Payment status poll: payment_id={payment_id}, "
                     f"status={status}, attempt={attempt + 1}"
                 )
-                
+
                 # Return if terminal status
                 if status in ("succeeded", "failed"):
                     logger.info(
@@ -415,7 +414,7 @@ class StripeMCPClient:
                         f"status={status}, attempts={attempt + 1}"
                     )
                     return status
-                
+
             except asyncio.TimeoutError:
                 logger.warning(
                     f"Payment status poll timed out: "
@@ -426,9 +425,9 @@ class StripeMCPClient:
                     f"Payment status poll failed: "
                     f"payment_id={payment_id}, attempt={attempt + 1}, error={e}"
                 )
-            
+
             attempt += 1
-            
+
             # Wait before next poll (if time permits)
             remaining = deadline - (time.time() - start_time)
             if remaining > poll_interval:
@@ -437,9 +436,9 @@ class StripeMCPClient:
                 await asyncio.sleep(remaining)
             else:
                 break
-        
+
         return "timeout"
-    
+
     async def _poll_payment_status(self, payment_id: str) -> str:
         """
         Poll Stripe MCP server for payment status.
@@ -456,13 +455,13 @@ class StripeMCPClient:
         # TODO: Implement actual MCP server call via kiroPowers
         # For now, simulate a pending response for development
         # This will be replaced with actual MCP integration
-        
+
         logger.debug(f"Stripe MCP status poll (stub): payment_id={payment_id}")
-        
+
         # Simulate: return pending for now
         # In real implementation, this would query Stripe
         return "pending"
-    
+
     def invalidate_availability_cache(self) -> None:
         """
         Invalidate the availability cache.

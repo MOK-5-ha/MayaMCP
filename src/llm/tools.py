@@ -1,11 +1,11 @@
 """LLM tools for bartending operations."""
 
 import asyncio
-import re
 import random
-import threading
+import re
 from enum import Enum
 from typing import Dict, List, Optional, Union
+
 
 def tool(fn):
     import inspect
@@ -28,24 +28,30 @@ def tool(fn):
         return wrapper(args, **kwargs)
     wrapper.invoke = invoke
     return wrapper
-from typing_extensions import TypedDict, Literal
+from typing_extensions import Literal, TypedDict
 
 from ..config.logging_config import get_logger
+from ..payments.stripe_mcp import StripeMCPClient
 from ..utils.state_manager import (
-    get_current_order_state,
-    get_order_history,
-    update_order_state,
-    get_payment_state,
+    CONCURRENT_MODIFICATION as STATE_CONCURRENT_MODIFICATION,
+)
+from ..utils.state_manager import (
+    INSUFFICIENT_FUNDS as STATE_INSUFFICIENT_FUNDS,
+)
+from ..utils.state_manager import (
+    VALID_TIP_PERCENTAGES,
     atomic_order_update,
     atomic_payment_complete,
-    update_payment_state,
-    set_tip as state_set_tip,
+    get_current_order_state,
+    get_order_history,
+    get_payment_state,
     get_payment_total,
-    INSUFFICIENT_FUNDS as STATE_INSUFFICIENT_FUNDS,
-    CONCURRENT_MODIFICATION as STATE_CONCURRENT_MODIFICATION,
-    VALID_TIP_PERCENTAGES,
+    update_order_state,
+    update_payment_state,
 )
-from ..payments.stripe_mcp import StripeMCPClient
+from ..utils.state_manager import (
+    set_tip as state_set_tip,
+)
 
 logger = get_logger(__name__)
 
@@ -190,6 +196,7 @@ def create_tool_error(
 # This allows tools to access the current session_id without explicit parameter passing
 # Initialize with default None (no active session) for backwards compatibility
 import contextvars
+
 _session_context = contextvars.ContextVar('session_id', default=None)
 
 
@@ -410,7 +417,7 @@ def create_stripe_payment() -> ToolResponse:
     payment = get_payment_state(session_id, store)
     tab_total = payment['tab_total']
     tip_amount = payment['tip_amount']
-    
+
     # Payment amount = tab_total + tip_amount (Requirements 7.9)
     payment_total = get_payment_total(session_id, store)
 
@@ -756,9 +763,9 @@ def get_recommendation(preference: str) -> str:
             "description": "These spirits deliver that characteristic burn when sipped straight"
         }
     }
-    
+
     preference = preference.lower()
-    
+
     # Check if the preference is valid
     if preference in preferences_map:
         rec = preferences_map[preference]
@@ -778,7 +785,7 @@ def _parse_menu_items(menu_str: str) -> Dict[str, float]:
     for match in matches:
         item_name = match[0].strip()
         price = float(match[1])
-        items[item_name.lower()] = price 
+        items[item_name.lower()] = price
     return items
 
 @tool
@@ -868,15 +875,15 @@ def get_order() -> str:
     session_id = get_current_session()
     store = get_global_store()
     order_list = get_current_order_state(session_id, store)
-    
+
     if not order_list:
         return "The order is currently empty."
-    
+
     # Enhanced order display including quantity and modifiers
     order_details = []
     for item in order_list:
-        quantity = item.get('quantity', 1)  
-    
+        quantity = item.get('quantity', 1)
+
         if "modifiers" in item and item["modifiers"] != "no modifiers":
             # Show single price per item, not total price
             item_price = item['price'] / quantity if quantity > 0 else item['price']
@@ -891,10 +898,10 @@ def get_order() -> str:
                 order_details.append(f"- {quantity}x {item['name']} (${item_price:.2f} each)")
             else:
                 order_details.append(f"- {item['name']} (${item_price:.2f})")
-    
+
     order_text = "\n".join(order_details)
     total = sum(item['price'] for item in order_list)
-    
+
     return f"Current Order:\n{order_text}\nTotal: ${total:.2f}"
 
 @tool
@@ -903,10 +910,10 @@ def confirm_order() -> str:
     session_id = get_current_session()
     store = get_global_store()
     order_list = get_current_order_state(session_id, store)
-    
+
     if not order_list:
         return "There is nothing in the order to confirm. Please add items first."
-    
+
     # Enhanced order display including modifiers
     order_details = []
     for item in order_list:
@@ -914,13 +921,13 @@ def confirm_order() -> str:
             order_details.append(f"- {item['name']} with {item['modifiers']} (${item['price']:.2f})")
         else:
             order_details.append(f"- {item['name']} (${item['price']:.2f})")
-    
+
     order_text = "\n".join(order_details)
     total = sum(item['price'] for item in order_list)
-    
+
     confirmation_request = f"Here is your current order:\n{order_text}\nTotal: ${total:.2f}\n\nIs this correct? You can ask to add/remove items or proceed to place the order."
     logger.info("Tool: Generated order confirmation request with modifiers for user.")
-    
+
     return confirmation_request
 
 @tool
@@ -931,35 +938,35 @@ def place_order() -> str:
     if session_id is None:
         logger.warning("place_order called without session context")
         return "Error: No active session. Please refresh and try again."
-    
+
     store = get_global_store()
     order_list = get_current_order_state(session_id, store)
-    
+
     if not order_list:
         return "Cannot place an empty order. Please add items first."
-    
+
     # Enhanced order details including modifiers
     order_details = []
     current_order_cost = 0.0
-    
+
     for item in order_list:
         # Add to running total
         current_order_cost += item['price']
-        
+
         # Format for display
         if "modifiers" in item and item["modifiers"] != "no modifiers":
             order_details.append(f"{item['name']} with {item['modifiers']}")
         else:
             order_details.append(item['name'])
-    
+
     order_text = ", ".join(order_details)
     total = sum(item['price'] for item in order_list)
-    
+
     # Simulate random preparation time between 2-8 minutes
     prep_time = random.randint(2, 8)
-    
+
     logger.info(f"Tool: Placing order: [{order_text}], Total: ${total:.2f}, ETA: {prep_time} minutes")
-    
+
     # Update order state to place the order
     update_order_state(session_id, get_global_store(), "place_order")
 
@@ -973,7 +980,7 @@ def clear_order() -> str:
     if session_id is None:
         logger.warning("clear_order called without session context")
         return "Error: No active session. Please refresh and try again."
-    
+
     update_order_state(session_id, get_global_store(), "clear_order")
     return "Your order has been cleared."
 
@@ -983,30 +990,30 @@ def get_bill() -> str:
     session_id = get_current_session()
     store = get_global_store()
     order_history = get_order_history(session_id, store)
-    
+
     if not order_history['items']:
         return "You haven't ordered anything yet."
-    
+
     # Format the bill with details
     bill_details = []
     for item in order_history['items']:
         item_text = item['name']
-        quantity = item.get('quantity', 1)  
-    
+        quantity = item.get('quantity', 1)
+
         if "modifiers" in item and item["modifiers"] != "no modifiers":
             item_text += f" with {item['modifiers']}"
-            
+
         # Calculate single item price
         item_price = item['price'] / quantity if quantity > 0 else item['price']
-        
+
         if quantity > 1:
             bill_details.append(f"{quantity}x {item_text}: ${item_price:.2f} each = ${item['price']:.2f}")
         else:
             bill_details.append(f"{item_text}: ${item_price:.2f}")
-    
+
     bill_text = "\n".join(bill_details)
     subtotal = order_history['total_cost']
-    
+
     # Include tip in the bill if present
     if order_history['tip_amount'] > 0:
         tip = order_history['tip_amount']
@@ -1026,23 +1033,23 @@ def pay_bill() -> str:
     if session_id is None:
         logger.warning("pay_bill called without session context")
         return "Error: No active session. Please refresh and try again."
-    
+
     store = get_global_store()
     order_history = get_order_history(session_id, store)
-    
+
     if not order_history['items']:
         return "You haven't ordered anything yet."
-    
+
     if order_history['paid']:
         return "Your bill has already been paid. Thank you!"
-    
+
     subtotal = order_history['total_cost']
     tip = order_history['tip_amount']
     total = subtotal + tip
-    
+
     # Update order state to mark as paid
     update_order_state(session_id, get_global_store(), "pay_bill")
-    
+
     if tip > 0:
         return f"Thank you for your payment of ${total:.2f} (including ${tip:.2f} tip)! We hope you enjoyed your drinks at MOK 5-ha."
     else:
@@ -1064,16 +1071,16 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
     if session_id is None:
         logger.warning("add_tip called without session context")
         return "Error: No active session. Please refresh and try again."
-    
+
     store = get_global_store()
     order_history = get_order_history(session_id, store)
-    
+
     if not order_history['items']:
         return "You haven't ordered anything yet, so there's nothing to tip on."
-    
+
     if order_history['paid']:
         return "The bill has already been paid. Thank you for your business!"
-    
+
     # Calculate the tip amount
     if percentage > 0:
         tip_amount = order_history['total_cost'] * (percentage / 100)
@@ -1084,10 +1091,10 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
             tip_percentage = (amount / order_history['total_cost']) * 100
         else:
             tip_percentage = 0
-    
+
     # Round tip to two decimal places for cleaner display
     tip_amount = round(tip_amount, 2)
-    
+
     # Update order state with tip
     update_order_state(session_id, get_global_store(), "add_tip", {"amount": tip_amount, "percentage": tip_percentage})
     # Update payment state with tip to sync active Stripe / UI tab total
@@ -1095,11 +1102,11 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
         "tip_amount": tip_amount,
         "tip_percentage": int(tip_percentage) if int(tip_percentage) in [10, 15, 20] else None
     })
-    
+
     # Calculate the new total
     subtotal = order_history['total_cost']
     total_with_tip = subtotal + tip_amount
-    
+
     if percentage > 0:
         return f"Added a {percentage:.1f}% tip (${tip_amount:.2f}) to your bill. New total: ${total_with_tip:.2f}"
     else:

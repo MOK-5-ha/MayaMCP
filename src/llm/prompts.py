@@ -1,6 +1,5 @@
 """System prompts and prompt templates for Maya."""
 
-from typing import Dict
 
 # Main system instructions for Maya
 MAYA_SYSTEM_INSTRUCTIONS = (
@@ -43,10 +42,10 @@ def get_system_prompt(menu_text: str = "") -> str:
         Complete system prompt
     """
     prompt = MAYA_SYSTEM_INSTRUCTIONS
-    
+
     if menu_text:
         prompt += f"\n\nMenu available: {menu_text}"
-    
+
     return prompt
 
 def get_phase_prompt(phase: str) -> str:
@@ -74,5 +73,5 @@ def get_combined_prompt(phase: str, menu_text: str = "") -> str:
     """
     phase_prompt = get_phase_prompt(phase)
     system_prompt = get_system_prompt(menu_text)
-    
+
     return f"{phase_prompt}\n\n{system_prompt}"

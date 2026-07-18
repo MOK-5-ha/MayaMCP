@@ -1,36 +1,37 @@
 """Conversation phase management for Maya."""
 
-from typing import Dict, Any, MutableMapping
-from ..utils.state_manager import get_conversation_state, update_conversation_state
-from ..utils.helpers import determine_next_phase
+from typing import MutableMapping
+
 from ..config.logging_config import get_logger
+from ..utils.helpers import determine_next_phase
+from ..utils.state_manager import get_conversation_state, update_conversation_state
 
 logger = get_logger(__name__)
 
 class ConversationPhaseManager:
     """Manages conversation phases and state transitions."""
-    
+
     def __init__(self, session_id: str, app_state: MutableMapping):
         self.logger = get_logger(self.__class__.__name__)
         self.session_id = session_id
         self.app_state = app_state
-    
+
     def get_current_phase(self) -> str:
         """Get the current conversation phase."""
         state = get_conversation_state(self.session_id, self.app_state)
         return state['phase']
-    
+
     def increment_turn(self) -> None:
         """Increment the conversation turn count."""
         state = get_conversation_state(self.session_id, self.app_state)
         update_conversation_state(self.session_id, self.app_state, {'turn_count': state['turn_count'] + 1})
-    
+
     def increment_small_talk(self) -> None:
         """Increment the small talk counter."""
         state = get_conversation_state(self.session_id, self.app_state)
         if state['phase'] == 'small_talk':
             update_conversation_state(self.session_id, self.app_state, {'small_talk_count': state['small_talk_count'] + 1})
-    
+
     def handle_order_placed(self) -> None:
         """Handle state updates when an order is placed."""
         state = get_conversation_state(self.session_id, self.app_state)
@@ -38,7 +39,7 @@ class ConversationPhaseManager:
             'last_order_time': state['turn_count'],
             'small_talk_count': 0
         })
-    
+
     def update_phase(self, order_placed: bool = False) -> str:
         """
         Update conversation phase based on current state and actions.
@@ -50,22 +51,22 @@ class ConversationPhaseManager:
             New conversation phase
         """
         current_state = get_conversation_state(self.session_id, self.app_state)
-        
+
         # Handle order placement
         if order_placed:
             self.handle_order_placed()
             current_state = get_conversation_state(self.session_id, self.app_state)  # Get updated state
-        
+
         # Determine next phase
         next_phase = determine_next_phase(current_state, order_placed)
-        
+
         # Update phase
         update_conversation_state(self.session_id, self.app_state, {'phase': next_phase})
-        
+
         self.logger.info(f"Conversation phase updated: {current_state['phase']} -> {next_phase}")
-        
+
         return next_phase
-    
+
     def should_use_rag(self, user_input: str) -> bool:
         """
         Determine if RAG should be used for this input.
@@ -77,10 +78,10 @@ class ConversationPhaseManager:
             True if RAG should be used
         """
         from ..utils.helpers import is_casual_conversation
-        
+
         # Use RAG for casual conversation
         return is_casual_conversation(user_input)
-    
+
     def reset_phase(self) -> None:
         """Reset conversation phase to greeting."""
         update_conversation_state(self.session_id, self.app_state, {

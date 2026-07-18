@@ -1,9 +1,16 @@
 """Text-to-speech functionality using Cartesia."""
 
+import logging
 import re
 from typing import Optional
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
-import logging
+
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from ..config.logging_config import get_logger
 from ..config.model_config import get_cartesia_config
@@ -25,10 +32,10 @@ def clean_text_for_tts(text: str) -> str:
     """
     if not text:
         return text
-    
+
     # Replace "MOK 5-ha" with "Moksha" for proper pronunciation
     cleaned_text = re.sub(r'MOK 5-ha', 'Moksha', text, flags=re.IGNORECASE)
-    
+
     # Convert monetary amounts to speech-friendly format
     def format_money_for_speech(match):
         amount = match.group(1)
@@ -68,10 +75,10 @@ def clean_text_for_tts(text: str) -> str:
         except ValueError:
             # If parsing fails, just remove the dollar sign
             return amount
-    
+
     # Pattern to match valid $XX.XX format and convert to speech-friendly text
     cleaned_text = re.sub(r'\$(\d+(?:\.\d{1,2})?)(?!\d)', format_money_for_speech, cleaned_text)
-    
+
     # Remove problematic punctuation that TTS might pronounce
     # Keep periods, commas, question marks, exclamation marks for natural pauses
     # Remove: asterisks, hashtags, underscores, brackets, etc.
@@ -96,17 +103,17 @@ def clean_text_for_tts(text: str) -> str:
         r'%+',            # Percent signs (%,%%)
         r'\$+',           # Dollar signs ($,$$)
     ]
-    
+
     for pattern in punctuation_to_remove:
         cleaned_text = re.sub(pattern, ' ', cleaned_text)
-    
+
     # Clean up extra whitespace
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
-    
+
     # Log if significant changes were made
     if cleaned_text != text:
         logger.info(f"Cleaned TTS text: '{text[:30]}...' → '{cleaned_text[:30]}...'")
-    
+
     return cleaned_text
 
 def initialize_cartesia_client(api_key: str):
@@ -121,11 +128,11 @@ def initialize_cartesia_client(api_key: str):
     """
     try:
         from cartesia import Cartesia
-        
+
         client = Cartesia(api_key=api_key)
         logger.info("Successfully initialized Cartesia client.")
         return client
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize Cartesia client: {e}")
         raise RuntimeError("Cartesia client initialization failed.") from e
@@ -138,8 +145,8 @@ def initialize_cartesia_client(api_key: str):
     reraise=True
 )
 def get_voice_audio(
-    text_to_speak: str, 
-    cartesia_client, 
+    text_to_speak: str,
+    cartesia_client,
     voice_id: Optional[str] = None
 ) -> Optional[bytes]:
     """
@@ -156,7 +163,7 @@ def get_voice_audio(
     if not text_to_speak or not text_to_speak.strip():
         logger.warning("get_voice_audio received empty text.")
         return None
-        
+
     if not cartesia_client:
         logger.error("Cartesia client not provided, cannot generate audio.")
         return None
@@ -166,7 +173,7 @@ def get_voice_audio(
         config = get_cartesia_config()
         if voice_id is None:
             voice_id = config["voice_id"]
-        
+
         # Clean text for TTS (pronunciation fixes and punctuation removal)
         text_for_tts = clean_text_for_tts(text_to_speak)
 
@@ -175,7 +182,7 @@ def get_voice_audio(
         # Call Cartesia TTS API
         audio_generator = cartesia_client.tts.bytes(
             model_id=config["model_id"],
-            transcript=text_for_tts,  
+            transcript=text_for_tts,
             voice={
                 "mode": "id",
                 "id": voice_id,

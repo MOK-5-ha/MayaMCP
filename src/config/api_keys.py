@@ -2,6 +2,7 @@
 
 import os
 from typing import Dict, Optional
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
