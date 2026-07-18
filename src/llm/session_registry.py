@@ -138,10 +138,23 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
                 _session_clients[session_id] = {}
 
     # Create outside lock to avoid blocking other sessions
-    from .client import get_genai_client
+    from google.adk.models import Gemini
+    from google.genai import Client
+    from .client import get_model_name
 
-    llm = get_genai_client(api_key=api_key)
-    logger.info("Created new Client instance for session %s...", session_id[:8])
+    class BYOKGemini(Gemini):
+        def __init__(self, api_key: str, **kwargs):
+            super().__init__(**kwargs)
+            self._api_key = api_key
+
+        @property
+        def api_client(self) -> Client:
+            if not hasattr(self, '_client'):
+                self._client = Client(api_key=self._api_key)
+            return self._client
+
+    llm = BYOKGemini(api_key=api_key, model=get_model_name())
+    logger.info("Created new BYOKGemini instance for session %s...", session_id[:8])
 
     with _registry_lock:
         entry = _session_clients[session_id]

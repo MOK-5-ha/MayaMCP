@@ -51,6 +51,9 @@ pytest --cov              # With coverage
 pytest -m "not slow"      # Skip slow tests
 pytest -m unit            # Unit tests only
 pytest -m integration     # Integration tests only
+
+# Weave Evaluations (LLM-as-judge)
+python scripts/run_weave_evals.py
 ```
 - Tests live in `tests/` with `test_*.py` naming.
 - `tests/conftest.py` provides fixtures and SDK stubs for offline testing.
@@ -61,6 +64,9 @@ pytest -m integration     # Integration tests only
 - **Rate Limit Testing**: Never allow global app rate limits to restrict the standard test suite, as it causes false-negative token exhaustion errors. Set rate limit environment variables to high values (e.g., `9999`) in `tests/conftest.py`. When testing the rate limiter itself, use context-manager overrides to temporarily enforce limits strictly within those specific tests.
 - **Stateful Singletons (Rate Limits)**: The application uses a global singleton for rate limiting (`RateLimiter`). When writing tests, ensure `check_rate_limits` is mocked in fixtures (e.g., returning `(True, "")`) to prevent sequential test execution from accumulating state and failing due to burst limits.
 - **Refactoring & Mocks**: When extracting logic into helper functions, do not move the calls to state managers or mocked dependencies into the helper if it bypasses existing `@patch` targets in the test suite. Instead, fetch the data in the original module and pass the data structures into the helper.
+- **Mocking Tools**: Never use "mock-sniffing" wrappers in production code to detect `unittest.mock` objects. Instead, fix the test doubles. When patching tools that used to be invoked via LangChain's `.invoke()`, set both `mock.return_value` and `mock.invoke.return_value` to the expected string to ensure compatibility with both direct calls and legacy test harnesses.
+- **Rate Limiter Initialization timing**: If overriding rate limit constraints via environment variables (e.g. setting `MAYA_SESSION_RATE_LIMIT` to `9999` for tests or evaluations), ensure those environment variables are set *before* importing any package from the application to prevent the `RateLimiter` singleton from initializing with default values.
+- **Offline Evaluations**: Headless evaluation suites (such as Weights & Biases Weave integrations) must support running completely offline without demanding remote authentication if `WANDB_API_KEY` is missing. Create dummy mock fallbacks for classes like `weave.Model` and `weave.Evaluation` to execute evaluations locally.
 
 ## Linting & Type Checking
 ```bash
@@ -92,6 +98,10 @@ Optional:
 - **Lazy Streaming Pipelining**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs (e.g. streaming LLM outputs to TTS). Consume them lazily (using queue-based iterators if passing items between threads) to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired, preventing payload misalignment.
 - **Intent Routing Safety**: When implementing deterministic intent routing (e.g., bypassing the LLM for hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`) as it is prone to false positives. Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to guarantee precise matching.
+- **Nested Event Loop Avoidance**: When executing synchronous entrypoint wraps of async ADK code (such as ADK `Runner` routines using `asyncio.run()`), always verify if an event loop is already running in the current thread. If a loop is active, execute the coroutine in a separate thread/executor to avoid event loop collision errors (`RuntimeError: asyncio.run() cannot be called from a running event loop`).
+- **ContextVars and Thread Boundaries**: When using `ThreadPoolExecutor` or spawning new threads within ADK workflows, thread-local `ContextVar` states (like `session_id`) are not automatically propagated. You must explicitly initialize the context inside the thread worker closure (e.g., `set_current_session(session_id)`) before invoking ADK tools or database helpers.
+- **ADK Streaming Payload Gathering**: When accumulating chunks from ADK's `Runner.run_async` SSE events, do not restrict data collection exclusively to `event.partial == True`. Final text chunks may arrive without the partial flag, leading to dropped content. Process any `text_chunk` that contains valid string data.
+- **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`

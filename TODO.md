@@ -136,6 +136,9 @@ The implementation includes:
 
 ## Other TODOs
 
+- [ ] Expand Weave evaluation dataset in `scripts/run_weave_evals.py`
+  - Add more conversation flow test cases (e.g., testing memory retrieval and complex payment edge cases).
+
 
 - [ ] Implement actual Stripe MCP server calls in `src/payments/stripe_mcp.py`
   - Replace stub implementations in `_call_stripe_create_link()` and `_poll_payment_status()`

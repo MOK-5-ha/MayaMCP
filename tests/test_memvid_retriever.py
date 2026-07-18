@@ -330,7 +330,11 @@ class TestMemvidRetriever:
     @patch('src.memvid.retriever.time.time')
     def test_search_main_interface(self, mock_time, sample_index_data):
         """Test main search interface with timing."""
-        mock_time.side_effect = [0.0, 0.5]  # Start and end times
+        t = [0.0]
+        def mock_time_call():
+            t[0] += 0.5
+            return t[0]
+        mock_time.side_effect = mock_time_call
 
         with patch('src.memvid.retriever.check_dependencies', side_effect=ImportError()):
             with patch('builtins.open', mock_open(read_data=json.dumps(sample_index_data))):
