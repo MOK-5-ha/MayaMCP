@@ -119,30 +119,7 @@ def some_function():
     pass
 ```
 
-## 📊 Monitoring and Observability
 
-### Health Checks
-
-The deployment includes comprehensive health monitoring:
-
-```bash
-# Basic health check
-curl https://your-workspace--mayamcp.modal.run/healthz
-
-# Expected response (healthy)
-{
-  "status": "healthy",
-  "checks": [],
-  "timestamp": "2024-02-23T18:55:00Z"
-}
-
-# Expected response (memory pressure)
-{
-  "status": "unhealthy",
-  "checks": ["Container memory pressure detected"],
-  "timestamp": "2024-02-23T18:55:00Z"
-}
-```
 
 
 ## 🔒 Security Configuration
@@ -410,4 +387,4 @@ For deployment issues:
 
 **Deployment Success!** 🎉
 
-Your MayaMCP application is now running with advanced memory management and session monitoring on Modal Labs. Monitor the metrics dashboard and health checks to ensure optimal performance.
+Your MayaMCP application is now running with advanced memory management and session monitoring on Modal Labs. Monitor the health checks to ensure optimal performance.

@@ -25,18 +25,12 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
   - Tip selection (10%, 15%, 20%) with toggle behavior
   - Stripe payment links via MCP server (with mock fallback)
   - Low balance warnings (orange < $50, red at $0)
-- **Emotion-Based Animations**
-  - Dynamic avatar switching based on Maya's emotional state
-  - Supports: Neutral, Happy, Flustered, Thinking, Mixing, Upset
-  - **State Persistence**: Avatar maintains expression during improper inputs or errors
-  - Context-aware emotional triggers (compliments, insults, tips, order placement)
 
 ## Project Structure
 
 - `assets/`: Static files (avatar, media)
 - `config/`: Configuration files separate from code
-- `docs/`: Additional documentation (ADRs, emotion system)
-- `monitoring/`: Grafana dashboards and monitoring configurations
+- `docs/`: Additional documentation (ADRs)
 - `notebooks/`: Experimentation and analysis
 - `scripts/`: Utility scripts, including Weave evaluations
 - `src/`: Core source code with modular organization
