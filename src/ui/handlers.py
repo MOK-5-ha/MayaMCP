@@ -27,37 +27,6 @@ logger = get_logger(__name__)
 
 
 
-def resolve_avatar_path(
-    emotion_state: Optional[str],
-    current_avatar_path: str
-) -> str:
-    """
-    Resolve the final avatar/video path based on the emotion state.
-    
-    Normalizes emotions, checks for asset existence, and handles logging.
-    """
-    if not emotion_state:
-        return current_avatar_path
-
-    valid_emotions = ["neutral", "happy", "flustered", "thinking", "mixing", "upset"]
-    
-    # Normalize unknown or missing emotions
-    resolved_emotion = emotion_state if emotion_state in valid_emotions else "neutral"
-    
-    emotion_filename = f"maya_{resolved_emotion}.mp4"
-    potential_path = f"assets/{emotion_filename}"
-    
-    if os.path.exists(potential_path):
-        logger.info(f"Emotion: {resolved_emotion} -> Avatar Path: {potential_path}")
-        return potential_path
-    else:
-        logger.warning(
-            f"Emotion {resolved_emotion} detected but asset {potential_path} missing. "
-            "Keeping current avatar."
-        )
-        return current_avatar_path
-
-
 def handle_gradio_input(
     user_input: str,
     session_history_state: List[Dict[str, str]],
@@ -126,12 +95,11 @@ def handle_gradio_input(
     effective_rag_key = rag_api_key or gemini_key
 
     # Call text processing logic
-    emotion_state = None
     quota_error_html = ""
     try:
         # Use batch state commits to optimize remote dictionary operations
         with batch_state_commits(session_id, app_state):
-            response_text, updated_history, updated_history_for_gradio, updated_order, _, emotion_state = process_order(
+            response_text, updated_history, updated_history_for_gradio, updated_order, _ = process_order(
                 user_input_text=user_input,
                 current_session_history=session_history_state,
                 llm=llm,
@@ -165,8 +133,8 @@ def handle_gradio_input(
         payment_state = get_payment_state(session_id, app_state)
         new_tab, new_balance, new_tip_percentage, new_tip_amount = get_overlay_payment_data(payment_state)
 
-        # Resolve Avatar based on Emotion State
-        final_avatar_path = resolve_avatar_path(emotion_state, avatar_path)
+        # Avatar is now static
+        final_avatar_path = avatar_path
 
         # Create overlay HTML with animation from previous to new values
         overlay_html = create_tab_overlay_html(
@@ -339,7 +307,6 @@ def handle_gradio_input_stream(
             elif event['type'] == 'complete':
                 # Final response ready
                 final_text = event['content']
-                emotion_state = event['emotion_state']
                 
                 # Update history
                 updated_history = append_to_history(session_history_state, user_input, final_text)
@@ -348,10 +315,8 @@ def handle_gradio_input_stream(
                 final_payment_state = get_payment_state(session_id, app_state)
                 new_tab, new_balance, new_tip_percentage, new_tip_amount = get_overlay_payment_data(final_payment_state)
                 
-                # Resolve final avatar
-                final_avatar_path = resolve_avatar_path(
-                    emotion_state, avatar_path
-                )
+                # Avatar is now static
+                final_avatar_path = avatar_path
                 
                 # Create overlay HTML
                 overlay_html = create_tab_overlay_html(
@@ -371,22 +336,19 @@ def handle_gradio_input_stream(
                     'history': updated_history,
                     'order': get_current_order_state(session_id, app_state),
                     'overlay_html': overlay_html,
-                    'emotion_state': emotion_state,
                     'avatar_path': final_avatar_path
                 }
                     
             elif event['type'] == 'error':
                 # Handle errors
                 error_text = event['content']
-                emotion_state = event.get('emotion_state', 'neutral')
                 
                 updated_history = append_to_history(session_history_state, user_input, error_text)
                 
                 yield {
                     'type': 'error',
                     'content': error_text,
-                    'history': updated_history,
-                    'emotion_state': emotion_state
+                    'history': updated_history
                 }
 
     except SessionLimitExceededError as e:
@@ -399,8 +361,7 @@ def handle_gradio_input_stream(
         error_payload = {
             'type': 'error',
             'content': error_message,
-            'history': error_history,
-            'emotion_state': 'neutral'
+            'history': error_history
         }
         
         yield error_payload
@@ -420,8 +381,7 @@ def handle_gradio_input_stream(
         error_payload = {
             'type': 'error',
             'content': error_message,
-            'history': error_history,
-            'emotion_state': 'neutral'
+            'history': error_history
         }
         
         # Add quota error HTML if applicable

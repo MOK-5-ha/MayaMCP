@@ -221,7 +221,7 @@ class TestHandleGradioStreamingInput:
         def mock_process_order_stream(*args, **kwargs):
             yield {'type': 'text_chunk', 'content': 'Hello ', 'partial': 'Hello '}
             yield {'type': 'sentence', 'content': 'world.'}
-            yield {'type': 'complete', 'content': 'Hello world.', 'emotion_state': 'happy'}
+            yield {'type': 'complete', 'content': 'Hello world.'}
         
         with patch('src.ui.handlers.process_order_stream', mock_process_order_stream), \
              patch('src.ui.handlers.get_api_key_state', return_value={'gemini_key': 'test-gemini', 'cartesia_key': 'test-cartesia'}), \
@@ -261,7 +261,6 @@ class TestHandleGradioStreamingInput:
             complete_events = [e for e in events if e['type'] == 'complete']
             assert len(complete_events) == 1
             assert complete_events[0]['content'] == 'Hello world.'
-            assert complete_events[0]['emotion_state'] == 'happy'
             
     def test_handle_gradio_streaming_input_disabled(self):
         """Test streaming input handler when streaming is disabled."""
@@ -272,7 +271,7 @@ class TestHandleGradioStreamingInput:
         
         # Mock traditional response
         def mock_process_order_traditional(*args, **kwargs):
-            return "Traditional response", [{"role": "assistant", "content": "Traditional response"}], [{"role": "assistant", "content": "Traditional response"}], [], None, "neutral"
+            return "Traditional response", [{"role": "assistant", "content": "Traditional response"}], [{"role": "assistant", "content": "Traditional response"}], [], None
         
         with patch('src.ui.handlers.process_order', mock_process_order_traditional), \
              patch('src.ui.handlers.has_valid_keys', return_value=True), \

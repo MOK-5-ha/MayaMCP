@@ -270,20 +270,6 @@ def is_casual_conversation(user_input: str) -> bool:
     return True
 
 
-def extract_emotion(text: str) -> Tuple[str, str]:
-    """
-    Extract emotion state from text, e.g. [STATE: happy].
-    
-    Returns a tuple of (emotion, clean_text).
-    """
-    match = re.search(r'\[STATE:\s*(\w+)\]', text, re.IGNORECASE)
-    if match:
-        emotion = match.group(1).lower()
-        clean_text = re.sub(r'\[STATE:\s*\w+\]', '', text, flags=re.IGNORECASE).strip()
-        return emotion, clean_text
-    return "neutral", text
-
-
 def append_to_history(
     history: List[Dict[str, str]], user_text: str, assistant_text: str
 ) -> List[Dict[str, str]]:

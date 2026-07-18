@@ -195,36 +195,14 @@ def create_tab_overlay_html(
     # Tip and total row - only shown when tip is selected
     tip_display_style = "flex" if tip_percentage is not None else "none"
     
-    # Determine media type and poster
-    import os
-    is_video = avatar_src.lower().endswith(('.mp4', '.webm', '.mov'))
-    
-    # Logic for transition: Default -> Poster (Fade In) -> Video
-    # We set the container background to the default avatar.
-    # The new media (video/image) fades in over it.
-    
+    # Avatar is strictly static image rendering
     DEFAULT_AVATAR = "assets/bartender_avatar.jpg"
     
-    poster_attr = ""
-    if is_video:
-        # Try to find a companion image for the poster
-        base_name = os.path.splitext(avatar_src)[0]
-        for ext in ['.png', '.jpg', '.jpeg']:
-            possible_poster = f"{base_name}{ext}"
-            if os.path.exists(possible_poster):
-                poster_attr = f'poster="file/{possible_poster}"'
-                break
-    
     style_animation = "animation: fadeIn 1.5s ease-in-out forwards;"
-    if not is_video and "bartender_avatar" in avatar_src and "image" not in avatar_src:
-        # Don't animate the default avatar if we are just showing it natively
-        # Note: "bartender_avatar.jpg" is the target string now
+    if "bartender_avatar" in avatar_src and "image" not in avatar_src:
         style_animation = ""
 
-    if is_video:
-        media_html = f'<video src="file/{avatar_src}" {poster_attr} autoplay loop muted playsinline class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}"></video>'
-    else:
-        media_html = f'<img src="file/{avatar_src}" alt="Maya" class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}">'
+    media_html = f'<img src="file/{avatar_src}" alt="Maya" class="avatar-media" style="width: 100%; height: auto; display: block; border-radius: 8px; {style_animation}">'
     
     html = f'''
 <style>

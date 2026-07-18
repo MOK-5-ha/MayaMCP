@@ -99,7 +99,7 @@ def test_no_tip_input_triggers_intent_detection(mock_scan_output, mock_scan_inpu
     
     # "close my tab" matches get_bill or pay_bill, triggering the intent bypass tool invoke directly,
     # bypassing Gemini API.
-    response, _, _, _, _, _ = proc.process_order(
+    response, _, _, _, _ = proc.process_order(
         user_input_text="close my tab",
         current_session_history=[],
         llm=None,

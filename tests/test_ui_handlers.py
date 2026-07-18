@@ -50,7 +50,6 @@ class TestHandleGradioInput:
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'name': 'Martini', 'price': 13.0}],
             None,
-            None,  # emotion_state
         )
         mock_get_voice_audio.return_value = b'audio_data'
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
@@ -111,7 +110,7 @@ class TestHandleGradioInput:
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'name': 'Martini', 'price': 13.0}],
-            None, None,
+            None,
         )
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
         mock_get_payment_state.return_value = {
@@ -155,7 +154,7 @@ class TestHandleGradioInput:
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'name': 'Martini', 'price': 13.0}],
-            None, None,
+            None,
         )
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
         mock_get_payment_state.return_value = {
@@ -200,7 +199,7 @@ class TestHandleGradioInput:
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'name': 'Martini', 'price': 13.0}],
-            None, None,
+            None,
         )
         mock_get_voice_audio.side_effect = Exception("TTS failed")
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
@@ -284,7 +283,7 @@ class TestHandleGradioInput:
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'name': 'Martini', 'price': 13.0}],
-            None, None,
+            None,
         )
         mock_get_voice_audio.return_value = b'audio_data'
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
@@ -337,7 +336,7 @@ class TestHandleGradioInput:
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'role': 'user', 'content': 'Hi'}, {'role': 'assistant', 'content': 'Hello!'}],
             [{'name': 'Martini', 'price': 13.0}],
-            None, None,
+            None,
         )
         mock_get_current_order_state.return_value = [{'name': 'Martini', 'price': 13.0}]
         mock_get_payment_state.return_value = {

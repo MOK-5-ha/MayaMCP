@@ -23,7 +23,7 @@ from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import get_all_tools, set_current_session, clear_current_session
 from ..llm.client import stream_gemini_api, call_gemini_api
-from ..utils.helpers import detect_order_inquiry, detect_speech_acts, extract_emotion, append_to_history
+from ..utils.helpers import detect_order_inquiry, detect_speech_acts, append_to_history
 from ..utils.state_manager import is_order_finished, get_current_order_state, _get_store_and_session
 from ..utils.rate_limiter import check_rate_limits
 from ..utils.batch_state import batch_state_commits
@@ -124,7 +124,7 @@ def process_order(
     api_key: str = None,
     session_id: str = "default",
     app_state: Any = None
-) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any, str]:
+) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
     """
     Process user input using LLM with tool calling, updates state.
     
@@ -145,7 +145,7 @@ def process_order(
         llm = get_session_llm(session_id, api_key=api_key)
     if not user_input_text:
         logger.warning("Received empty user input.")
-        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None, "neutral"
+        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
 
     # Security Scan: Input
     scan_result = scan_input(user_input_text)
@@ -155,7 +155,7 @@ def process_order(
         
         updated_history = append_to_history(current_session_history, user_input_text, blocked_msg)
         
-        return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
+        return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
 
     # Rate limiting check
     rate_allowed, rate_reason = check_rate_limits(session_id)
@@ -165,7 +165,7 @@ def process_order(
         
         updated_history = append_to_history(current_session_history, user_input_text, rate_error_msg)
         
-        return rate_error_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None, "neutral"
+        return rate_error_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
 
     # Set session context for tools to access
     # This allows payment tools to know which session they're operating on
@@ -225,21 +225,17 @@ def process_order(
             agent_response_text = "Absolutely! I'll take care of that for you."
             
 
-        # Parse emotion from response
-        emotion_state, agent_response_text = extract_emotion(agent_response_text)
-        
         # Security Scan: Output
         output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
         if not output_scan_result.is_valid:
             logger.warning("Output blocked by security scanner (speech act)")
             agent_response_text = output_scan_result.sanitized_text
-            emotion_state = "neutral"
 
         updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
         
-        # Return documented 6-tuple including emotion_state
+        # Return documented 5-tuple
         clear_current_session()
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
     
     # Fallback to traditional intent detection (only if not asking about tips)
     elif intent_match['intent'] and intent_match['confidence'] >= 0.5 and not re.search(r'\btips?\b', user_input_text, re.IGNORECASE):
@@ -261,20 +257,16 @@ def process_order(
         else:
             agent_response_text = "I'm not sure what you're asking for. Could you please clarify?"
             
-        # Parse emotion from response
-        emotion_state, agent_response_text = extract_emotion(agent_response_text)
-        
         # Security Scan: Output
         output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
         if not output_scan_result.is_valid:
             logger.warning("Output blocked by security scanner (intent)")
             agent_response_text = output_scan_result.sanitized_text
-            emotion_state = "neutral"
 
         updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
         
         clear_current_session()
-        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
+        return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
 
     # Prepare message history
     # Get current phase and create appropriate prompt
@@ -401,7 +393,7 @@ def process_order(
                     return (
                         "QUOTA_ERROR", quota_history, quota_history,
                         get_current_order_state(session_id, app_state),
-                        None, "neutral",
+                        None,
                     )
                 else:
                     logger.error(f"LLM invocation failed: {invoke_err}")
@@ -422,26 +414,22 @@ def process_order(
             # Determine next phase
             next_phase = phase_manager.update_phase(order_placed)
             
-            # Parse emotion from response
-            emotion_state, agent_response_text = extract_emotion(agent_response_text)
-    
             # Security Scan: Output
             output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
             if not output_scan_result.is_valid:
                 logger.warning("Output blocked by security scanner")
                 agent_response_text = output_scan_result.sanitized_text
-                emotion_state = "neutral"
     
             updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
     
-            return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None, emotion_state
+            return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
     
         except Exception as e:
             logger.exception(f"Critical error in process_order: {str(e)}")
             error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
             # Return original state on critical error
             safe_history = append_to_history(current_session_history, user_input_text, error_message)
-            return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None, "neutral"
+            return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None
         finally:
             # Always clear session context after processing completes
             clear_current_session()
@@ -481,8 +469,7 @@ def process_order_stream(
         logger.warning("Input blocked by security scanner")
         yield {
             'type': 'error',
-            'content': input_scan_result.sanitized_text,
-            'emotion_state': 'neutral'
+            'content': input_scan_result.sanitized_text
         }
         return
     
@@ -495,8 +482,7 @@ def process_order_stream(
         logger.warning(f"Rate limit exceeded: {rate_reason}")
         yield {
             'type': 'error',
-            'content': f"Rate limit exceeded: {rate_reason}",
-            'emotion_state': 'neutral'
+            'content': f"Rate limit exceeded: {rate_reason}"
         }
         return
     
@@ -635,8 +621,7 @@ def process_order_stream(
                     logger.error("Queue timed out waiting for ADK runner stream.")
                     yield {
                         'type': 'error',
-                        'content': "Sorry, I'm having a bit of trouble completing that response.",
-                        'emotion_state': 'neutral'
+                        'content': "Sorry, I'm having a bit of trouble completing that response."
                     }
                     return
 
@@ -645,15 +630,13 @@ def process_order_stream(
                         logger.warning(f"Quota error in stream: {data}")
                         yield {
                             'type': 'error',
-                            'content': "It looks like your API key has hit its rate limit. Please check the popup for details.",
-                            'emotion_state': 'neutral'
+                            'content': "It looks like your API key has hit its rate limit. Please check the popup for details."
                         }
                     else:
                         logger.error(f"Error in runner thread: {data}")
                         yield {
                             'type': 'error',
-                            'content': "I'm sorry, an unexpected error occurred during processing. Please try again later.",
-                            'emotion_state': 'neutral'
+                            'content': "I'm sorry, an unexpected error occurred during processing. Please try again later."
                         }
                     return
 
@@ -706,8 +689,7 @@ def process_order_stream(
                     'content': sentence
                 }
             
-            # Extract emotion from final response
-            emotion_state, clean_response = extract_emotion(accumulated_text)
+            clean_response = accumulated_text
             
             # Final Security Scan
             output_scan_result = scan_output(
@@ -716,13 +698,11 @@ def process_order_stream(
             if not output_scan_result.is_valid:
                 logger.warning("Final output blocked by security scanner")
                 clean_response = output_scan_result.sanitized_text
-                emotion_state = "neutral"
             
             # Signal completion with final data
             yield {
                 'type': 'complete',
                 'content': clean_response,
-                'emotion_state': emotion_state,
                 'full_response': clean_response
             }
 
@@ -734,8 +714,7 @@ def process_order_stream(
             error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
             yield {
                 'type': 'error',
-                'content': error_message,
-                'emotion_state': 'neutral'
+                'content': error_message
             }
         finally:
             # Always clear session context after processing completes
