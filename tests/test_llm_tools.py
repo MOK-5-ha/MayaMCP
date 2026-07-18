@@ -127,7 +127,7 @@ class TestAddToOrder:
     def test_add_to_order_successful(self, mock_update_order_state, mock_get_menu):
         """Test successful item addition to order."""
         # Setup mocks
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         Martini - $13.00
         Daiquiri - $10.00
@@ -137,7 +137,7 @@ class TestAddToOrder:
         result = add_to_order.invoke({"item_name": "Martini", "modifiers": ["shaken"], "quantity": 1})
 
         # Verify get_menu was called
-        mock_get_menu.invoke.assert_called_once()
+        mock_get_menu.assert_called_once()
 
         # Verify update_order_state was called
         mock_update_order_state.assert_called_once()
@@ -160,7 +160,7 @@ class TestAddToOrder:
     def test_add_to_order_with_multiple_modifiers(self, mock_update_order_state, mock_get_menu):
         """Test adding item with multiple modifiers."""
         # Setup mocks
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         Old Fashioned - $12.00
         """
@@ -182,7 +182,7 @@ class TestAddToOrder:
     def test_add_to_order_with_quantity(self, mock_update_order_state, mock_get_menu):
         """Test adding multiple quantities of an item."""
         # Setup mocks
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         Beer - $5.00
         """
@@ -205,7 +205,7 @@ class TestAddToOrder:
     def test_add_to_order_no_modifiers(self, mock_update_order_state, mock_get_menu):
         """Test adding item without modifiers."""
         # Setup mocks
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         Water - $1.00
         """
@@ -227,7 +227,7 @@ class TestAddToOrder:
     def test_add_to_order_item_not_found(self, mock_get_menu):
         """Test adding item not found in menu."""
         # Setup mocks
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         Martini - $13.00
         """
@@ -245,7 +245,7 @@ class TestAddToOrder:
     def test_add_to_order_case_insensitive(self, mock_update_order_state, mock_get_menu):
         """Test that item matching is case insensitive."""
         # Setup mocks
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         martini - $13.00
         """
@@ -714,7 +714,7 @@ class TestAddToOrderWithBalance:
         # Setup mocks
         mock_get_session.return_value = "test_session"
         mock_get_store.return_value = {}
-        mock_get_menu.invoke.return_value = """
+        mock_get_menu.return_value = mock_get_menu.invoke.return_value = """
         MENU:
         Martini - $13.00
         """

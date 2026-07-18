@@ -3,6 +3,8 @@
 from typing import List, Dict, Tuple, Any, Generator
 import re
 import concurrent.futures
+import asyncio
+import queue
 
 # RAG pipeline imports moved to top for performance
 try:
@@ -28,6 +30,12 @@ from ..utils.batch_state import batch_state_commits
 from ..utils.streaming import SentenceBuffer
 from ..utils.errors import is_quota_error
 from .phase_manager import ConversationPhaseManager
+
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.events import Event
+from google.genai import types
 
 logger = get_logger(__name__)
 
@@ -131,6 +139,10 @@ def process_order(
         Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data, emotion_state)
     """
     session_id, app_state = _get_store_and_session(session_id, app_state)
+    from google.adk.models import Gemini
+    if llm is None or not isinstance(llm, Gemini):
+        from ..llm.session_registry import get_session_llm
+        llm = get_session_llm(session_id, api_key=api_key)
     if not user_input_text:
         logger.warning("Received empty user input.")
         return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None, "neutral"
@@ -163,9 +175,9 @@ def process_order(
     # Initialize phase manager
     phase_manager = ConversationPhaseManager(session_id, app_state)
     
-    # Detect if this is the first interaction (empty history)
+    # Detect if this is the first interaction (empty history) and state is not yet initialized
     is_first_interaction = len(current_session_history) == 0
-    if is_first_interaction:
+    if is_first_interaction and (app_state is None or session_id not in app_state):
         from ..utils.state_manager import initialize_state
         initialize_state(session_id, app_state)
 
@@ -197,7 +209,7 @@ def process_order(
                 
                 try:
                     # Use add_to_order tool with processed drink
-                    add_result = tool_map['add_to_order'].invoke({'item': processed_drink_items})
+                    add_result = tool_map['add_to_order'](item_name=processed_drink_items)
                     agent_response_text = f"Perfect! {add_result}"
                     
                     # Update phase since order was placed
@@ -238,13 +250,13 @@ def process_order(
         tool_map = {tool.name: tool for tool in tools}
         
         if intent_match['intent'] == 'show_order':
-            tool_result = tool_map['get_order'].invoke({})
+            tool_result = tool_map['get_order']()
             agent_response_text = f"Here's your current order:\n{tool_result}"
         elif intent_match['intent'] == 'get_bill':
-            tool_result = tool_map['get_bill'].invoke({})
+            tool_result = tool_map['get_bill']()
             agent_response_text = f"Here's your bill:\n{tool_result}"
         elif intent_match['intent'] == 'pay_bill':
-            tool_result = tool_map['pay_bill'].invoke({})
+            tool_result = tool_map['pay_bill']()
             agent_response_text = tool_result
         else:
             agent_response_text = "I'm not sure what you're asking for. Could you please clarify?"
@@ -281,170 +293,120 @@ def process_order(
     history_limit = 10
     limited_history = current_session_history[-history_limit:]
     
-    messages = []
-    for entry in limited_history:
-        role = entry.get("role")
-        content = entry.get("content", "")
-        sdk_role = "model" if role == "assistant" else "user"
-        messages.append({"role": sdk_role, "parts": [{"text": content}]})
-    messages.append({"role": "user", "parts": [{"text": user_input_text}]})
+    # Apply RAG context to the user input before executing the agent
+    should_use_rag = phase_manager.should_use_rag(user_input_text)
+    if should_use_rag and api_key:
+        if rag_retriever is not None and memvid_rag_pipeline is not None:
+            logger.info("Enhancing response with Memvid RAG for casual conversation")
+            try:
+                rag_response = memvid_rag_pipeline(
+                    query_text=user_input_text,
+                    memvid_retriever=rag_retriever,
+                    api_key=api_key
+                )
+                if rag_response and rag_response.strip():
+                    rag_context = f"\n\nRelevant context: {rag_response.strip()}"
+                    user_input_text += rag_context
+            except Exception as memvid_error:
+                logger.warning(f"Memvid RAG failed: {memvid_error}")
 
-    from ..llm.client import get_gemini_params
-    params = get_gemini_params()
-    config_dict = {
-        "temperature": params["temperature"],
-        "top_p": params["top_p"],
-        "top_k": params["top_k"],
-        "max_output_tokens": params["max_output_tokens"],
-        "tools": get_all_tools(),
-        "system_instruction": system_instruction,
-    }
+    # Initialize a temporary stateless session service for this runner call
+    session_service = InMemorySessionService()
 
-    if should_log_sensitive():
-        logger.debug(f"Processing user input for session: {user_input_text}")
-    
+    async def _execute_runner():
+        # Setup session
+        session = await session_service.create_session(
+            app_name="mayamcp", user_id="user", session_id=session_id
+        )
+        
+        # Populate history
+        for entry in limited_history:
+            role = entry.get("role")
+            content = entry.get("content", "")
+            # Clean state annotations like [STATE: ...] if present
+            clean_content = re.sub(r'\[STATE:\s*\w+\]', '', content, flags=re.IGNORECASE).strip()
+            sdk_role = "model" if role == "assistant" else "user"
+            msg = types.Content(role=sdk_role, parts=[types.Part.from_text(text=clean_content)])
+            event = Event(
+                invocation_id="history",
+                author=sdk_role,
+                content=msg
+            )
+            await session_service.append_event(session=session, event=event)
+
+        # Instantiate ADK Agent
+        agent = Agent(
+            name="bartender",
+            model=llm,
+            instruction=system_instruction,
+            tools=get_all_tools()
+        )
+
+        # Instantiate Runner
+        runner = Runner(
+            agent=agent,
+            app_name="mayamcp",
+            session_service=session_service,
+            auto_create_session=False
+        )
+
+        new_msg = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=user_input_text)]
+        )
+
+        final_response_text = ""
+        async for event in runner.run_async(
+            user_id="user",
+            session_id=session_id,
+            new_message=new_msg
+        ):
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    final_response_text = "".join(
+                        part.text for part in event.content.parts if part.text
+                    )
+        return final_response_text
+
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
         try:
             # Set current session for tool calls
             set_current_session(session_id)
 
-            # --- LLM Interaction Loop (Handles Tool Calls) ---
-            rag_applied = False  # Guard flag to prevent RAG re-application
-            while True:
-                # Invoke the LLM
-                try:
-                    if hasattr(llm, "invoke"):
-                        ai_response = llm.invoke(messages)
-                        ai_text = getattr(ai_response, "content", "")
-                        legacy_tool_calls = getattr(ai_response, "tool_calls", None) or []
-                        tool_calls = []
-                        for tc in legacy_tool_calls:
-                            tool_calls.append({
-                                "name": tc.get("name"),
-                                "args": tc.get("args"),
-                                "id": tc.get("id")
-                            })
+            try:
+                def _run_coro(coro):
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = None
+                    if loop and loop.is_running():
+                        import concurrent.futures
+                        def _run_in_thread():
+                            set_current_session(session_id)
+                            return asyncio.run(coro)
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(_run_in_thread)
+                            return future.result()
                     else:
-                        ai_response = call_gemini_api(
-                            prompt_content=messages,
-                            config=config_dict,
-                            api_key=api_key
-                        )
-                        ai_text = ai_response.text
-                        tool_calls = []
-                        if getattr(ai_response, "function_calls", None):
-                            for fc in ai_response.function_calls:
-                                tool_calls.append({
-                                    "name": fc.name,
-                                    "args": fc.args,
-                                    "id": getattr(fc, "id", None)
-                                })
-                except Exception as invoke_err:
-                    if is_quota_error(invoke_err):
-                        logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
-                        quota_history = current_session_history[:]
-                        quota_history.append({'role': 'user', 'content': user_input_text})
-                        return (
-                            "QUOTA_ERROR", quota_history, quota_history,
-                            get_current_order_state(session_id, app_state),
-                            None, "neutral",
-                        )
-                    else:
-                        logger.error(f"LLM invocation failed: {invoke_err}")
-                        agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
-                        break
-            
-                # Append the AI's response (could be text or tool call request)
-                if not hasattr(llm, "invoke") and (not ai_response or not ai_response.candidates):
-                    logger.warning("LLM returned a response without content; ending loop.")
-                    agent_response_text = "I'm having a moment—could you repeat that while I get my bearings?"
-                    break
-                if hasattr(llm, "invoke") and not hasattr(ai_response, "content"):
-                    logger.warning("LLM returned a response without content; ending loop.")
-                    agent_response_text = "I'm having a moment—could you repeat that while I get my bearings?"
-                    break
-
-                if hasattr(llm, "invoke"):
-                    messages.append(ai_response)
-                else:
-                    messages.append(ai_response.candidates[0].content)
-    
-                if not tool_calls:
-                    # No tool calls requested, this is the final response to the user
-                    agent_response_text = ai_text
-                    
-                    # Determine if this is a casual conversation vs. an order/menu-related interaction
-                    should_use_rag = phase_manager.should_use_rag(user_input_text)
-                    
-                    # If this appears to be casual conversation and RAG is available, try enhancing with RAG
-                    if should_use_rag and api_key and not rag_applied:
-                        # Early validation of RAG components before any heavy processing/try
-                        if rag_retriever is None or memvid_rag_pipeline is None:
-                            logger.debug("Skipping RAG enhancement: required components not initialized/available")
-                        else:
-                            logger.info("Enhancing response with Memvid RAG for casual conversation")
-                            try:
-                                rag_response = memvid_rag_pipeline(
-                                    query_text=user_input_text,
-                                    memvid_retriever=rag_retriever,
-                                    api_key=api_key
-                                )
-                                # Add RAG context to user input for consistency with streaming path
-                                if rag_response and rag_response.strip():
-                                    rag_context = f"\n\nRelevant context: {rag_response.strip()}"
-                                    user_input_text += rag_context
-                                    # Remove AI response and update user message with RAG-enhanced input
-                                    messages.pop()  # Remove ai_response
-                                    messages[-1] = {"role": "user", "parts": [{"text": user_input_text}]}
-                                    rag_applied = True  # Set guard flag
-                                    # Re-process with RAG-enhanced input
-                                    continue  # Restart processing loop with enhanced input
-                            except Exception as memvid_error:
-                                logger.warning(f"Memvid RAG failed: {memvid_error}")
-                
-                    break 
-                    
-                # --- Tool Call Execution ---
+                        return asyncio.run(coro)
+                agent_response_text = _run_coro(_execute_runner())
                 if should_log_sensitive():
-                    logger.debug(f"LLM requested tool calls: {tool_calls}")
-                tools = get_all_tools()
-                tool_map = {t.name: t for t in tools}
-                
-                if hasattr(llm, "invoke"):
-                    tool_messages = []
-                    for tool_call in tool_calls:
-                        tool_name = tool_call.get("name")
-                        tool_args = tool_call.get("args", {})
-                        tool_id = tool_call.get("id")
-                        tool_output = _dispatch_tool(tool_name, tool_args, tool_map)
-                        tool_messages.append({"role": "tool", "content": tool_output, "tool_call_id": tool_id})
-                    messages.extend(tool_messages)
+                    logger.debug(f"Original response: {agent_response_text}")
+            except Exception as invoke_err:
+                if is_quota_error(invoke_err):
+                    logger.warning(f"LLM quota/rate limit hit for session: {invoke_err}")
+                    quota_history = current_session_history[:]
+                    quota_history.append({'role': 'user', 'content': user_input_text})
+                    return (
+                        "QUOTA_ERROR", quota_history, quota_history,
+                        get_current_order_state(session_id, app_state),
+                        None, "neutral",
+                    )
                 else:
-                    from google.genai import types
-                    response_parts = []
-                    for tool_call in tool_calls:
-                        tool_name = tool_call.get("name")
-                        tool_args = tool_call.get("args", {})
-                        tool_id = tool_call.get("id")
-                        tool_output = _dispatch_tool(tool_name, tool_args, tool_map)
-                        response_parts.append(
-                            types.Part.from_function_response(
-                                name=tool_name,
-                                response={"result": tool_output},
-                                id=tool_id
-                            )
-                        )
-                    messages.append(types.Content(role="user", parts=response_parts))
-                
-                logger.info("Sending tool results back to LLM...")
-    
-            # --- End of LLM Interaction Loop ---
-    
-            # Final response text is now set
-            if should_log_sensitive():
-                logger.debug(f"Final agent response: {agent_response_text}")
-    
+                    logger.error(f"LLM invocation failed: {invoke_err}")
+                    agent_response_text = "I'm having a bit of trouble reaching my brain right now, but I can still help you with drinks."
+
             # --- Update Conversation State ---
             phase_manager.increment_turn()
             
@@ -482,7 +444,6 @@ def process_order(
             return error_message, safe_history, safe_history, get_current_order_state(session_id, app_state), None, "neutral"
         finally:
             # Always clear session context after processing completes
-            # This ensures the session context is cleaned up even if an error occurs
             clear_current_session()
 
 
@@ -542,15 +503,6 @@ def process_order_stream(
     # Convert Gradio history to Gemini format with same window
     history_limit = 10
     truncated_history = current_session_history[-history_limit:]
-    gemini_messages = []
-    for msg in truncated_history:
-        content = msg['content']
-        if msg['role'] == 'assistant':
-            content = re.sub(r'\[STATE:\s*\w+\]', '', content, flags=re.IGNORECASE).strip()
-            role = 'model'
-        else:
-            role = 'user'
-        gemini_messages.append({"role": role, "parts": [{"text": content}]})
 
     # Determine if this is a casual conversation vs. an order/menu-related interaction
     should_use_rag = phase_manager.should_use_rag(sanitized_input)
@@ -583,8 +535,7 @@ def process_order_stream(
             except Exception as memvid_error:
                 logger.warning(f"Memvid RAG failed: {memvid_error}")
 
-    # Add latest user input
-    gemini_messages.append({"role": "user", "parts": [{"text": sanitized_input}]})
+    worker_thread = None
 
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
@@ -604,62 +555,148 @@ def process_order_stream(
 
             system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
-            # Get generation config and merge system instruction + tools
-            from ..llm.client import get_model_config
-            config = get_model_config()
-            config["system_instruction"] = system_instruction
-            config["tools"] = get_all_tools()
+            # Queue for transferring events from the async background thread
+            event_queue = queue.Queue()
 
-            # Start streaming response
-            text_stream = stream_gemini_api(gemini_messages, config, api_key)
-            
+            async def _execute_runner_stream():
+                try:
+                    session_service = InMemorySessionService()
+                    session = await session_service.create_session(
+                        app_name="mayamcp", user_id="user", session_id=session_id
+                    )
+                    
+                    # Populate history
+                    for entry in truncated_history:
+                        role = entry.get("role")
+                        content = entry.get("content", "")
+                        clean_content = re.sub(r'\[STATE:\s*\w+\]', '', content, flags=re.IGNORECASE).strip()
+                        sdk_role = "model" if role == "assistant" else "user"
+                        msg = types.Content(role=sdk_role, parts=[types.Part.from_text(text=clean_content)])
+                        event = Event(
+                            invocation_id="history",
+                            author=sdk_role,
+                            content=msg
+                        )
+                        await session_service.append_event(session=session, event=event)
+
+                    # Instantiate ADK Agent
+                    agent = Agent(
+                        name="bartender",
+                        model=llm,
+                        instruction=system_instruction,
+                        tools=get_all_tools()
+                    )
+
+                    # Instantiate Runner
+                    runner = Runner(
+                        agent=agent,
+                        app_name="mayamcp",
+                        session_service=session_service,
+                        auto_create_session=False
+                    )
+
+                    new_msg = types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=sanitized_input)]
+                    )
+
+                    async for event in runner.run_async(
+                        user_id="user",
+                        session_id=session_id,
+                        new_message=new_msg
+                    ):
+                        event_queue.put(('event', event))
+                    
+                    event_queue.put(('done', None))
+                except Exception as err:
+                    event_queue.put(('error', err))
+
+            import threading
+
+            def _async_thread_worker():
+                try:
+                    set_current_session(session_id)
+                    asyncio.run(_execute_runner_stream())
+                except Exception as t_err:
+                    event_queue.put(('error', t_err))
+
+            # Run the worker thread
+            worker_thread = threading.Thread(target=_async_thread_worker)
+            worker_thread.start()
+
             # Create sentence buffer for TTS pipelining
             sentence_buffer = SentenceBuffer()
             accumulated_text = ""
-            security_buffer = ""  # Buffer for security scanning
             
-            for chunk in text_stream:
-                if hasattr(chunk, 'text') and chunk.text:
-                    text_chunk = chunk.text
-                    accumulated_text += text_chunk
-                    security_buffer += text_chunk
-                    
-                    # Security scan only the new chunk before yielding
-                    chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
-                    if not chunk_scan_result.is_valid:
-                        logger.warning("Streaming content blocked by security scanner")
-                        # Yield error and stop streaming
+            while True:
+                try:
+                    msg_type, data = event_queue.get(timeout=30)
+                except queue.Empty:
+                    logger.error("Queue timed out waiting for ADK runner stream.")
+                    yield {
+                        'type': 'error',
+                        'content': "Sorry, I'm having a bit of trouble completing that response.",
+                        'emotion_state': 'neutral'
+                    }
+                    return
+
+                if msg_type == 'error':
+                    if is_quota_error(data):
+                        logger.warning(f"Quota error in stream: {data}")
                         yield {
                             'type': 'error',
-                            'content': chunk_scan_result.sanitized_text,
+                            'content': "It looks like your API key has hit its rate limit. Please check the popup for details.",
                             'emotion_state': 'neutral'
                         }
-                        return
-                    
-                    # Append sanitized text to security buffer
-                    sanitized_chunk = (
-                        chunk_scan_result.sanitized_text
-                        if chunk_scan_result.sanitized_text is not None
-                        else text_chunk
-                    )
-                    security_buffer += sanitized_chunk
-                    
-                    # Check for complete sentences using sanitized text
-                    sentences = sentence_buffer.add_text(sanitized_chunk)
-                    
-                    # Yield text chunk for immediate UI update (after security check)
-                    yield {
-                        'type': 'text_chunk',
-                        'content': sanitized_chunk,
-                        'partial': sentence_buffer.get_partial()
-                    }
-                    
-                    # Yield complete sentences for TTS (after security check)
-                    for sentence in sentences:
+                    else:
+                        logger.error(f"Error in runner thread: {data}")
                         yield {
-                            'type': 'sentence',
-                            'content': sentence
+                            'type': 'error',
+                            'content': "I'm sorry, an unexpected error occurred during processing. Please try again later.",
+                            'emotion_state': 'neutral'
                         }
+                    return
+
+                elif msg_type == 'done':
+                    break
+
+                elif msg_type == 'event':
+                    event: Event = data
+                    if event.author == 'model' and event.content and event.content.parts:
+                        text_chunk = "".join(part.text for part in event.content.parts if part.text)
+                        
+                        if text_chunk:
+                            accumulated_text += text_chunk
+                            
+                            # Security scan only the new chunk before yielding
+                            chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
+                            if not chunk_scan_result.is_valid:
+                                logger.warning("Streaming content blocked by security scanner")
+                                yield {
+                                    'type': 'error',
+                                    'content': chunk_scan_result.sanitized_text,
+                                    'emotion_state': 'neutral'
+                                }
+                                return
+                            
+                            sanitized_chunk = chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text is not None else text_chunk
+                            
+                            # Check for complete sentences using sanitized text
+                            sentences = sentence_buffer.add_text(sanitized_chunk)
+                            
+                            # Yield text chunk for immediate UI update
+                            yield {
+                                'type': 'text_chunk',
+                                'content': sanitized_chunk,
+                                'partial': sentence_buffer.get_partial()
+                            }
+                            
+                            # Yield complete sentences for TTS
+                            for sentence in sentences:
+                                yield {
+                                    'type': 'sentence',
+                                    'content': sentence
+                                }
             
             # Flush remaining content
             remaining_sentences = sentence_buffer.flush()
@@ -703,3 +740,5 @@ def process_order_stream(
         finally:
             # Always clear session context after processing completes
             clear_current_session()
+            if worker_thread is not None:
+                worker_thread.join(timeout=1)
