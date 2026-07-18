@@ -97,7 +97,7 @@ def mock_run_async(self, user_id, session_id, new_message):
     if "martini" in text.lower():
         from src.utils.state_manager import update_order_state
         # Place order
-        update_order_state(session_id, None, "add", {
+        update_order_state(session_id, None, "add_item", {
             "name": "Martini",
             "price": 13.0,
             "modifiers": "no modifiers",

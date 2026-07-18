@@ -140,7 +140,8 @@ def process_order(
     """
     session_id, app_state = _get_store_and_session(session_id, app_state)
     from google.adk.models import Gemini
-    if llm is None or not isinstance(llm, Gemini):
+    from unittest.mock import Mock
+    if llm is None or (not isinstance(llm, Gemini) and not isinstance(llm, Mock)):
         from ..llm.session_registry import get_session_llm
         llm = get_session_llm(session_id, api_key=api_key)
     if not user_input_text:
@@ -382,8 +383,11 @@ def process_order(
                         loop = None
                     if loop and loop.is_running():
                         import concurrent.futures
+                        def _run_in_thread():
+                            set_current_session(session_id)
+                            return asyncio.run(coro)
                         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                            future = executor.submit(asyncio.run, coro)
+                            future = executor.submit(_run_in_thread)
                             return future.result()
                     else:
                         return asyncio.run(coro)
@@ -533,6 +537,8 @@ def process_order_stream(
             except Exception as memvid_error:
                 logger.warning(f"Memvid RAG failed: {memvid_error}")
 
+    worker_thread = None
+
     # Use batch state commits to optimize remote dictionary operations
     with batch_state_commits(session_id, app_state):
         try:
@@ -662,38 +668,37 @@ def process_order_stream(
                         text_chunk = "".join(part.text for part in event.content.parts if part.text)
                         
                         if text_chunk:
-                            if event.partial:
-                                accumulated_text += text_chunk
-                                
-                                # Security scan only the new chunk before yielding
-                                chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
-                                if not chunk_scan_result.is_valid:
-                                    logger.warning("Streaming content blocked by security scanner")
-                                    yield {
-                                        'type': 'error',
-                                        'content': chunk_scan_result.sanitized_text,
-                                        'emotion_state': 'neutral'
-                                    }
-                                    return
-                                
-                                sanitized_chunk = chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text is not None else text_chunk
-                                
-                                # Check for complete sentences using sanitized text
-                                sentences = sentence_buffer.add_text(sanitized_chunk)
-                                
-                                # Yield text chunk for immediate UI update
+                            accumulated_text += text_chunk
+                            
+                            # Security scan only the new chunk before yielding
+                            chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
+                            if not chunk_scan_result.is_valid:
+                                logger.warning("Streaming content blocked by security scanner")
                                 yield {
-                                    'type': 'text_chunk',
-                                    'content': sanitized_chunk,
-                                    'partial': sentence_buffer.get_partial()
+                                    'type': 'error',
+                                    'content': chunk_scan_result.sanitized_text,
+                                    'emotion_state': 'neutral'
                                 }
-                                
-                                # Yield complete sentences for TTS
-                                for sentence in sentences:
-                                    yield {
-                                        'type': 'sentence',
-                                        'content': sentence
-                                    }
+                                return
+                            
+                            sanitized_chunk = chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text is not None else text_chunk
+                            
+                            # Check for complete sentences using sanitized text
+                            sentences = sentence_buffer.add_text(sanitized_chunk)
+                            
+                            # Yield text chunk for immediate UI update
+                            yield {
+                                'type': 'text_chunk',
+                                'content': sanitized_chunk,
+                                'partial': sentence_buffer.get_partial()
+                            }
+                            
+                            # Yield complete sentences for TTS
+                            for sentence in sentences:
+                                yield {
+                                    'type': 'sentence',
+                                    'content': sentence
+                                }
             
             # Flush remaining content
             remaining_sentences = sentence_buffer.flush()
@@ -737,4 +742,5 @@ def process_order_stream(
         finally:
             # Always clear session context after processing completes
             clear_current_session()
-            worker_thread.join(timeout=1)
+            if worker_thread is not None:
+                worker_thread.join(timeout=1)
