@@ -35,8 +35,8 @@ class PaymentState(TypedDict):
     tab_total: float        # >= 0, default: 0.00
     tip_percentage: Optional[Literal[10, 15, 20]]  # None when no tip selected
     tip_amount: float       # >= 0, default: 0.00
-    stripe_payment_id: Optional[str]  # None or Stripe ID pattern: ^(plink_|pi_)[a-zA-Z0-9]+$
-    payment_status: Literal['pending', 'processing', 'completed']  # default: 'pending'
+    crypto_tx_hash: Optional[str]  # None or Base Sepolia tx hash pattern: ^0x[a-fA-F0-9]{64}$
+    payment_status: Literal['pending', 'processing', 'completed', 'failed']  # default: 'pending'
     idempotency_key: Optional[str]    # None or format: {session_id}_{unix_timestamp}
     version: int            # >= 0, default: 0
     needs_reconciliation: bool  # default: False
@@ -46,17 +46,18 @@ class PaymentState(TypedDict):
 VALID_TIP_PERCENTAGES = {10, 15, 20}
 
 
-# Stripe ID pattern: plink_ or pi_ followed by alphanumeric characters
-STRIPE_ID_PATTERN = re.compile(r'^(plink_|pi_)[a-zA-Z0-9]+$')
+# Crypto Tx Hash pattern: 0x followed by 64 hex characters
+CRYPTO_TX_PATTERN = re.compile(r'^0x[a-fA-F0-9]{64}$')
 
 # Idempotency key pattern: alphanumeric with underscore separator
 IDEMPOTENCY_KEY_PATTERN = re.compile(r'^[a-zA-Z0-9]+_[0-9]+$')
 
 # Valid payment status transitions
 VALID_STATUS_TRANSITIONS = {
-    'pending': {'processing', 'completed'},
-    'processing': {'completed'},
-    'completed': set()  # No backwards transitions allowed
+    'pending': {'processing', 'completed', 'failed'},
+    'processing': {'completed', 'failed'},
+    'completed': {'failed'},  # Allow background tx failure after optimistic completion
+    'failed': {'pending', 'processing', 'completed'}  # Allow retrying
 }
 
 
@@ -65,7 +66,7 @@ DEFAULT_PAYMENT_STATE: PaymentState = {
     'tab_total': 0.00,
     'tip_percentage': None,
     'tip_amount': 0.00,
-    'stripe_payment_id': None,
+    'crypto_tx_hash': None,
     'payment_status': 'pending',
     'idempotency_key': None,
     'version': 0,
@@ -95,7 +96,7 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
     # Check required fields if not partial
     if not allow_partial:
         required_fields = {'balance', 'tab_total', 'tip_percentage', 'tip_amount',
-                          'stripe_payment_id', 'payment_status', 'idempotency_key',
+                          'crypto_tx_hash', 'payment_status', 'idempotency_key',
                           'version', 'needs_reconciliation'}
         missing = required_fields - set(state.keys())
         if missing:
@@ -122,15 +123,15 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
         if state['version'] < 0:
             raise PaymentStateValidationError(f"version must be >= 0, got {state['version']}")
 
-    # Validate stripe_payment_id pattern
-    if 'stripe_payment_id' in state:
-        stripe_id = state['stripe_payment_id']
-        if stripe_id is not None:
-            if not isinstance(stripe_id, str):
-                raise PaymentStateValidationError("stripe_payment_id must be a string or None")
-            if not STRIPE_ID_PATTERN.match(stripe_id):
+    # Validate crypto_tx_hash pattern
+    if 'crypto_tx_hash' in state:
+        tx_hash = state['crypto_tx_hash']
+        if tx_hash is not None:
+            if not isinstance(tx_hash, str):
+                raise PaymentStateValidationError("crypto_tx_hash must be a string or None")
+            if not CRYPTO_TX_PATTERN.match(tx_hash):
                 raise PaymentStateValidationError(
-                    f"stripe_payment_id must match pattern ^(plink_|pi_)[a-zA-Z0-9]+$, got {stripe_id}"
+                    f"crypto_tx_hash must match pattern ^0x[a-fA-F0-9]{{64}}$, got {tx_hash}"
                 )
 
     # Validate idempotency_key pattern
@@ -146,7 +147,7 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
 
     # Validate payment_status
     if 'payment_status' in state:
-        valid_statuses = {'pending', 'processing', 'completed'}
+        valid_statuses = {'pending', 'processing', 'completed', 'failed'}
         if state['payment_status'] not in valid_statuses:
             raise PaymentStateValidationError(
                 f"payment_status must be one of {valid_statuses}, got {state['payment_status']}"
@@ -186,7 +187,7 @@ def is_valid_status_transition(current_status: str, new_status: str) -> bool:
     """
     Check if a payment status transition is valid.
     
-    Status transitions: pending -> processing -> completed (no backwards transitions)
+    Status transitions: pending -> processing -> completed/failed, etc.
     
     Args:
         current_status: Current payment status
@@ -569,9 +570,18 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         session_data['payment'] = copy.deepcopy(DEFAULT_PAYMENT_STATE)
         needs_update = True
     else:
-        # 3. Ensure tip fields exist within existing payment state
+        # 3. Ensure fields exist within existing payment state
         payment = session_data['payment']
         payment_needs_update = False
+        
+        # Migrate stripe_payment_id -> crypto_tx_hash if it exists
+        if 'stripe_payment_id' in payment:
+            payment['crypto_tx_hash'] = payment.pop('stripe_payment_id')
+            payment_needs_update = True
+        elif 'crypto_tx_hash' not in payment:
+            payment['crypto_tx_hash'] = None
+            payment_needs_update = True
+            
         if 'tip_percentage' not in payment:
             payment['tip_percentage'] = None
             payment_needs_update = True
@@ -580,7 +590,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
             payment_needs_update = True
 
         if payment_needs_update:
-            logger.info(f"Adding missing tip fields to existing session {session_id}")
+            logger.info(f"Updated payment fields for session {session_id}")
             needs_update = True
 
     if needs_update:

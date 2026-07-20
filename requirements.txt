@@ -42,3 +42,6 @@ numpy>=2.0.0,<2.3.0
 # The codebase falls back gracefully to regex scanning when llm-guard is unavailable.
 # llm-guard>=0.3.0
 cryptography>=46.0.0
+
+# Coinbase Developer Platform (CDP) SDK
+cdp-sdk>=0.1.0

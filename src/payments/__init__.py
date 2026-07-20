@@ -1,5 +1,5 @@
-"""Payments package for Stripe MCP integration."""
+"""Payments package for stablecoin testnet payments."""
 
-from .stripe_mcp import StripeMCPClient
+from .crypto_client import CryptoPaymentClient
 
-__all__ = ['StripeMCPClient']
+__all__ = ['CryptoPaymentClient']

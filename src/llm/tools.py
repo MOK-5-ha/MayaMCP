@@ -31,7 +31,7 @@ def tool(fn):
 from typing_extensions import Literal, TypedDict
 
 from ..config.logging_config import get_logger
-from ..payments.stripe_mcp import StripeMCPClient
+from ..payments.crypto_client import CryptoPaymentClient
 from ..utils.state_manager import (
     CONCURRENT_MODIFICATION as STATE_CONCURRENT_MODIFICATION,
 )
@@ -86,8 +86,8 @@ class PaymentError(Enum):
     # INSUFFICIENT_FUNDS: balance < order price (Req 1.3)
     INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS"
 
-    # STRIPE_UNAVAILABLE: Stripe MCP server not responding (Req 3.4)
-    STRIPE_UNAVAILABLE = "STRIPE_UNAVAILABLE"
+    # WALLET_UNAVAILABLE: CDP wallet or testnet not responding (Req 3.4)
+    WALLET_UNAVAILABLE = "WALLET_UNAVAILABLE"
 
     # PAYMENT_FAILED: Stripe payment processing failed (Req 3.3)
     PAYMENT_FAILED = "PAYMENT_FAILED"
@@ -120,8 +120,8 @@ PAYMENT_ERROR_MESSAGES: Dict[PaymentError, str] = {
         "Insufficient funds: your balance is ${balance:.2f} "
         "but the item costs ${price:.2f}."
     ),
-    PaymentError.STRIPE_UNAVAILABLE: (
-        "Payment service is temporarily unavailable. "
+    PaymentError.WALLET_UNAVAILABLE: (
+        "Wallet service is temporarily unavailable. "
         "Please try again or use an alternative payment method."
     ),
     PaymentError.PAYMENT_FAILED: (
@@ -373,41 +373,43 @@ def get_balance() -> ToolResponse:
     })
 
 
-# Global Stripe MCP client instance (lazy initialization)
-_stripe_client: Optional[StripeMCPClient] = None
+# Global CDP payment client instance (lazy initialization)
+_crypto_client: Optional[CryptoPaymentClient] = None
 
 
-def get_stripe_client() -> StripeMCPClient:
-    """Get or create the Stripe MCP client instance."""
-    global _stripe_client
-    if _stripe_client is None:
-        _stripe_client = StripeMCPClient(test_mode=True)
-    return _stripe_client
+def get_crypto_client() -> CryptoPaymentClient:
+    """Get or create the CDP crypto payment client instance."""
+    global _crypto_client
+    if _crypto_client is None:
+        _crypto_client = CryptoPaymentClient()
+    return _crypto_client
 
 
 @tool
-def create_stripe_payment() -> ToolResponse:
-    """Create Stripe payment link for current tab using MCP server.
+def process_crypto_payment() -> ToolResponse:
+    """Process payment for the current tab using stablecoin on Base Sepolia testnet.
 
-    Generates an idempotency key, calls the Stripe MCP server to create
-    a payment link, and handles fallback to mock payment if Stripe is
-    unavailable.
+    Uses the Coinbase CDP AgentKit SDK to optimistically process a USDC transfer
+    on the Base Sepolia testnet. The payment clears instantly for the customer;
+    actual blockchain confirmation happens in the background.
+
+    If the background transaction fails (e.g., out of gas, network issue),
+    the payment status will be updated to 'failed' and Maya will address it
+    as a register malfunction in her next conversational turn.
 
     The payment amount includes both the tab total and any tip amount.
 
     Session context read implicitly from _current_session thread-local.
 
     Returns:
-        Success: {"status": "ok", "result": {"url": str, "payment_id": str, 
+        Success: {"status": "ok", "result": {"tx_hash": str, "url": str,
                   "is_simulated": bool}}
-        Error: {"status": "error", "error": "STRIPE_UNAVAILABLE", "message": ...}
+        Error: {"status": "error", "error": "WALLET_UNAVAILABLE", "message": ...}
                {"status": "error", "error": "INVALID_SESSION", "message": ...}
-
-    Requirements: 3.1, 3.2, 3.4, 4.3, 7.9
     """
     session_id = get_current_session()
     if session_id is None:
-        logger.warning("create_stripe_payment called without session context")
+        logger.warning("process_crypto_payment called without session context")
         return create_tool_error(
             PaymentError.INVALID_SESSION,
             "No active session. Please refresh and try again."
@@ -416,9 +418,8 @@ def create_stripe_payment() -> ToolResponse:
     store = get_global_store()
     payment = get_payment_state(session_id, store)
     tab_total = payment['tab_total']
-    tip_amount = payment['tip_amount']
 
-    # Payment amount = tab_total + tip_amount (Requirements 7.9)
+    # Payment amount = tab_total + tip_amount
     payment_total = get_payment_total(session_id, store)
 
     if tab_total <= 0:
@@ -427,160 +428,54 @@ def create_stripe_payment() -> ToolResponse:
             "No items in tab to pay for."
         )
 
-    # Get Stripe client and generate idempotency key
-    client = get_stripe_client()
-    idempotency_key = client.generate_idempotency_key(session_id)
+    # Get CDP client
+    client = get_crypto_client()
 
-    # Store idempotency key in payment state
     try:
-        update_payment_state(session_id, store, {
-            'idempotency_key': idempotency_key,
-            'payment_status': 'processing'
-        })
-    except Exception as e:
-        logger.error(f"Failed to update payment state: {e}")
-        # Continue anyway - we can still create the payment link
+        # Process the payment optimistically – returns instantly
+        result = client.process_payment_optimistically(
+            amount=payment_total,
+            session_id=session_id
+        )
 
-    # Build payment description including tip if present
-    if tip_amount > 0:
-        description = f"Bar tab at MOK 5-ha (Tab: ${tab_total:.2f}, Tip: ${tip_amount:.2f})"
-    else:
-        description = "Bar tab at MOK 5-ha"
-    # Create payment link (async call wrapped for sync context)
-    try:
-        # Run async create_payment_link in event loop
-        loop = asyncio.new_event_loop()
+        tx_hash = result['tx_hash']
+
+        # Store crypto tx hash in payment state
         try:
-            result = loop.run_until_complete(
-                client.create_payment_link(
-                    amount=payment_total,
-                    description=description,
-                    idempotency_key=idempotency_key
-                )
+            update_payment_state(session_id, store, {
+                'crypto_tx_hash': tx_hash,
+                'payment_status': 'processing'
+            })
+        except Exception as e:
+            logger.warning(
+                f"Failed to store crypto_tx_hash in state: {e}. "
+                f"tx_hash={tx_hash}, session_id={session_id}"
             )
-        finally:
-            loop.close()
 
-        # Store payment ID in state
-        payment_id = result.get('payment_id')
-        if payment_id:
-            try:
-                update_payment_state(session_id, store, {
-                    'stripe_payment_id': payment_id
-                })
-            except Exception as e:
-                # Log but don't fail - payment link was created
-                logger.warning(
-                    f"Failed to store payment_id in state: {e}. "
-                    f"payment_id={payment_id}, session_id={session_id}"
-                )
+        # Complete payment atomically – clears the tab instantly
+        success = atomic_payment_complete(session_id, store)
+        if not success:
+            logger.error(
+                f"Failed to complete payment atomically for {session_id}"
+            )
 
         is_simulated = result.get('is_simulated', False)
-        if is_simulated:
-            logger.info(
-                f"Using backup payment method for {session_id}. "
-                f"payment_id={payment_id}"
-            )
-
         logger.info(
-            f"Payment link created for {session_id}: "
-            f"payment_id={payment_id}, is_simulated={is_simulated}"
+            f"Crypto payment processed for {session_id}: "
+            f"tx_hash={tx_hash}, is_simulated={is_simulated}"
         )
 
         return create_tool_success({
+            "tx_hash": tx_hash,
             "url": result['url'],
-            "payment_id": payment_id,
             "is_simulated": is_simulated
         })
 
     except Exception as e:
-        logger.error(f"Failed to create payment link: {e}")
+        logger.error(f"Failed to process crypto payment: {e}")
         return create_tool_error(
-            PaymentError.STRIPE_UNAVAILABLE,
-            "Payment service is temporarily unavailable. Please try again."
-        )
-
-
-@tool
-def check_payment_status() -> ToolResponse:
-    """Check status of Stripe payment.
-
-    Polls the Stripe MCP server for the current payment status.
-    Handles timeout case by returning "timeout" status.
-
-    Session context read implicitly from _current_session thread-local.
-
-    Returns:
-        Success: {"status": "ok", "result": {"payment_status": str}}
-                 payment_status is one of: "pending", "succeeded", "failed", "timeout"
-        Error: {"status": "error", "error": "PAYMENT_FAILED", "message": ...}
-               {"status": "error", "error": "INVALID_SESSION", "message": ...}
-               {"status": "error", "error": "PAYMENT_TIMEOUT", "message": ...}
-
-    Requirements: 3.3
-    """
-    session_id = get_current_session()
-    if session_id is None:
-        logger.warning("check_payment_status called without session context")
-        return create_tool_error(
-            PaymentError.INVALID_SESSION,
-            "No active session. Please refresh and try again."
-        )
-
-    store = get_global_store()
-    payment = get_payment_state(session_id, store)
-    payment_id = payment.get('stripe_payment_id')
-
-    if not payment_id:
-        return create_tool_error(
-            PaymentError.PAYMENT_FAILED,
-            "No payment in progress. Please create a payment first."
-        )
-
-    # Get Stripe client
-    client = get_stripe_client()
-
-    try:
-        # Run async check_payment_status in event loop
-        loop = asyncio.new_event_loop()
-        try:
-            status = loop.run_until_complete(
-                client.check_payment_status(payment_id)
-            )
-        finally:
-            loop.close()
-
-        logger.info(
-            f"Payment status for {session_id}: "
-            f"payment_id={payment_id}, status={status}"
-        )
-
-        # Handle timeout case
-        if status == "timeout":
-            return create_tool_error(
-                PaymentError.PAYMENT_TIMEOUT,
-                "Payment status check timed out. Please check again later."
-            )
-
-        # Handle success - complete the payment atomically
-        if status == "succeeded":
-            success = atomic_payment_complete(session_id, store)
-            if not success:
-                logger.error(
-                    f"Failed to complete payment atomically for {session_id}"
-                )
-                # Still return success status - payment was successful on Stripe side
-                # The needs_reconciliation flag should be set
-
-        return create_tool_success({
-            "payment_status": status
-        })
-
-    except Exception as e:
-        logger.error(f"Failed to check payment status: {e}")
-        return create_tool_error(
-            PaymentError.PAYMENT_FAILED,
-            f"Failed to check payment status: {str(e)}"
+            PaymentError.WALLET_UNAVAILABLE,
+            "Wallet service is temporarily unavailable. Please try again."
         )
 
 
@@ -1120,8 +1015,7 @@ def get_all_tools() -> List:
         add_to_order,
         add_to_order_with_balance,
         get_balance,
-        create_stripe_payment,
-        check_payment_status,
+        process_crypto_payment,
         set_tip,
         get_tip,
         get_order,
