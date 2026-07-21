@@ -11,7 +11,7 @@
 - **UI**: Gradio 4.x
 - **TTS**: Cartesia
 - **RAG**: FAISS (faiss-cpu), custom Memvid pipeline
-- **MCP**: Stripe integration for payments
+- **Payments**: Coinbase CDP AgentKit for crypto payments (Base Sepolia testnet)
 - **HTTP/Retry**: tenacity, requests, websockets
 - **Security**: cryptography (Fernet for BYOK encryption)
 - **Config**: python-dotenv
@@ -71,5 +71,6 @@ GEMINI_MODEL_VERSION=gemini-2.5-flash-lite
 TEMPERATURE=0.7
 MAX_OUTPUT_TOKENS=2048
 MAYA_MASTER_KEY=fernet_key_for_encrypting_session_data
-STRIPE_SECRET_KEY=sk_test_stripe_secret_key
+CDP_API_KEY_ID=your_cdp_key_id
+CDP_API_KEY_SECRET=your_cdp_key_secret
 ```

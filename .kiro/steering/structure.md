@@ -22,7 +22,7 @@ MayaMCP/
 │   │   ├── encoder.py
 │   │   ├── retriever.py
 │   │   └── utils.py
-│   ├── payments/           # Stripe MCP client and payment logic
+│   ├── payments/           # Coinbase CDP crypto payment client and logic
 │   ├── prompt_engineering/ # Prompt templates
 │   ├── rag/                # RAG pipeline
 │   │   ├── embeddings.py

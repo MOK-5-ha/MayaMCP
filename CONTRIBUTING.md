@@ -11,6 +11,7 @@ When writing code for MayaMCP, please adhere to the DRY (Don't Repeat Yourself) 
 - **Intent Routing Safety**: When implementing deterministic intent routing (e.g., hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`). Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to prevent false positives.
 - **Streaming Pipeline Guidelines**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs. Consume them lazily to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired.
+- **Payment Architecture & Simulation Mode**: Payment handling uses `CryptoPaymentClient` (`src/payments/crypto_client.py`) with zero-latency optimistic processing. For local development, **no CDP API keys are required** — leaving `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET` unset in `.env` enables Simulation Mode automatically. Test cases or demo flows can use an order amount of `$99.99` to trigger a simulated background transaction failure ("register malfunction").
 
 ## Testing Guidelines
 
@@ -18,7 +19,7 @@ Our test suite aims to be fast, reliable, and decoupled from external services.
 
 ### Test Isolation and Mocking
 
-- **No Real API Calls**: Always mock external APIs (Google, Cartesia, Stripe). Never make real calls in tests.
+- **No Real API Calls**: Always mock external APIs (Google, Cartesia, Coinbase CDP). Never make real calls in tests.
 - **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats. Do not use legacy LangChain structures.
 - **Stateful Singletons**: The application uses a global singleton for rate limiting (`RateLimiter`). When writing tests, ensure `check_rate_limits` is mocked in fixtures (e.g., returning `(True, "")`) to prevent sequential test execution from accumulating state and failing due to burst limits. Never allow global app rate limits to restrict the standard test suite.
 - **Patch Preservation during Refactoring**: When extracting logic into helper functions, do not move the calls to state managers or mocked dependencies into the helper if it bypasses existing `@patch` targets in the test suite. Instead, fetch the data in the original module and pass the data structures into the helper.

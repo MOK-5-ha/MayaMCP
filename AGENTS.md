@@ -1,5 +1,5 @@
 ## Project Overview
-MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, and simulated payments. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Stripe MCP for payments. The UI is built with Gradio, and API resilience is handled by `tenacity`.
+MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, and simulated payments. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio, and API resilience is handled by `tenacity`.
 
 ## Repository Layout
 ```
@@ -8,7 +8,7 @@ src/
 ├── conversation/    # Phase management, message processing
 ├── llm/             # Gemini client, prompts, function tools, session registry
 ├── memvid/          # Memvid RAG implementation
-├── payments/        # Stripe MCP client and payment logic
+├── payments/        # Coinbase CDP crypto payment client and logic
 ├── rag/             # RAG pipeline (embeddings, retrieval, vector store)
 ├── security/        # Input/output scanning, encryption, scan config
 ├── ui/              # Gradio components, handlers, tab overlay, BYOK modal
@@ -56,7 +56,7 @@ python scripts/run_weave_evals.py
 - `tests/conftest.py` provides fixtures and SDK stubs for offline testing.
 - Markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`.
 - Property-based tests use Hypothesis.
-- Always mock external APIs (Google, Cartesia, Stripe) — never make real calls in tests.
+- Always mock external APIs (Google, Cartesia, Coinbase CDP) — never make real calls in tests.
 - **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats instead of obsolete LangChain structures.
 - **Rate Limit Testing**: Never allow global app rate limits to restrict the standard test suite, as it causes false-negative token exhaustion errors. Set rate limit environment variables to high values (e.g., `9999`) in `tests/conftest.py`. When testing the rate limiter itself, use context-manager overrides to temporarily enforce limits strictly within those specific tests.
 - **Stateful Singletons (Rate Limits)**: The application uses a global singleton for rate limiting (`RateLimiter`). When writing tests, ensure `check_rate_limits` is mocked in fixtures (e.g., returning `(True, "")`) to prevent sequential test execution from accumulating state and failing due to burst limits.
@@ -84,11 +84,14 @@ Optional:
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `2048`
 - `MAYA_MASTER_KEY` — Fernet key for encrypting session data (ephemeral if unset)
-- `STRIPE_SECRET_KEY` — Stripe test mode key (`sk_test_*` only)
+- `CDP_API_KEY_ID` — Coinbase CDP API key ID
+- `CDP_API_KEY_SECRET` — Coinbase CDP API key secret
+- `CDP_MERCHANT_PRIVATE_KEY` — Wallet private key for Base Sepolia (optional)
+- `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional, has default)
 
 ## Key Architecture Rules
 - **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client(api_key=...)` instead of instantiating `genai.Client` directly (this applies to sessions, registration modules, and integration tests to ensure proper caching).
-- **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Stripe MCP → mock payment links.
+- **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments.
 - **Security scanning**: Inputs are checked for prompt injection/toxicity before processing; outputs are checked before returning to user. See `src/security/`.
 - **Payment state**: Thread-safe per-session locking with atomic updates and version checks. Always acquire the session lock before modifying payment state. See `src/utils/state_manager.py`.
 - **BYOK mode**: Per-session LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
@@ -100,6 +103,9 @@ Optional:
 - **ADK Streaming Payload Gathering**: When accumulating chunks from ADK's `Runner.run_async` SSE events, do not restrict data collection exclusively to `event.partial == True`. Final text chunks may arrive without the partial flag, leading to dropped content. Process any `text_chunk` that contains valid string data.
 - **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
 - **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and `a2a-sdk`. The `JSONRPCApplication` within the `a2a` server specifically requires `sse-starlette` to function. If test collection errors occur related to ADK routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
+- **Optimistic Payment Status Transitions**: In zero-latency optimistic payment flows, `completed → failed` transitions MUST be allowed in `VALID_STATUS_TRANSITIONS` so async background processing tasks can record failures without raising validation exceptions.
+- **Deterministic Payment Failure Testing**: Order amounts of `$99.99` trigger simulated background transaction failures in `CryptoPaymentClient._simulate_payment_lifecycle` for testing "register malfunction" apology flows in BDD and Weave evaluations.
+- **Async Background Task Dispatch**: When dispatching background tasks from synchronous tool functions, attempt `asyncio.get_running_loop().create_task()` first. If no event loop is active, spawn a daemon thread (`threading.Thread(daemon=True)`) running `asyncio.run()`.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
@@ -112,7 +118,7 @@ Optional:
 - Skip error handling for external API calls
 - Break the graceful fallback chain
 - Add tests that require real API calls without mocking
-- Use Stripe live mode keys (test mode only: `sk_test_*`)
+- Use Coinbase CDP mainnet keys in development (Base Sepolia testnet only)
 - Modify payment state without acquiring the session lock
 - Commit changes — only stage them for owner review
 - Eagerly materialize streaming generators using `list()` or list comprehensions.

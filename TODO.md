@@ -1,115 +1,79 @@
 # TODOs
 
-## Stripe Payment Integration Setup
+## Stablecoin Payment Integration Setup (Base Sepolia Testnet)
 
-The Stripe payment feature has been implemented with a mock/fallback mode that works out of the box. To enable real Stripe integration, follow these steps:
+The payment feature uses the Coinbase Developer Platform (CDP) AgentKit SDK for simulated stablecoin (USDC) payments on the Base Sepolia testnet. It works immediately in sandbox/simulation mode without any API keys.
 
 ### Current Status
 
-✅ **Works immediately without any setup:**
+✅ **Works immediately without any setup (simulation mode):**
 - Tab overlay displays on Maya's avatar
 - Balance tracking ($1000 starting balance)
 - Tip selection (10%, 15%, 20%)
 - Animated tab/balance updates
-- Mock payment flow (simulated payment links)
+- Optimistic payment processing (instant tab clearing)
+- Simulated blockchain transaction hash + BaseScan explorer link
 
-⚠️ **Requires Stripe MCP setup for real payments:**
-- Real Stripe payment link generation
-- Actual payment status checking
-
----
-
-### Step 1: Create a Stripe Account (Test Mode)
-
-1. Go to [Stripe Dashboard](https://dashboard.stripe.com/register)
-2. Create a free account (no credit card required for test mode)
-3. Once logged in, ensure you're in **Test Mode** (toggle in top-right corner)
-4. Navigate to **Developers → API Keys**
-5. Copy your **Test mode** keys:
-   - `Publishable key`: `pk_test_...`
-   - `Secret key`: `sk_test_...`
-
-> ⚠️ **Important**: Never use live keys! The implementation is designed for test mode only.
+⚠️ **Requires CDP setup for real testnet transactions:**
+- Real USDC transfers on Base Sepolia
+- Actual blockchain confirmation
+- BaseScan-verifiable transaction hashes
 
 ---
 
-### Step 2: Install Stripe MCP Server
+### Step 1: Create a CDP Account
 
-The Stripe MCP server provides the Model Context Protocol integration for payment operations.
+1. Go to [CDP Portal](https://portal.cdp.coinbase.com/)
+2. Create a free account
+3. Navigate to **API Keys**
+4. Create a new API key pair (note the **API Key ID** and **API Key Secret**)
+
+---
+
+### Step 2: Configure Environment Variables
+
+Copy `.env.example` to `.env` and fill in:
 
 ```bash
-# Option 1: Using uvx (recommended if you have uv installed)
-# No installation needed - uvx runs it directly
+# Coinbase Developer Platform (CDP) — Base Sepolia Testnet Payments
+CDP_API_KEY_ID=your_key_id_here
+CDP_API_KEY_SECRET=your_key_secret_here
 
-# Option 2: Install uv if you don't have it
-pip install uv
-# or on macOS:
-brew install uv
+# Optional: Private key for a persistent merchant wallet
+CDP_MERCHANT_PRIVATE_KEY=
+
+# Optional: Override receiver address for testnet payments
+CDP_RECEIVER_ADDRESS=
 ```
 
 ---
 
-### Step 3: Configure Stripe MCP Server in Kiro
+### Step 3: Get Testnet Funds
 
-Create the MCP configuration file at `.kiro/settings/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "stripe": {
-      "command": "uvx",
-      "args": ["mcp-server-stripe"],
-      "env": {
-        "STRIPE_SECRET_KEY": "sk_test_YOUR_TEST_SECRET_KEY_HERE"
-      },
-      "disabled": false,
-      "autoApprove": [
-        "create_payment_link",
-        "get_payment_link"
-      ]
-    }
-  }
-}
-```
-
-Replace `sk_test_YOUR_TEST_SECRET_KEY_HERE` with your actual Stripe test secret key.
+1. Use the Base Sepolia faucet: [https://www.coinbase.com/faucets/base-sepolia](https://www.coinbase.com/faucets/base-sepolia)
+2. Request test ETH for gas fees
+3. Test USDC is requested automatically by the CDP SDK on first transaction
 
 ---
 
-### Step 4: Update Environment Variables (Optional)
+### Step 4: Verify Setup
 
-Add to your `.env` file if you want to configure Stripe directly:
-
-```bash
-# Stripe Configuration (Test Mode Only!)
-STRIPE_SECRET_KEY=sk_test_YOUR_TEST_SECRET_KEY_HERE
-STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_TEST_PUBLISHABLE_KEY_HERE
-```
-
----
-
-### Step 5: Verify Setup
-
-1. Start MayaMCP: `mayamcp` or `python main.py`
-2. Order a drink: "I'd like a martini"
-3. Check your tab: "What's my tab?"
-4. Add a tip: Click 15% tip button
-5. Pay: "I'll pay my bill"
+1. Start MayaMCP: `mayamcp` or `./run_maya.sh`
+2. Order a drink: "I'll have a martini"
+3. Pay your bill: "I'll pay my bill"
+4. Expected: Real tx hash returned, verifiable on [BaseScan Sepolia](https://sepolia.basescan.org/)
 
 **Expected behavior:**
-- With Stripe MCP configured: Real Stripe checkout link generated
-- Without Stripe MCP: Mock payment link (still functional for demo)
+- With CDP keys configured: Real USDC transfer on Base Sepolia
+- Without CDP keys: Simulated payment (still functional for demo, `is_simulated=True`)
 
 ---
 
 ### Testing Payment Flow
 
-Use Stripe's test card numbers:
-- **Success**: `4242 4242 4242 4242`
-- **Decline**: `4000 0000 0000 0002`
-- **Requires Auth**: `4000 0025 0000 3155`
-
-Any future expiry date and any 3-digit CVC will work.
+- **Normal payments**: Any amount processes successfully (optimistic clearing)
+- **Force failure (testing)**: An amount of exactly **$99.99** triggers a simulated register malfunction
+- **Simulation mode**: Works without CDP keys (`is_simulated=True` in response)
 
 ---
 
@@ -117,9 +81,10 @@ Any future expiry date and any 3-digit CVC will work.
 
 | Issue | Solution |
 |-------|----------|
-| "Stripe MCP unavailable" | Check MCP server is running, verify API key |
-| Mock payment links only | Stripe MCP not configured, check `.kiro/settings/mcp.json` |
-| Payment link creation fails | Verify test mode key (starts with `sk_test_`) |
+| "Wallet service unavailable" | Check CDP API keys in `.env` |
+| Simulated payments only | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` not configured |
+| Transaction fails on-chain | Insufficient testnet ETH for gas; use faucet |
+| Register malfunction message | Background tx failed — check logs for CDP errors |
 | Tab not updating | Check browser console for JavaScript errors |
 
 ---
@@ -127,10 +92,11 @@ Any future expiry date and any 3-digit CVC will work.
 ### Architecture Notes
 
 The implementation includes:
-- **Graceful fallback**: If Stripe MCP is unavailable, mock payments work automatically
-- **Idempotency**: Payment requests use `{session_id}_{timestamp}` keys to prevent duplicates
-- **Retry logic**: 3 retries with exponential backoff (1s, 2s, 4s)
-- **Test mode only**: The code enforces `test_mode=True` by default
+- **Optimistic UI**: Tab clears instantly; blockchain confirmation happens in background
+- **Graceful fallback**: Real CDP → simulated mode (no keys needed)
+- **Thread-safe**: Background transactions use daemon threads with mutex-locked state updates
+- **Failure handling**: Failed background txs update state; Maya reports register malfunction
+- **Test mode**: Amount `$99.99` triggers deterministic failure for testing/evals
 
 ---
 
@@ -138,12 +104,6 @@ The implementation includes:
 
 - [ ] Expand Weave evaluation dataset in `scripts/run_weave_evals.py`
   - Add more conversation flow test cases (e.g., testing memory retrieval and complex payment edge cases).
-
-
-- [ ] Implement actual Stripe MCP server calls in `src/payments/stripe_mcp.py`
-  - Replace stub implementations in `_call_stripe_create_link()` and `_poll_payment_status()`
-  - Integrate with kiroPowers tool for MCP communication
-  - Add proper error handling for MCP server responses
 
 - [ ] Add session lock cleanup background task
   - Implement scheduled cleanup for expired session locks (>1 hour inactive)
