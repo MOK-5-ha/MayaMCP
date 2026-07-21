@@ -242,7 +242,7 @@ class TestSimulatePaymentLifecycle:
                 client._simulate_payment_lifecycle(13.00, "test_sess", "0xhash")
             )
 
-            mock_update.assert_called_once_with("test_sess", "completed")
+            mock_update.assert_called_once_with("test_sess", "completed", tx_hash="0xhash")
 
     def test_99_99_triggers_failure(self, monkeypatch):
         """Amount of $99.99 should trigger a failure status."""

@@ -135,6 +135,7 @@ class CryptoPaymentClient:
                 logger.info(f"Submitting stablecoin transfer from {account.address} to {self.receiver_address}")
 
                 # Try transferring USDC first, fallback to ETH if USDC fails
+                actual_tx_hash = optimistic_tx_hash
                 try:
                     transfer = await account.transfer(
                         to=self.receiver_address,
@@ -142,7 +143,8 @@ class CryptoPaymentClient:
                         token="usdc",
                         network="base-sepolia"
                     )
-                    logger.info(f"CDP Transfer USDC initiated: tx_hash={transfer.transaction_hash}")
+                    actual_tx_hash = getattr(transfer, "transaction_hash", optimistic_tx_hash) or optimistic_tx_hash
+                    logger.info(f"CDP Transfer USDC initiated: tx_hash={actual_tx_hash}")
                 except Exception as usdc_err:
                     logger.warning(f"USDC transfer failed, trying ETH transfer instead: {usdc_err}")
                     transfer = await account.transfer(
@@ -151,15 +153,16 @@ class CryptoPaymentClient:
                         token="eth",
                         network="base-sepolia"
                     )
-                    logger.info(f"CDP Transfer ETH initiated: tx_hash={transfer.transaction_hash}")
+                    actual_tx_hash = getattr(transfer, "transaction_hash", optimistic_tx_hash) or optimistic_tx_hash
+                    logger.info(f"CDP Transfer ETH initiated: tx_hash={actual_tx_hash}")
 
                 # Poll transaction confirmation
                 # Wait 5 seconds to simulate block confirmation
                 await asyncio.sleep(5)
                 
                 # Check status
-                logger.info(f"Background payment transaction completed successfully for session {session_id}.")
-                self._update_payment_status(session_id, 'completed')
+                logger.info(f"Background payment transaction completed successfully for session {session_id} (tx_hash={actual_tx_hash}).")
+                self._update_payment_status(session_id, 'completed', tx_hash=actual_tx_hash)
 
         except Exception as e:
             logger.error(f"CDP background payment transaction failed for session {session_id}: {e}")
@@ -176,18 +179,19 @@ class CryptoPaymentClient:
             self._update_payment_status(session_id, 'failed')
         else:
             logger.info(f"Simulated payment success for session {session_id}")
-            self._update_payment_status(session_id, 'completed')
+            self._update_payment_status(session_id, 'completed', tx_hash=tx_hash)
 
-    def _update_payment_status(self, session_id: str, status: str):
-        """Update payment status in state manager safely."""
+    def _update_payment_status(self, session_id: str, status: str, tx_hash: Optional[str] = None):
+        """Update payment status (and optional actual on-chain tx hash) in state manager safely."""
         from ..llm.tools import get_global_store
         from ..utils.state_manager import update_payment_state
         store = get_global_store()
 
         try:
-            update_payment_state(session_id, store, {
-                'payment_status': status
-            })
-            logger.info(f"Updated payment_status to '{status}' for session {session_id}")
+            updates: Dict[str, Any] = {'payment_status': status}
+            if tx_hash:
+                updates['crypto_tx_hash'] = tx_hash
+            update_payment_state(session_id, store, updates)
+            logger.info(f"Updated payment_status to '{status}' (tx_hash={tx_hash}) for session {session_id}")
         except Exception as e:
             logger.error(f"Failed to update payment_status in state manager for {session_id}: {e}")
