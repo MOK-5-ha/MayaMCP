@@ -8,7 +8,7 @@ MayaMCP is an AI bartending agent (v2.0.0) that provides a conversational orderi
 - Menu management with beverage catalog
 - Real-time streaming voice chat (TTS via Cartesia)
 - RAG-enhanced responses using Memvid/FAISS
-- MCP Stripe integration for payment simulation
+- Coinbase CDP AgentKit integration for crypto payment simulation
 - Gradio web UI with agent avatar
 - BYOK (Bring Your Own Key) mode for user-provided API credentials
 - Real-time security scanning (prompt injection and toxicity detection)

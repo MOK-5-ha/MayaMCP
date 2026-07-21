@@ -18,7 +18,7 @@ Our test suite aims to be fast, reliable, and decoupled from external services.
 
 ### Test Isolation and Mocking
 
-- **No Real API Calls**: Always mock external APIs (Google, Cartesia, Stripe). Never make real calls in tests.
+- **No Real API Calls**: Always mock external APIs (Google, Cartesia, Coinbase CDP). Never make real calls in tests.
 - **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats. Do not use legacy LangChain structures.
 - **Stateful Singletons**: The application uses a global singleton for rate limiting (`RateLimiter`). When writing tests, ensure `check_rate_limits` is mocked in fixtures (e.g., returning `(True, "")`) to prevent sequential test execution from accumulating state and failing due to burst limits. Never allow global app rate limits to restrict the standard test suite.
 - **Patch Preservation during Refactoring**: When extracting logic into helper functions, do not move the calls to state managers or mocked dependencies into the helper if it bypasses existing `@patch` targets in the test suite. Instead, fetch the data in the original module and pass the data structures into the helper.

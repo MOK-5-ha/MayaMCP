@@ -18,12 +18,12 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - Menu management with several beverages
 - Real-time streaming voice chat
 - Gradio UI with agent avatar
-- **Stripe Payment Integration** (Test Mode)
+- **Crypto Payment Integration** (Coinbase CDP AgentKit on Base Sepolia)
   - $1000 starting balance for simulated bar experience
   - Live tab counter overlay on Maya's avatar
   - Animated balance/tab updates with visual feedback
   - Tip selection (10%, 15%, 20%) with toggle behavior
-  - Stripe payment links via MCP server (with mock fallback)
+  - Crypto payments via Coinbase CDP AgentKit (with mock fallback)
   - Low balance warnings (orange < $50, red at $0)
 
 ## Project Structure
@@ -146,47 +146,25 @@ The free Cartesia tier includes **20K credits per month**, which provides approx
 
 For extended usage, consider upgrading to a paid Cartesia plan.
 
-### Stripe API (Optional - for real payment links)
+### Coinbase CDP (Optional - for real crypto payments)
 
-The payment feature works out of the box with mock payments. For real Stripe integration:
+The payment feature works out of the box with simulated mock payments. For real stablecoin (USDC) transactions on the Base Sepolia testnet:
 
-1. Visit [Stripe Dashboard](https://dashboard.stripe.com/register)
-2. Create a free account (no credit card required)
-3. Ensure **Test Mode** is enabled (toggle in top-right)
-4. Go to **Developers → API Keys**
-5. Copy your test secret key (`sk_test_...`)
-6. Configure the Stripe MCP server (see below)
+1. Visit [Coinbase Developer Platform](https://portal.cdp.coinbase.com/)
+2. Create a free account and generate an API key
+3. Add your credentials to `.env`:
 
-> ⚠️ **Important**: Only use test mode keys. The implementation enforces test mode for safety.
-
-#### Stripe MCP Server Setup
-
-Create `.kiro/settings/mcp.json` (or copy from `.kiro/settings/mcp.json.example`):
-
-```json
-{
-  "mcpServers": {
-    "stripe": {
-      "command": "uvx",
-      "args": ["mcp-server-stripe"],
-      "env": {
-        "STRIPE_SECRET_KEY": "sk_test_YOUR_TEST_KEY_HERE"
-      },
-      "disabled": false,
-      "autoApprove": ["create_payment_link", "get_payment_link"]
-    }
-  }
-}
+```bash
+CDP_API_KEY_ID=your_key_id_here
+CDP_API_KEY_SECRET=your_key_secret_here
+# Optional: provide your own wallet
+CDP_MERCHANT_PRIVATE_KEY=0xYourPrivateKey
+CDP_RECEIVER_ADDRESS=0xYourWalletAddress
 ```
 
-Without this configuration, Maya uses mock payment links (fully functional for demos).
+> ⚠️ **Important**: Only use Base Sepolia testnet keys. Never configure mainnet keys — all transactions are simulated.
 
-#### Test Card Numbers
-
-When testing payments, use Stripe's test cards:
-- **Success**: `4242 4242 4242 4242`
-- **Decline**: `4000 0000 0000 0002`
-- Any future expiry date and 3-digit CVC work.
+Without CDP configuration, Maya uses mock crypto payments with simulated transaction hashes and BaseScan URLs (fully functional for demos).
 
 Startup validation: On launch, Maya validates required API keys and logs clear, actionable messages if any are missing. The configured `GEMINI_MODEL_VERSION` is also checked against a known list; unrecognized models produce a warning without stopping the app.
 

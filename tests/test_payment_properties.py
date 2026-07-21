@@ -58,7 +58,7 @@ order_item_strategy = st.fixed_dictionaries({
 
 class TestBalanceDeductionConsistency:
     """
-    **Feature: stripe-payment, Property 1: Balance Deduction Consistency**
+    **Feature: payment, Property 1: Balance Deduction Consistency**
     
     *For any* drink order with price P and initial balance B where B >= P,
     after the order is processed, the new balance SHALL equal B - P exactly.
@@ -160,7 +160,7 @@ class TestBalanceDeductionConsistency:
 
 class TestInsufficientFundsRejection:
     """
-    **Feature: stripe-payment, Property 3: Insufficient Funds Rejection**
+    **Feature: payment, Property 3: Insufficient Funds Rejection**
     
     *For any* drink order with price P and balance B where B < P,
     the order SHALL be rejected with "INSUFFICIENT_FUNDS" error code,
@@ -264,7 +264,7 @@ class TestInsufficientFundsRejection:
 
 class TestStatePreservationOnRejection:
     """
-    **Feature: stripe-payment, Property 4: State Preservation on Rejection**
+    **Feature: payment, Property 4: State Preservation on Rejection**
     
     *For any* order state S and rejected order due to insufficient funds,
     the order state after rejection SHALL be identical to S
@@ -368,7 +368,7 @@ class TestStatePreservationOnRejection:
 
 class TestTabAccumulationAccuracy:
     """
-    **Feature: stripe-payment, Property 2: Tab Accumulation Accuracy**
+    **Feature: payment, Property 2: Tab Accumulation Accuracy**
 
     *For any* sequence of drink orders with prices [P1, P2, ..., Pn],
     the tab total SHALL equal the sum of all prices: sum(P1 + P2 + ... + Pn).
@@ -471,7 +471,7 @@ class TestTabAccumulationAccuracy:
 
 class TestPaymentCompletionStateReset:
     """
-    **Feature: stripe-payment, Property 5: Payment Completion State Reset**
+    **Feature: payment, Property 5: Payment Completion State Reset**
 
     *For any* successful payment completion, the tab total SHALL reset to $0.00
     and payment status SHALL be "completed".
@@ -611,7 +611,7 @@ from src.ui.tab_overlay import get_balance_color, COLOR_NORMAL, COLOR_LOW_FUNDS,
 
 class TestBalanceColorSelection:
     """
-    **Feature: stripe-payment, Property 7: Balance Color Selection**
+    **Feature: payment, Property 7: Balance Color Selection**
 
     *For any* balance value B:
     - If B >= 50.00, color SHALL be white (#FFFFFF)
@@ -693,7 +693,7 @@ import time
 
 class TestAnimationQueueLengthConsistency:
     """
-    **Feature: stripe-payment, Property 6: Animation Queue Length Consistency**
+    **Feature: payment, Property 6: Animation Queue Length Consistency**
 
     *For any* sequence of N item additions to the tab, the animation queue
     SHALL contain exactly N pending animations before any are executed.
@@ -884,7 +884,7 @@ from src.utils.state_manager import (
 
 class TestTipCalculationAccuracy:
     """
-    **Feature: stripe-payment, Property 8: Tip Calculation Accuracy**
+    **Feature: payment, Property 8: Tip Calculation Accuracy**
 
     *For any* tab total T > 0 and tip percentage P in {10, 15, 20},
     the calculated tip amount SHALL equal T * (P / 100) rounded to 2 decimal places.
@@ -945,7 +945,7 @@ class TestTipCalculationAccuracy:
 
 class TestTipToggleBehavior:
     """
-    **Feature: stripe-payment, Property 9: Tip Toggle Behavior**
+    **Feature: payment, Property 9: Tip Toggle Behavior**
 
     *For any* selected tip percentage P, clicking the same percentage button again
     SHALL result in tip_percentage = None and tip_amount = 0.00.
@@ -1051,7 +1051,7 @@ class TestTipToggleBehavior:
 
 class TestTotalCalculationWithTip:
     """
-    **Feature: stripe-payment, Property 10: Total Calculation with Tip**
+    **Feature: payment, Property 10: Total Calculation with Tip**
 
     *For any* tab total T and tip amount A, the displayed total SHALL equal T + A exactly.
 
@@ -1120,7 +1120,7 @@ class TestTotalCalculationWithTip:
 
 class TestTipReplacementOnNewSelection:
     """
-    **Feature: stripe-payment, Property 11: Tip Replacement on New Selection**
+    **Feature: payment, Property 11: Tip Replacement on New Selection**
 
     *For any* existing tip with percentage P1 and new selection P2 where P1 != P2,
     the tip SHALL be recalculated as tab_total * (P2 / 100), completely replacing
@@ -1206,7 +1206,7 @@ class TestTipReplacementOnNewSelection:
 
 class TestTipResetOnPaymentCompletion:
     """
-    **Feature: stripe-payment, Property 12: Tip Reset on Payment Completion**
+    **Feature: payment, Property 12: Tip Reset on Payment Completion**
 
     *For any* successful payment completion with a non-zero tip,
     both tip_percentage SHALL be None and tip_amount SHALL be 0.00 after completion.
@@ -1323,7 +1323,7 @@ from src.ui.tab_overlay import (
 
 class TestTipNotificationContent:
     """
-    **Feature: stripe-payment, Property 13: Tip Notification Content**
+    **Feature: payment, Property 13: Tip Notification Content**
 
     *For any* tip selection with percentage P in {10, 15, 20} and calculated amount A,
     the generated notification SHALL contain both the percentage value P and the tip amount A.
@@ -1399,7 +1399,7 @@ class TestTipNotificationContent:
 
 class TestTipButtonVisualState:
     """
-    **Feature: stripe-payment, Property 14: Tip Button Visual State**
+    **Feature: payment, Property 14: Tip Button Visual State**
 
     *For any* tip selection state with selected_percentage P (where P is 10, 15, 20, or None),
     exactly one button SHALL have the highlighted style (#4CAF50 background) when P is not None,

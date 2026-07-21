@@ -89,16 +89,16 @@ class PaymentError(Enum):
     # WALLET_UNAVAILABLE: CDP wallet or testnet not responding (Req 3.4)
     WALLET_UNAVAILABLE = "WALLET_UNAVAILABLE"
 
-    # PAYMENT_FAILED: Stripe payment processing failed (Req 3.3)
+    # PAYMENT_FAILED: Payment processing failed (Req 3.3)
     PAYMENT_FAILED = "PAYMENT_FAILED"
 
     # CONCURRENT_MODIFICATION: optimistic lock version mismatch (Req 1.3)
     CONCURRENT_MODIFICATION = "CONCURRENT_MODIFICATION"
 
-    # NETWORK_ERROR: network timeout or connection failure during Stripe calls
+    # NETWORK_ERROR: network timeout or connection failure during payment calls
     NETWORK_ERROR = "NETWORK_ERROR"
 
-    # RATE_LIMITED: Stripe API rate limit exceeded
+    # RATE_LIMITED: API rate limit exceeded
     RATE_LIMITED = "RATE_LIMITED"
 
     # INVALID_SESSION: session_id not found or expired
@@ -992,7 +992,7 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
 
     # Update order state with tip
     update_order_state(session_id, get_global_store(), "add_tip", {"amount": tip_amount, "percentage": tip_percentage})
-    # Update payment state with tip to sync active Stripe / UI tab total
+    # Update payment state with tip to sync active payment / UI tab total
     update_payment_state(session_id, get_global_store(), {
         "tip_amount": tip_amount,
         "tip_percentage": int(tip_percentage) if int(tip_percentage) in [10, 15, 20] else None
