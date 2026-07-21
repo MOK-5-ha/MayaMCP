@@ -11,6 +11,7 @@ When writing code for MayaMCP, please adhere to the DRY (Don't Repeat Yourself) 
 - **Intent Routing Safety**: When implementing deterministic intent routing (e.g., hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`). Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to prevent false positives.
 - **Streaming Pipeline Guidelines**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs. Consume them lazily to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired.
+- **Payment Architecture & Simulation Mode**: Payment handling uses `CryptoPaymentClient` (`src/payments/crypto_client.py`) with zero-latency optimistic processing. For local development, **no CDP API keys are required** — leaving `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET` unset in `.env` enables Simulation Mode automatically. Test cases or demo flows can use an order amount of `$99.99` to trigger a simulated background transaction failure ("register malfunction").
 
 ## Testing Guidelines
 

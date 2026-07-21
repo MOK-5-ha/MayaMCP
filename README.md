@@ -146,25 +146,34 @@ The free Cartesia tier includes **20K credits per month**, which provides approx
 
 For extended usage, consider upgrading to a paid Cartesia plan.
 
-### Coinbase CDP (Optional - for real crypto payments)
+### Coinbase CDP (Simulated vs. Base Sepolia Testnet)
 
-The payment feature works out of the box with simulated mock payments. For real stablecoin (USDC) transactions on the Base Sepolia testnet:
+Maya's payment system operates in **Optimistic UI Mode** (zero latency tab clearing with background transaction processing). It supports two modes:
 
-1. Visit [Coinbase Developer Platform](https://portal.cdp.coinbase.com/)
-2. Create a free account and generate an API key
-3. Add your credentials to `.env`:
+#### 1. Simulation Mode (Default — No API Keys Required)
+Works **out of the box** without any setup or API keys!
+- If `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET` are left blank in `.env`, Maya automatically runs in **Simulation Mode**.
+- Payment transactions are processed instantly in sandbox mode with validly formatted 0x transaction hashes and clickable [BaseScan Sepolia Explorer](https://sepolia.basescan.org/) links for seamless local demos.
+
+#### 2. Base Sepolia Testnet Mode (Optional)
+To connect Maya to real **Base Sepolia testnet** stablecoin (USDC) transactions:
+1. Register for free at [Coinbase Developer Platform (CDP)](https://portal.cdp.coinbase.com/)
+2. Create an API key in the CDP Portal
+3. Configure `.env` with your testnet environment variables:
 
 ```bash
-CDP_API_KEY_ID=your_key_id_here
-CDP_API_KEY_SECRET=your_key_secret_here
-# Optional: provide your own wallet
+# Required for real CDP testnet calls:
+CDP_API_KEY_ID=your_cdp_key_id_here
+CDP_API_KEY_SECRET=your_cdp_key_secret_here
+
+# Optional: Persistent merchant wallet private key (auto-generates per session if empty)
 CDP_MERCHANT_PRIVATE_KEY=0xYourPrivateKey
+
+# Optional: Destination address for payments (defaults to built-in demo testnet wallet)
 CDP_RECEIVER_ADDRESS=0xYourWalletAddress
 ```
 
-> ⚠️ **Important**: Only use Base Sepolia testnet keys. Never configure mainnet keys — all transactions are simulated.
-
-Without CDP configuration, Maya uses mock crypto payments with simulated transaction hashes and BaseScan URLs (fully functional for demos).
+> ⚠️ **Important**: Only use Base Sepolia testnet keys. Never use mainnet credentials — Maya is designed for simulated bar experiences.
 
 Startup validation: On launch, Maya validates required API keys and logs clear, actionable messages if any are missing. The configured `GEMINI_MODEL_VERSION` is also checked against a known list; unrecognized models produce a warning without stopping the app.
 
