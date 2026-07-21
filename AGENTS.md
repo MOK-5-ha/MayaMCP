@@ -103,6 +103,9 @@ Optional:
 - **ADK Streaming Payload Gathering**: When accumulating chunks from ADK's `Runner.run_async` SSE events, do not restrict data collection exclusively to `event.partial == True`. Final text chunks may arrive without the partial flag, leading to dropped content. Process any `text_chunk` that contains valid string data.
 - **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
 - **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and `a2a-sdk`. The `JSONRPCApplication` within the `a2a` server specifically requires `sse-starlette` to function. If test collection errors occur related to ADK routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
+- **Optimistic Payment Status Transitions**: In zero-latency optimistic payment flows, `completed → failed` transitions MUST be allowed in `VALID_STATUS_TRANSITIONS` so async background processing tasks can record failures without raising validation exceptions.
+- **Deterministic Payment Failure Testing**: Order amounts of `$99.99` trigger simulated background transaction failures in `CryptoPaymentClient._simulate_payment_lifecycle` for testing "register malfunction" apology flows in BDD and Weave evaluations.
+- **Async Background Task Dispatch**: When dispatching background tasks from synchronous tool functions, attempt `asyncio.get_running_loop().create_task()` first. If no event loop is active, spawn a daemon thread (`threading.Thread(daemon=True)`) running `asyncio.run()`.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
