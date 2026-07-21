@@ -576,7 +576,8 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         
         # Migrate stripe_payment_id -> crypto_tx_hash if it exists
         if 'stripe_payment_id' in payment:
-            payment['crypto_tx_hash'] = payment.pop('stripe_payment_id')
+            payment.pop('stripe_payment_id')
+            payment['crypto_tx_hash'] = None
             payment_needs_update = True
         elif 'crypto_tx_hash' not in payment:
             payment['crypto_tx_hash'] = None

@@ -181,15 +181,13 @@ class CryptoPaymentClient:
     def _update_payment_status(self, session_id: str, status: str):
         """Update payment status in state manager safely."""
         from ..llm.tools import get_global_store
-        from ..utils.state_manager import get_session_lock, update_payment_state
+        from ..utils.state_manager import update_payment_state
         store = get_global_store()
-        lock = get_session_lock(session_id)
 
-        with lock:
-            try:
-                update_payment_state(session_id, store, {
-                    'payment_status': status
-                })
-                logger.info(f"Updated payment_status to '{status}' for session {session_id}")
-            except Exception as e:
-                logger.error(f"Failed to update payment_status in state manager for {session_id}: {e}")
+        try:
+            update_payment_state(session_id, store, {
+                'payment_status': status
+            })
+            logger.info(f"Updated payment_status to '{status}' for session {session_id}")
+        except Exception as e:
+            logger.error(f"Failed to update payment_status in state manager for {session_id}: {e}")

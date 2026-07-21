@@ -281,12 +281,8 @@ class TestUpdatePaymentStatus:
         client = CryptoPaymentClient()
 
         mock_store = {}
-        mock_lock = MagicMock()
-        mock_lock.__enter__ = MagicMock(return_value=None)
-        mock_lock.__exit__ = MagicMock(return_value=False)
 
         with patch("src.llm.tools.get_global_store", return_value=mock_store), \
-             patch("src.utils.state_manager.get_session_lock", return_value=mock_lock), \
              patch("src.utils.state_manager.update_payment_state") as mock_update:
 
             client._update_payment_status("test_session", "completed")
@@ -301,12 +297,7 @@ class TestUpdatePaymentStatus:
         monkeypatch.delenv("CDP_API_KEY_SECRET", raising=False)
         client = CryptoPaymentClient()
 
-        mock_lock = MagicMock()
-        mock_lock.__enter__ = MagicMock(return_value=None)
-        mock_lock.__exit__ = MagicMock(return_value=False)
-
         with patch("src.llm.tools.get_global_store", return_value={}), \
-             patch("src.utils.state_manager.get_session_lock", return_value=mock_lock), \
              patch("src.utils.state_manager.update_payment_state",
                    side_effect=Exception("State update failed")):
 
