@@ -54,14 +54,22 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
-    "--disable-warnings",
     "--color=yes"
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests"
+    "unit: marks tests as unit tests",
+    "memvid: marks tests related to Memvid functionality",
+    "rag: marks tests related to RAG functionality",
+    "llm: marks tests related to LLM functionality",
+    "ui: marks tests related to UI functionality"
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets.legacy.*:",
+    "ignore::DeprecationWarning:gradio_client.*:"
+]
+
 
 [tool.coverage.run]
 source = ["src"]
