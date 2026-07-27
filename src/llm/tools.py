@@ -842,12 +842,8 @@ def place_order() -> str:
 
     # Enhanced order details including modifiers
     order_details = []
-    current_order_cost = 0.0
 
     for item in order_list:
-        # Add to running total
-        current_order_cost += item['price']
-
         # Format for display
         if "modifiers" in item and item["modifiers"] != "no modifiers":
             order_details.append(f"{item['name']} with {item['modifiers']}")

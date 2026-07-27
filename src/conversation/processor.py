@@ -86,22 +86,6 @@ def _process_drink_context(drink_context: str) -> str:
     # Fallback to first token if no priority match
     return drink_tokens[0] if drink_tokens else ""
 
-def _dispatch_tool(tool_name: str, tool_args: dict, tool_map: dict) -> str:
-    """Execute a single tool with args and return the string output."""
-    selected_tool = tool_map.get(tool_name)
-    if not selected_tool:
-        return f"Error: Tool '{tool_name}' not found."
-    if not isinstance(tool_args, dict):
-        return f"Error: Malformed arguments for tool {tool_name}."
-    try:
-        tool_output = selected_tool(**tool_args)
-        if should_log_sensitive():
-            logger.debug(f"Executed tool '{tool_name}' with args {tool_args}. Output: {tool_output}")
-        return str(tool_output)
-    except TypeError:
-        return f"Error: Invalid parameters for tool {tool_name}."
-    except Exception as e:
-        return f"Error executing tool {tool_name}: {e}"
 
 
 def _build_order_context(session_id: str, app_state: dict) -> str:

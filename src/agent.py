@@ -45,19 +45,19 @@ if os.getenv("INTEGRATION_TEST") == "TRUE":
                 return None
 
         class MockModelsAsync:
-            async def generate_content_stream(self, model, contents, config=None):
+            async def generate_content_stream(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 async def _stream():
                     yield MockResponse("This is a mock streaming response from Gemini.")
                 return _stream()
-            async def generate_content(self, model, contents, config=None):
+            async def generate_content(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 return MockResponse("This is a mock response from Gemini.")
 
         class MockModelsSync:
-            def generate_content(self, model, contents, config=None):
+            def generate_content(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 return MockResponse("This is a mock response from Gemini.")
-            def generate_content_stream(self, model, contents, config=None):
+            def generate_content_stream(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 yield MockResponse("This is a mock response from Gemini.")
-            def embed_content(self, model, contents, config=None):
+            def embed_content(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 if isinstance(contents, list):
                     return types.EmbedContentResponse(embeddings=[types.Embedding(values=[0.1]*768) for _ in contents])
                 return types.EmbedContentResponse(embeddings=[types.Embedding(values=[0.1]*768)])

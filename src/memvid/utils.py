@@ -77,7 +77,7 @@ def decode_qr(image: ArrayType) -> str | None:
 
     try:
         detector = cv2.QRCodeDetector()
-        data, bbox, straight_qrcode = detector.detectAndDecode(image)
+        data, _, _ = detector.detectAndDecode(image)
 
         if data:
             # Check if data was compressed

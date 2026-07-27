@@ -21,9 +21,6 @@ logger = get_logger(__name__)
 DEFAULT_RECEIVER_ADDRESS = "0x4252e0c9A3da5A2700e7d91cb50aEf522D0C6Fe8"
 
 
-class CryptoPaymentError(Exception):
-    """Base exception for Crypto payment operations."""
-    pass
 
 
 class CryptoPaymentClient:
