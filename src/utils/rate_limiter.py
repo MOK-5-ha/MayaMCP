@@ -4,7 +4,6 @@ import os
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Dict, Optional, Tuple
 
 from ..config.logging_config import get_logger
 
@@ -17,7 +16,7 @@ class TokenBucket:
     def __init__(self, capacity: int, refill_rate: float):
         """
         Initialize token bucket.
-        
+
         Args:
             capacity: Maximum number of tokens the bucket can hold
             refill_rate: Number of tokens to add per second
@@ -31,10 +30,10 @@ class TokenBucket:
     def consume(self, tokens: int = 1) -> bool:
         """
         Try to consume tokens from the bucket.
-        
+
         Args:
             tokens: Number of tokens to consume
-            
+
         Returns:
             True if tokens were consumed, False if insufficient tokens
         """
@@ -53,7 +52,7 @@ class TokenBucket:
     def peek(self) -> int:
         """
         Get current token count without consuming.
-        
+
         Returns:
             Current number of tokens in bucket
         """
@@ -70,10 +69,10 @@ class TokenBucket:
         self.tokens = min(self.capacity, self.tokens + tokens_to_add)
         self.last_refill = now
 
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> dict[str, int]:
         """
         Get consistent snapshot of bucket statistics.
-        
+
         Returns:
             Dictionary with tokens, capacity, and refill_rate per minute
         """
@@ -111,7 +110,7 @@ class RateLimiter:
         )
 
         # Session-specific buckets (session_id -> TokenBucket)
-        self._session_buckets: Dict[str, TokenBucket] = {}
+        self._session_buckets: dict[str, TokenBucket] = {}
         self._session_lock = threading.Lock()
 
         # Global application bucket
@@ -121,7 +120,7 @@ class RateLimiter:
         )
 
         # Request tracking for burst detection
-        self._request_history: Dict[str, deque] = defaultdict(deque)
+        self._request_history: dict[str, deque] = defaultdict(deque)
         self._history_lock = threading.Lock()
 
         logger.info(
@@ -146,14 +145,14 @@ class RateLimiter:
             logger.warning(f"Invalid rate limit in {env_var}, using default {default}")
         return default
 
-    def check_session_limit(self, session_id: str, consume: bool = True) -> Tuple[bool, str]:
+    def check_session_limit(self, session_id: str, consume: bool = True) -> tuple[bool, str]:
         """
         Check if session can make a request.
-        
+
         Args:
             session_id: Unique session identifier
             consume: Whether to consume a token (True) or just check (False)
-            
+
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
@@ -182,13 +181,13 @@ class RateLimiter:
 
         return True, ""
 
-    def check_app_limit(self, consume: bool = True) -> Tuple[bool, str]:
+    def check_app_limit(self, consume: bool = True) -> tuple[bool, str]:
         """
         Check if application can handle a request.
-        
+
         Args:
             consume: Whether to consume a token (True) or just check (False)
-            
+
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
@@ -202,13 +201,13 @@ class RateLimiter:
 
         return True, ""
 
-    def check_limits(self, session_id: str) -> Tuple[bool, str]:
+    def check_limits(self, session_id: str) -> tuple[bool, str]:
         """
         Check both application and session rate limits with consistent lock ordering.
-        
+
         Args:
             session_id: Unique session identifier
-            
+
         Returns:
             Tuple of (allowed, reason) where reason is empty if allowed
         """
@@ -246,15 +245,15 @@ class RateLimiter:
     def _check_burst_limit(self, session_id: str) -> bool:
         """
         Check burst limit to prevent rapid-fire requests.
-        
+
         Note: This method appends to the history immediately if the check passes.
-        This means denied attempts (due to subsequent app or session limits) 
-        are still recorded, providing a natural penalty for rapid retries 
+        This means denied attempts (due to subsequent app or session limits)
+        are still recorded, providing a natural penalty for rapid retries
         during rate-limit or capacity conditions (DoS protection).
 
         Args:
             session_id: Unique session identifier
-            
+
         Returns:
             True if within burst limit, False otherwise
         """
@@ -279,7 +278,7 @@ class RateLimiter:
     def cleanup_expired_sessions(self, max_age_seconds: int = 3600) -> None:
         """
         Clean up session data for expired sessions.
-        
+
         Args:
             max_age_seconds: Maximum age of session data before cleanup
         """
@@ -322,13 +321,13 @@ class RateLimiter:
                 f"(total: {total_cleaned})"
             )
 
-    def get_session_stats(self, session_id: str) -> Dict[str, int]:
+    def get_session_stats(self, session_id: str) -> dict[str, int]:
         """
         Get rate limiting statistics for a session.
-        
+
         Args:
             session_id: Unique session identifier
-            
+
         Returns:
             Dictionary with rate limiting statistics
         """
@@ -339,10 +338,10 @@ class RateLimiter:
 
             return bucket.stats()
 
-    def get_app_stats(self) -> Dict[str, int]:
+    def get_app_stats(self) -> dict[str, int]:
         """
         Get application-wide rate limiting statistics.
-        
+
         Returns:
             Dictionary with application rate limiting statistics
         """
@@ -350,14 +349,14 @@ class RateLimiter:
 
 
 # Global rate limiter instance
-_rate_limiter: Optional[RateLimiter] = None
+_rate_limiter: RateLimiter | None = None
 _limiter_lock = threading.Lock()
 
 
 def get_rate_limiter() -> RateLimiter:
     """
     Get the global rate limiter instance.
-    
+
     Returns:
         RateLimiter singleton instance
     """
@@ -372,13 +371,13 @@ def get_rate_limiter() -> RateLimiter:
     return _rate_limiter
 
 
-def check_rate_limits(session_id: str) -> Tuple[bool, str]:
+def check_rate_limits(session_id: str) -> tuple[bool, str]:
     """
     Convenience function to check rate limits for a session.
-    
+
     Args:
         session_id: Unique session identifier
-        
+
     Returns:
         Tuple of (allowed, reason) where reason is empty if allowed
     """

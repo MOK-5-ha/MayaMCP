@@ -1,6 +1,6 @@
 """API key modal UI components for BYOK authentication."""
 
-from typing import MutableMapping, Optional, Tuple
+from collections.abc import MutableMapping
 
 import gradio as gr
 
@@ -85,8 +85,8 @@ def handle_key_submission(
     gemini_key: str,
     cartesia_key: str,
     request: gr.Request,
-    app_state: Optional[MutableMapping] = None,
-) -> Tuple[str, gr.Column, gr.Column, bool]:
+    app_state: MutableMapping | None = None,
+) -> tuple[str, gr.Column, gr.Column, bool]:
     """Validate keys, store them in session state, and toggle UI visibility.
 
     Returns:

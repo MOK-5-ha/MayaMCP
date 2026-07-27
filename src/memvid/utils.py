@@ -6,7 +6,7 @@ Cherry-picked and simplified from original memvid
 import base64
 import gzip
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 # Import only what we need
 try:
@@ -34,7 +34,7 @@ def check_dependencies():
         raise ImportError("Missing dependencies. Need: pip install qrcode[pil] opencv-python")
     return True
 
-def encode_to_qr(data: str) -> Optional[ImageType]:
+def encode_to_qr(data: str) -> ImageType | None:
     """
     Encode data to QR code image (simplified version)
     """
@@ -68,7 +68,7 @@ def encode_to_qr(data: str) -> Optional[ImageType]:
         logger.error(f"QR encoding failed: {e}")
         return None
 
-def decode_qr(image: ArrayType) -> Optional[str]:
+def decode_qr(image: ArrayType) -> str | None:
     """
     Decode QR code from image (simplified version)
     """
@@ -89,7 +89,7 @@ def decode_qr(image: ArrayType) -> Optional[str]:
         logger.warning(f"QR decode failed: {e}")
     return None
 
-def qr_to_frame(qr_image: ImageType, frame_size: Tuple[int, int]) -> Optional[ArrayType]:
+def qr_to_frame(qr_image: ImageType, frame_size: tuple[int, int]) -> ArrayType | None:
     """
     Convert QR PIL image to video frame
     """
@@ -114,7 +114,7 @@ def qr_to_frame(qr_image: ImageType, frame_size: Tuple[int, int]) -> Optional[Ar
         logger.error(f"Frame conversion failed: {e}")
         return None
 
-def extract_frame(video_path: str, frame_number: int) -> Optional[ArrayType]:
+def extract_frame(video_path: str, frame_number: int) -> ArrayType | None:
     """
     Extract single frame from video
     """
@@ -133,7 +133,7 @@ def extract_frame(video_path: str, frame_number: int) -> Optional[ArrayType]:
         logger.error(f"Frame extraction failed: {e}")
     return None
 
-def chunk_text(text: str, chunk_size: int = 512, overlap: int = 32) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 512, overlap: int = 32) -> list[str]:
     """
     Split text into overlapping chunks (simplified)
     """

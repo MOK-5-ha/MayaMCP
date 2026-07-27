@@ -6,7 +6,7 @@ Creates video memory from text chunks using QR codes
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ class MemvidEncoder:
     Simplified MemvidEncoder for Maya's personality documents
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or get_memvid_config()
         self.chunks = []
         self.chunk_metadata = []
@@ -33,12 +33,12 @@ class MemvidEncoder:
             logger.error(f"Memvid dependencies not available: {e}")
             self.dependencies_available = False
 
-    def add_chunks(self, chunks: List[str]):
+    def add_chunks(self, chunks: list[str]):
         """Add text chunks to be encoded"""
         self.chunks.extend(chunks)
         logger.info(f"Added {len(chunks)} chunks. Total: {len(self.chunks)}")
 
-    def add_text(self, text: str, chunk_size: Optional[int] = None, overlap: Optional[int] = None):
+    def add_text(self, text: str, chunk_size: int | None = None, overlap: int | None = None):
         """Add text and automatically chunk it"""
         chunk_size = chunk_size or self.config["chunking"]["chunk_size"]
         overlap = overlap or self.config["chunking"]["overlap"]
@@ -97,7 +97,7 @@ class MemvidEncoder:
 
         return video_writer
 
-    def _initialize_index_data(self) -> Dict[str, Any]:
+    def _initialize_index_data(self) -> dict[str, Any]:
         """Initialize index data structure"""
         return {
             "chunks": [],
@@ -106,7 +106,7 @@ class MemvidEncoder:
             "config": self.config
         }
 
-    def _process_all_chunks(self, video_writer, index_data: Dict[str, Any]) -> int:
+    def _process_all_chunks(self, video_writer, index_data: dict[str, Any]) -> int:
         """Process all chunks and write to video"""
         frame_count = 0
         frame_size = (self.config["video"]["frame_width"], self.config["video"]["frame_height"])
@@ -118,7 +118,7 @@ class MemvidEncoder:
         return frame_count
 
     def _process_single_chunk(self, chunk: str, chunk_id: int, frame_count: int,
-                            frame_size: tuple, video_writer, index_data: Dict[str, Any]) -> bool:
+                            frame_size: tuple, video_writer, index_data: dict[str, Any]) -> bool:
         """Process a single chunk and add to video"""
         chunk_data = {
             "id": chunk_id,
@@ -145,7 +145,7 @@ class MemvidEncoder:
         self._add_chunk_to_index(chunk, chunk_id, frame_count, index_data)
         return True
 
-    def _add_chunk_to_index(self, chunk: str, chunk_id: int, frame_count: int, index_data: Dict[str, Any]):
+    def _add_chunk_to_index(self, chunk: str, chunk_id: int, frame_count: int, index_data: dict[str, Any]):
         """Add chunk metadata to index"""
         preview_text = chunk[:100] + "..." if len(chunk) > 100 else chunk
         index_data["chunks"].append({
@@ -155,7 +155,7 @@ class MemvidEncoder:
             "length": len(chunk)
         })
 
-    def _finalize_video_build(self, video_writer, index_data: Dict[str, Any],
+    def _finalize_video_build(self, video_writer, index_data: dict[str, Any],
                             frame_count: int, index_path: str, output_path: str):
         """Finalize video creation and save index"""
         video_writer.release()
@@ -192,7 +192,7 @@ class MemvidEncoder:
 
         return success
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get encoder statistics"""
         return {
             "total_chunks": len(self.chunks),

@@ -2,7 +2,8 @@
 
 import logging
 import threading
-from typing import Any, Dict, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -18,7 +19,7 @@ logger = get_logger(__name__)
 def _handle_genai_fallback_error(e: Exception, logger: logging.Logger, context: str):
     """
     Handle fallback error classification for GenAI exceptions.
-    
+
     Args:
         e: The exception to classify and handle
         logger: Logger instance for error reporting
@@ -81,8 +82,8 @@ GenaiTimeoutError = getattr(genai_errors, "TimeoutError", _NoSDKError) if genai_
 
 # ---- Unified Google GenAI client/wrapper utilities ----
 
-_genai_client: Optional[genai.Client] = None
-_genai_client_key: Optional[str] = None
+_genai_client: genai.Client | None = None
+_genai_client_key: str | None = None
 _CLIENT_LOCK = threading.Lock()
 
 
@@ -104,7 +105,7 @@ def get_genai_client(api_key: str) -> genai.Client:
     return local_client
 
 
-def build_generate_config(config_dict: Dict[str, Any]) -> types.GenerateContentConfig:
+def build_generate_config(config_dict: dict[str, Any]) -> types.GenerateContentConfig:
     """Map our generation config dict to a GenerateContentConfig."""
     raw_tools = config_dict.get("tools")
     processed_tools = None
@@ -130,7 +131,7 @@ def get_model_name() -> str:
     return get_model_config()["model_version"]
 
 
-def get_gemini_params() -> Dict[str, Any]:
+def get_gemini_params() -> dict[str, Any]:
     """Return a dict of params for Gemini construction."""
     cfg = get_model_config()
     return {
@@ -148,8 +149,8 @@ def get_gemini_params() -> Dict[str, Any]:
     reraise=True
 )
 def call_gemini_api(
-    prompt_content: List[Dict],
-    config: Dict,
+    prompt_content: list[dict],
+    config: dict,
     api_key: str
 ) -> types.GenerateContentResponse:
     """
@@ -199,8 +200,8 @@ def call_gemini_api(
 
 
 def stream_gemini_api(
-    prompt_content: List[Dict],
-    config: Dict,
+    prompt_content: list[dict],
+    config: dict,
     api_key: str
 ) -> Generator[types.GenerateContentResponse, None, None]:
     """
@@ -251,8 +252,7 @@ def stream_gemini_api(
             response_stream = _open_gemini_stream()
 
             # Iterate through stream with error handling
-            for chunk in response_stream:
-                yield chunk
+            yield from response_stream
 
             # Stream completed successfully
             break

@@ -34,10 +34,10 @@ PHASE_PROMPTS = {
 def get_system_prompt(menu_text: str = "") -> str:
     """
     Get the main system prompt for Maya.
-    
+
     Args:
         menu_text: Menu text to include in the prompt
-        
+
     Returns:
         Complete system prompt
     """
@@ -51,10 +51,10 @@ def get_system_prompt(menu_text: str = "") -> str:
 def get_phase_prompt(phase: str) -> str:
     """
     Get phase-specific prompt for conversation management.
-    
+
     Args:
         phase: Conversation phase (greeting, order_taking, small_talk, reorder_prompt)
-        
+
     Returns:
         Phase-specific prompt
     """
@@ -63,11 +63,11 @@ def get_phase_prompt(phase: str) -> str:
 def get_combined_prompt(phase: str, menu_text: str = "") -> str:
     """
     Get combined phase and system prompt.
-    
+
     Args:
         phase: Conversation phase
         menu_text: Menu text to include
-        
+
     Returns:
         Combined prompt
     """

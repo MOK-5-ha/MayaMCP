@@ -4,7 +4,8 @@ import asyncio
 import concurrent.futures
 import queue
 import re
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from collections.abc import Generator
+from typing import Any
 
 # RAG pipeline imports moved to top for performance
 try:
@@ -48,10 +49,10 @@ RAG_TIMEOUT = 10.0  # seconds
 def _process_drink_context(drink_context: str) -> str:
     """
     Process multi-token drink context into a single drink item.
-    
+
     Args:
         drink_context: Space-separated drink terms from conversation context
-        
+
     Returns:
         Processed drink string suitable for add_to_order tool
     """
@@ -121,23 +122,23 @@ def _build_order_context(session_id: str, app_state: dict) -> str:
 
 def process_order(
     user_input_text: str,
-    current_session_history: List[Dict[str, str]],
+    current_session_history: list[dict[str, str]],
     llm,
     rag_retriever=None,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     session_id: str = "default",
     app_state: Any = None
-) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any]:
+) -> tuple[str, list[dict[str, str]], list[dict[str, str]], list[dict[str, Any]], Any]:
     """
     Process user input using LLM with tool calling, updates state.
-    
+
     Args:
         user_input_text: User's input
         current_session_history: Session history for Gradio
         llm: Initialized LLM instance
         rag_retriever: Memvid retriever for video-based RAG (optional)
         api_key: API key for RAG pipeline (optional)
-        
+
     Returns:
         Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data)
     """
@@ -414,8 +415,8 @@ def process_order(
             if phase_manager.get_current_phase() == 'small_talk':
                 phase_manager.increment_small_talk()
 
-            # Determine next phase
-            next_phase = phase_manager.update_phase(order_placed)
+            # Determine next phase (side-effect: updates phase manager state)
+            phase_manager.update_phase(order_placed)
 
             # Security Scan: Output
             output_scan_result = scan_output(agent_response_text, prompt=user_input_text)
@@ -440,16 +441,16 @@ def process_order(
 
 def process_order_stream(
     user_input_text: str,
-    current_session_history: List[Dict[str, str]],
+    current_session_history: list[dict[str, str]],
     llm,
     rag_retriever=None,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     session_id: str = "default",
     app_state: Any = None
 ) -> Generator[dict, None, None]:
     """
     Process user input using streaming LLM with tool calling.
-    
+
     Args:
         user_input_text: User's input
         current_session_history: Session history for Gradio
@@ -458,7 +459,7 @@ def process_order_stream(
         api_key: API key for RAG pipeline (optional)
         session_id: Session identifier for state management
         app_state: Application state for session management
-        
+
     Yields:
         Dict with streaming response data
     """

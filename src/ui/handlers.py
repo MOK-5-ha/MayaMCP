@@ -1,6 +1,7 @@
 """Gradio event handlers."""
 
-from typing import Any, Dict, List, MutableMapping, Optional, Tuple
+from collections.abc import MutableMapping
+from typing import Any
 
 import gradio as gr
 
@@ -33,19 +34,19 @@ logger = get_logger(__name__)
 
 def handle_gradio_input(
     user_input: str,
-    session_history_state: List[Dict[str, str]],
+    session_history_state: list[dict[str, str]],
     current_tab: float,
     current_balance: float,
-    current_tip_percentage: Optional[int],
+    current_tip_percentage: int | None,
     current_tip_amount: float,
     request: gr.Request,
     tools=None,
     rag_retriever=None,
-    rag_api_key: Optional[str] = None,
-    app_state: Optional[MutableMapping] = None,
+    rag_api_key: str | None = None,
+    app_state: MutableMapping | None = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
-) -> Tuple[str, List[Dict[str, str]], List[Dict[str, str]], List[Dict[str, Any]], Any,
-           str, float, float, float, float, Optional[int], float, str, str]:
+) -> tuple[str, list[dict[str, str]], list[dict[str, str]], list[dict[str, Any]], Any,
+           str, float, float, float, float, int | None, float, str, str]:
     """
     Gradio callback: Takes input/state, calls logic & TTS, returns updates.
 
@@ -186,11 +187,11 @@ def handle_gradio_input(
 
 def clear_chat_state(
     request: gr.Request,
-    app_state: Optional[MutableMapping] = None
-) -> Tuple[List, List, List, None]:
+    app_state: MutableMapping | None = None
+) -> tuple[list, list, list, None]:
     """
     Clear UI/session state including audio.
-    
+
     Returns:
         Tuple of (empty_chatbot, empty_history, empty_order, no_audio)
     """
@@ -216,24 +217,24 @@ def clear_chat_state(
 
 def handle_gradio_input_stream(
     user_input: str,
-    session_history_state: List[Dict[str, str]],
+    session_history_state: list[dict[str, str]],
     current_tab: float,
     current_balance: float,
-    current_tip_percentage: Optional[int],
+    current_tip_percentage: int | None,
     current_tip_amount: float,
     request: gr.Request,
     tools=None,
     rag_retriever=None,
-    rag_api_key: Optional[str] = None,
-    app_state: Optional[MutableMapping] = None,
+    rag_api_key: str | None = None,
+    app_state: MutableMapping | None = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
 ):
     """
     Streaming Gradio callback for real-time text and audio generation.
-    
+
     Args:
         Same as handle_gradio_input
-        
+
     Yields:
         Streaming updates for Gradio interface
     """
@@ -397,25 +398,25 @@ def handle_gradio_input_stream(
 
 def handle_gradio_streaming_input(
     user_input: str,
-    session_history_state: List[Dict[str, str]],
+    session_history_state: list[dict[str, str]],
     current_tab: float,
     current_balance: float,
-    current_tip_percentage: Optional[int],
+    current_tip_percentage: int | None,
     current_tip_amount: float,
     streaming_enabled: bool,
     request: gr.Request,
     tools=None,
     rag_retriever=None,
-    rag_api_key: Optional[str] = None,
-    app_state: Optional[MutableMapping] = None,
+    rag_api_key: str | None = None,
+    app_state: MutableMapping | None = None,
     avatar_path: str = "assets/bartender_avatar.jpg"
 ):
     """
     Handle Gradio input with streaming support.
-    
+
     Args:
         streaming_enabled: Whether to use streaming or traditional mode
-        
+
     Returns:
         Updates for Gradio interface components
     """

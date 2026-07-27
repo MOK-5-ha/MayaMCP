@@ -1,7 +1,6 @@
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from .config import ScanConfig
 
@@ -17,12 +16,12 @@ class ScanResult:
     is_valid: bool
     sanitized_text: str
     blocked_reason: str = ""
-    scanner_scores: Dict[str, float] = field(default_factory=dict)
+    scanner_scores: dict[str, float] = field(default_factory=dict)
 
 def is_available() -> bool:
     """Check if llm-guard is installed and functional."""
     try:
-        import llm_guard
+        import llm_guard  # noqa: F401 - presence check only; ImportError means llm-guard is unavailable
         return True
     except ImportError:
         logger.warning("llm-guard not installed. Security scanning is disabled.")
@@ -43,7 +42,7 @@ _FALLBACK_INJECTION_PATTERNS = [
     re.compile(r"\bbypass mode\b", re.IGNORECASE),
 ]
 
-def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
+def scan_input(text: str, config: ScanConfig | None = None) -> ScanResult:
     """
     Scan user input for prompt injection and toxicity.
     Returns ScanResult with is_valid=False if blocked.
@@ -119,7 +118,7 @@ def scan_input(text: str, config: Optional[ScanConfig] = None) -> ScanResult:
 
     return ScanResult(is_valid=True, sanitized_text=text, scanner_scores=scanner_scores)
 
-def scan_output(text: str, prompt: str = "", config: Optional[ScanConfig] = None) -> ScanResult:
+def scan_output(text: str, prompt: str = "", config: ScanConfig | None = None) -> ScanResult:
     """
     Scan LLM output for toxicity.
     Returns ScanResult with fallback message if toxic.

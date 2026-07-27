@@ -3,7 +3,7 @@
 import os
 import threading
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from ..config.logging_config import get_logger
 
@@ -25,7 +25,7 @@ class MemoryMonitor:
         self._last_alert_time = 0
         self._alert_cooldown = 300  # 5 minutes between alerts
 
-    def read_cgroup_memory(self) -> Tuple[Optional[int], Optional[int]]:
+    def read_cgroup_memory(self) -> tuple[int | None, int | None]:
         """
         Read container memory usage and limit from cgroups.
 
@@ -71,7 +71,7 @@ class MemoryMonitor:
             logger.warning(f"Error reading cgroup memory: {e}")
             return None, None
 
-    def get_memory_usage_mb(self) -> Optional[float]:
+    def get_memory_usage_mb(self) -> float | None:
         """
         Get current memory usage in MB.
         """
@@ -80,7 +80,7 @@ class MemoryMonitor:
             return current_bytes / (1024 * 1024)
         return None
 
-    def get_memory_utilization(self) -> Optional[float]:
+    def get_memory_utilization(self) -> float | None:
         """
         Get memory utilization as ratio (0.0-1.0).
         """
@@ -103,7 +103,7 @@ class MemoryMonitor:
         available_mb = (limit_bytes - current_bytes) / (1024 * 1024)
         return available_mb >= required_mb
 
-    def check_memory_pressure(self) -> Dict[str, Any]:
+    def check_memory_pressure(self) -> dict[str, Any]:
         """
         Check for memory pressure and return status.
         """
@@ -147,10 +147,10 @@ class MemoryMonitor:
             }
 
 
-    def get_memory_metrics(self) -> Dict[str, Any]:
+    def get_memory_metrics(self) -> dict[str, Any]:
         """
         Get comprehensive memory metrics for monitoring.
-        
+
         Returns:
             Dictionary with memory metrics
         """
@@ -200,7 +200,7 @@ class MemoryMonitor:
 
 
 # Global memory monitor instance and its initialization lock
-_memory_monitor: Optional[MemoryMonitor] = None
+_memory_monitor: MemoryMonitor | None = None
 _monitor_lock = threading.Lock()
 
 
