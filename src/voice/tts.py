@@ -2,7 +2,6 @@
 
 import logging
 import re
-from typing import Optional
 
 from tenacity import (
     before_sleep_log,
@@ -23,10 +22,10 @@ CARTESIA_RETRYABLE_EXCEPTIONS = (ConnectionError, TimeoutError)
 def clean_text_for_tts(text: str) -> str:
     """
     Clean text for TTS to improve pronunciation and remove unwanted punctuation.
-    
+
     Args:
         text: Raw text to be spoken
-        
+
     Returns:
         Cleaned text suitable for TTS
     """
@@ -119,10 +118,10 @@ def clean_text_for_tts(text: str) -> str:
 def initialize_cartesia_client(api_key: str):
     """
     Initialize Cartesia client.
-    
+
     Args:
         api_key: Cartesia API key
-        
+
     Returns:
         Initialized Cartesia client
     """
@@ -147,16 +146,16 @@ def initialize_cartesia_client(api_key: str):
 def get_voice_audio(
     text_to_speak: str,
     cartesia_client,
-    voice_id: Optional[str] = None
-) -> Optional[bytes]:
+    voice_id: str | None = None
+) -> bytes | None:
     """
     Call Cartesia API synchronously to synthesize speech and return WAV bytes.
-    
+
     Args:
         text_to_speak: Text to convert to speech
         cartesia_client: Initialized Cartesia client
         voice_id: Voice ID to use (uses default from config if None)
-        
+
     Returns:
         WAV audio data as bytes, or None if failed
     """

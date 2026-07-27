@@ -7,8 +7,9 @@ identified in PERFORMANCE_ANALYSIS.md #2.
 """
 
 import threading
+from collections.abc import MutableMapping
 from contextlib import contextmanager
-from typing import Any, Dict, MutableMapping, Optional
+from typing import Any
 
 from ..config.logging_config import get_logger
 
@@ -32,11 +33,11 @@ class BatchStateCache:
         """
         self.session_id = session_id
         self.store = store
-        self._cached_data: Optional[Dict[str, Any]] = None
+        self._cached_data: dict[str, Any] | None = None
         self._dirty = False  # Track if we have unsaved changes
         self._lock = threading.RLock()
 
-    def _load_data(self) -> Dict[str, Any]:
+    def _load_data(self) -> dict[str, Any]:
         """
         Load session data from store, using cache if available.
 
@@ -51,7 +52,7 @@ class BatchStateCache:
             )
         return self._cached_data
 
-    def get_session_data(self) -> Dict[str, Any]:
+    def get_session_data(self) -> dict[str, Any]:
         """
         Get cached session data, loading from store if necessary.
 
@@ -71,7 +72,7 @@ class BatchStateCache:
         with self._lock:
             return self._cached_data is not None
 
-    def get_cached_data(self) -> Optional[Dict[str, Any]]:
+    def get_cached_data(self) -> dict[str, Any] | None:
         """
         Get the currently cached data without loading from store.
 
@@ -81,7 +82,7 @@ class BatchStateCache:
         with self._lock:
             return self._cached_data.copy() if self._cached_data is not None else None
 
-    def set_cached_data(self, data: Dict[str, Any], dirty: bool = True) -> None:
+    def set_cached_data(self, data: dict[str, Any], dirty: bool = True) -> None:
         """
         Set the cached data and optionally mark as dirty.
 
@@ -115,7 +116,7 @@ class BatchStateCache:
         with self._lock:
             return self._dirty
 
-    def get_section(self, section_name: str) -> Dict[str, Any]:
+    def get_section(self, section_name: str) -> dict[str, Any]:
         """
         Get a specific section of session data.
 
@@ -134,7 +135,7 @@ class BatchStateCache:
                 raise TypeError(f"Section '{section_name}' is not a dictionary")
             return data[section_name].copy()
 
-    def update_session_data(self, updates: Dict[str, Any]) -> None:
+    def update_session_data(self, updates: dict[str, Any]) -> None:
         """
         Update session data with the provided changes.
 
@@ -150,7 +151,7 @@ class BatchStateCache:
                 f"{list(updates.keys())}"
             )
 
-    def update_section(self, section_name: str, updates: Dict[str, Any]) -> None:
+    def update_section(self, section_name: str, updates: dict[str, Any]) -> None:
         """
         Update a specific section of session data.
 
@@ -233,7 +234,7 @@ def batch_state_commits(session_id: str, store: MutableMapping):
             logger.debug(f"Ended batch state commits context for {session_id}")
 
 
-def get_current_batch_cache() -> Optional[BatchStateCache]:
+def get_current_batch_cache() -> BatchStateCache | None:
     """
     Get the current batch cache if within a batch_state_commits context.
 

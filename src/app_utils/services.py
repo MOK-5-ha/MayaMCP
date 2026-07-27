@@ -68,5 +68,5 @@ def get_artifact_service():
 
 
 _registry = get_service_registry()
-_registry.register_session_service("shared", lambda uri, **kw: get_session_service())
-_registry.register_artifact_service("shared", lambda uri, **kw: get_artifact_service())
+_registry.register_session_service("shared", lambda uri, **_kw: get_session_service())
+_registry.register_artifact_service("shared", lambda uri, **_kw: get_artifact_service())
