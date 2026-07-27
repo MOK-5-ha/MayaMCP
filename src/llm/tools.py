@@ -858,7 +858,7 @@ def place_order() -> str:
     total = sum(item['price'] for item in order_list)
 
     # Simulate random preparation time between 2-8 minutes
-    prep_time = random.randint(2, 8)
+    prep_time = random.randint(2, 8)  # nosec B311 - non-cryptographic: simulated UI display value only
 
     logger.info(f"Tool: Placing order: [{order_text}], Total: ${total:.2f}, ETA: {prep_time} minutes")
 

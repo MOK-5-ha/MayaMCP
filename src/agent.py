@@ -69,7 +69,7 @@ if os.getenv("INTEGRATION_TEST") == "TRUE":
         # Override properties on Client class
         google.genai.Client.models = property(lambda self: MockModelsSync())
         google.genai.Client.aio = property(lambda self: MockAio())
-    except Exception:
+    except Exception:  # nosec B110 - intentional: best-effort mock injection must not crash agent startup
         pass
 
 from google.adk.agents import Agent

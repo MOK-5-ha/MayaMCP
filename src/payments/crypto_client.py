@@ -127,7 +127,7 @@ class CryptoPaymentClient:
                     account = await cdp.evm.create_account(name=f"Temp_{session_id[:8]}")
                     # Attempt to get faucet ETH for gas if it's a new account
                     try:
-                        await cdp.evm.request_faucet(address=account.address, network="base-sepolia", token="eth")
+                        await cdp.evm.request_faucet(address=account.address, network="base-sepolia", token="eth")  # nosec B106 - 'eth' is a blockchain token symbol, not a password
                         logger.debug(f"Faucet request sent for temporary account: {account.address}")
                     except Exception as fe:
                         logger.warning(f"Could not request faucet ETH for gas: {fe}")
@@ -140,7 +140,7 @@ class CryptoPaymentClient:
                     transfer = await account.transfer(
                         to=self.receiver_address,
                         amount=amount,
-                        token="usdc",
+                        token="usdc",  # nosec B106 - 'usdc' is a blockchain token symbol, not a password
                         network="base-sepolia"
                     )
                     actual_tx_hash = getattr(transfer, "transaction_hash", optimistic_tx_hash) or optimistic_tx_hash
@@ -150,7 +150,7 @@ class CryptoPaymentClient:
                     transfer = await account.transfer(
                         to=self.receiver_address,
                         amount=amount * 0.0001,  # Convert mock amount to a tiny fractional ETH amount
-                        token="eth",
+                        token="eth",  # nosec B106 - 'eth' is a blockchain token symbol, not a password
                         network="base-sepolia"
                     )
                     actual_tx_hash = getattr(transfer, "transaction_hash", optimistic_tx_hash) or optimistic_tx_hash

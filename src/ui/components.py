@@ -32,7 +32,7 @@ def setup_avatar(
 
     try:
         # Download avatar
-        response = requests.get(avatar_url)
+        response = requests.get(avatar_url, timeout=10)
         if response.status_code == 200:
             avatar_bytes = response.content
             avatar_image = Image.open(io.BytesIO(avatar_bytes))
