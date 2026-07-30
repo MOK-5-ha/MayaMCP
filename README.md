@@ -145,6 +145,16 @@ Legacy script (optional):
 
 Note: `pip install -e .` installs dependencies from `requirements.txt` and sets up the `mayamcp` console command.
 
+### Verifying Environment & High-Throughput Quota
+
+```bash
+# 1. Verify your environment setup (Vertex AI vs AI Studio)
+python verify_environment.py
+
+# 2. Test high-throughput quota burst performance (25 parallel requests)
+python scripts/verify_burst_throughput.py
+```
+
 Note: `pip install -r requirements.txt` installs the Agent Development Kit (`google-adk`) and the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project has been fully migrated to ADK 2.0 and does not use LangChain.
 ## API Keys Required
 

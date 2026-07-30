@@ -78,10 +78,13 @@ Ruff config is in `pyproject.toml`. Rules: E, W, F, I, B, C4, UP.
 Copy `.env.example` to `.env`. Maya runs in BYOK (Bring Your Own Key) mode — users provide API keys via the UI.
 
 Required (for server-side fallback):
-- `GEMINI_API_KEY` — Google AI Studio API key
+- `GEMINI_API_KEY` — Google AI Studio API key (or `GCP_PROJECT` for Vertex AI mode)
 - `CARTESIA_API_KEY` — Cartesia TTS API key
 
 Optional:
+- `GCP_PROJECT` — GCP Project ID for Vertex AI mode (uses GCP Billing Account trial credits)
+- `GCP_LOCATION` — Vertex AI deployment region (defaults to `global`)
+- `GEMINI_TIER` — Set to `paid` for high-throughput 300+ RPM quota mode
 - `GEMINI_MODEL_VERSION` — defaults to `gemini-3-flash-preview`
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `2048`
@@ -92,7 +95,7 @@ Optional:
 - `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional, has default)
 
 ## Key Architecture Rules
-- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client(api_key=...)` instead of instantiating `genai.Client` directly (this applies to sessions, registration modules, and integration tests to ensure proper caching).
+- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client(api_key=...)` instead of instantiating `genai.Client` directly (this applies to sessions, registration modules, and integration tests to ensure proper caching). `get_genai_client()` automatically detects **GCP Vertex AI Mode** when `GCP_PROJECT` or `GOOGLE_CLOUD_PROJECT` is set, falling back to **Google AI Studio Mode** via `GEMINI_API_KEY` / BYOK session keys.
 - **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments.
 - **Security scanning**: Inputs are checked for prompt injection/toxicity before processing; outputs are checked before returning to user. See `src/security/`.
 - **Payment state**: Thread-safe per-session locking with atomic updates and version checks. Always acquire the session lock before modifying payment state. See `src/utils/state_manager.py`.
