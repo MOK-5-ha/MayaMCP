@@ -10,11 +10,13 @@ src/
 ├── memvid/          # Memvid RAG implementation
 ├── payments/        # Coinbase CDP crypto payment client and logic
 ├── rag/             # RAG pipeline (embeddings, retrieval, vector store)
+├── routers/         # FastAPI REST & SSE v1 API routers (chat, payments, session)
+├── schemas/         # Pydantic v2 data transfer schemas
 ├── security/        # Input/output scanning, encryption, scan config
 ├── ui/              # Gradio components, handlers, tab overlay, BYOK modal
 ├── utils/           # Errors, helpers, state management
 └── voice/           # Cartesia TTS integration
-tests/               # pytest suite (unit, integration, property-based)
+tests/               # pytest suite (unit, integration, property-based, API)
 assets/              # Static files (avatar, media)
 deploy.py            # Modal Labs deployment
 run_maya.sh          # Dev runner script

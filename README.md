@@ -34,14 +34,33 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - `notebooks/`: Experimentation and analysis
 - `scripts/`: Utility scripts, including Weave evaluations
 - `src/`: Core source code with modular organization
-  - `src/utils/`: Errors, helpers (centralized DRY logic), and state management
-- `tests/`: pytest suite (unit, integration, property-based)
+  - `src/routers/`: FastAPI v1 REST and SSE API endpoints (`session`, `payments`, `chat`)
+  - `src/schemas/`: Pydantic v2 data transfer schemas
+  - `src/utils/`: Errors, helpers (centralized DRY logic), and thread-safe state management
+- `tests/`: pytest suite (unit, integration, property-based, API)
 
 ## Architecture Updates
 
+- **FastAPI 0.141.1 & Decoupled Gradio UI**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, exposing root `/` for native REST (`/api/v1/*`) and Agent-to-Agent (`/a2a/*`) interfaces.
 - **Google ADK 2.0 Integration**: Completely migrated the conversational orchestrator to Google's Agent Development Kit (ADK) using `google-adk`. Replaced legacy `langchain` and native `google-genai` wrappers with ADK's `Agent`, `Runner`, and `Gemini` models.
 - **Unified GenAI Client**: Centralized API key and session registry management using ADK's lazy-loading patterns to support Bring Your Own Key (BYOK) dynamic initialization.
-- Model validation at startup warns if `GEMINI_MODEL_VERSION` is unrecognized but continues to run.
+- **Distributed State Management**: Thread-safe per-session synchronization (`RLock`) supporting Modal's distributed `modal.Dict` sharing across multi-container deployments (`max_containers > 1`).
+
+### REST & SSE API Endpoints (`/api/v1`)
+
+Maya exposes a REST and SSE API to allow building custom web and mobile client interfaces:
+
+| Endpoint | Method | Description | Headers / Query |
+|---|---|---|---|
+| `/api/v1/session/status` | GET | Retrieve session key validation status | `X-Session-ID` (optional) |
+| `/api/v1/session/keys` | POST | Submit BYOK Gemini & Cartesia API keys | `X-Session-ID` (optional) |
+| `/api/v1/session/reset` | POST | Reset session order & payment state | `X-Session-ID` (optional) |
+| `/api/v1/payments/tab` | GET | Fetch running tab, balance, and tip status | `X-Session-ID` (optional) |
+| `/api/v1/payments/tip` | POST | Set or update tip percentage or amount | `X-Session-ID` (optional) |
+| `/api/v1/chat` | POST | Send chat message (synchronous REST) | `X-Session-ID` (optional) |
+| `/api/v1/chat/stream` | GET | Real-time SSE response stream (`EventSource` compatible) | `session_id` query param or `X-Session-ID` header |
+
+*Note*: For EventSource streaming, browser clients can pass `session_id` as a URL parameter (`/api/v1/chat/stream?message=hello&session_id=sess_123`). The stream yields an initial `{"type": "session", "session_id": "sess_123"}` event upon connection.
 
 ### Model Information
 
