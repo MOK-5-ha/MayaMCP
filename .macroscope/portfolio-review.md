@@ -18,7 +18,8 @@ When reviewing code, pull requests, and commits:
 While being lenient on enterprise dogma, you **must** strictly enforce these specific project rules derived from the steering docs (AGENTS.md):
 
 1. **Unified GenAI Routing:** All LLM calls must go through `src/llm/client.py`. Flag any code that attempts to call the Google SDK directly in other modules.
-2. **BYOK (Bring Your Own Key) & Fallbacks:** 
+2. **Dual GenAI Authentication & BYOK:** 
+   - Supports **GCP Vertex AI Mode** (when `GCP_PROJECT` or `GOOGLE_CLOUD_PROJECT` is set, leveraging GCP Billing credits at 300+ RPM paid tier) and **Google AI Studio Mode** (via `GEMINI_API_KEY` or user BYOK session key).
    - LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
    - Ensure the graceful fallback chain remains intact: `Memvid → FAISS → no-RAG`, `Cartesia → text-only`, `Coinbase CDP → mock crypto payments`.
 3. **Thread-Safe Payments:** Payment state requires thread-safe, per-session locking with atomic updates. Flag any modifications to payment state that fail to acquire the session lock (see `src/utils/state_manager.py`).
