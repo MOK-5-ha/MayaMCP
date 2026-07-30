@@ -60,12 +60,12 @@ def get_phase_prompt(phase: str) -> str:
     """
     return PHASE_PROMPTS.get(phase, PHASE_PROMPTS['small_talk'])
 
-def get_combined_prompt(phase: str, menu_text: str = "") -> str:
+def get_combined_prompt(phase: str = "order_taking", menu_text: str = "") -> str:
     """
     Get combined phase and system prompt.
     
     Args:
-        phase: Conversation phase
+        phase: Conversation phase (defaults to 'order_taking')
         menu_text: Menu text to include
         
     Returns:

@@ -20,6 +20,7 @@ import google.auth
 from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
 
@@ -82,6 +83,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+from fastapi.middleware.cors import CORSMiddleware
+from src.routers import chat_router, payments_router, session_router
+
 app: FastAPI = get_fast_api_app(
     agents_dir=AGENT_DIR,
     web=True,
@@ -91,8 +95,27 @@ app: FastAPI = get_fast_api_app(
     otel_to_cloud=False,
     lifespan=lifespan,
 )
-app.title = "migrate-google-adk-agents"
-app.description = "API for interacting with the Agent migrate-google-adk-agents"
+app.title = "MayaMCP Backend API"
+app.description = "FastAPI backend for MayaMCP AI Bartender (REST, SSE, and ADK A2A)"
+
+# Add CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins or ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include v1 REST and SSE routers
+app.include_router(chat_router, prefix="/api/v1")
+app.include_router(payments_router, prefix="/api/v1")
+app.include_router(session_router, prefix="/api/v1")
+
+
+@app.get("/healthz")
+def healthz():
+    return PlainTextResponse("ok", media_type="text/plain")
 
 
 @app.post("/feedback")
@@ -107,6 +130,17 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """
     logger.log_struct(feedback.model_dump(), severity="INFO")
     return {"status": "success"}
+
+
+# Mount Gradio sub-app under /ui for backward compatibility / legacy interface access
+try:
+    from gradio.routes import mount_gradio_app
+    from src.ui.launcher import launch_bartender_interface
+    
+    gradio_blocks = launch_bartender_interface()
+    app = mount_gradio_app(app, gradio_blocks, path="/ui")
+except Exception as gradio_err:
+    logger.info(f"Gradio mounting skipped: {gradio_err}")
 
 
 # Main execution
