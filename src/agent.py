@@ -45,19 +45,19 @@ if os.getenv("INTEGRATION_TEST") == "TRUE":
                 return None
 
         class MockModelsAsync:
-            async def generate_content_stream(self, model, contents, config=None):
+            async def generate_content_stream(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 async def _stream():
                     yield MockResponse("This is a mock streaming response from Gemini.")
                 return _stream()
-            async def generate_content(self, model, contents, config=None):
+            async def generate_content(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 return MockResponse("This is a mock response from Gemini.")
 
         class MockModelsSync:
-            def generate_content(self, model, contents, config=None):
+            def generate_content(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 return MockResponse("This is a mock response from Gemini.")
-            def generate_content_stream(self, model, contents, config=None):
+            def generate_content_stream(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 yield MockResponse("This is a mock response from Gemini.")
-            def embed_content(self, model, contents, config=None):
+            def embed_content(self, model, contents, config=None):  # noqa: ARG002 - model kwarg required by ADK interface
                 if isinstance(contents, list):
                     return types.EmbedContentResponse(embeddings=[types.Embedding(values=[0.1]*768) for _ in contents])
                 return types.EmbedContentResponse(embeddings=[types.Embedding(values=[0.1]*768)])
@@ -69,7 +69,7 @@ if os.getenv("INTEGRATION_TEST") == "TRUE":
         # Override properties on Client class
         google.genai.Client.models = property(lambda self: MockModelsSync())
         google.genai.Client.aio = property(lambda self: MockAio())
-    except Exception:
+    except Exception:  # nosec B110 - intentional: best-effort mock injection must not crash agent startup
         pass
 
 from google.adk.agents import Agent
@@ -78,48 +78,17 @@ from google.adk.models import Gemini
 from google.genai import types
 
 
-def get_weather(query: str) -> str:
-    """Simulates a web search. Use it get information on weather.
+from .llm.prompts import get_combined_prompt
+from .llm.tools import get_all_tools
 
-    Args:
-        query: A string containing the location to get weather information for.
-
-    Returns:
-        A string with the simulated weather information for the queried location.
-    """
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        return "It's 60 degrees and foggy."
-    return "It's 90 degrees and sunny."
-
-
-def get_current_time(query: str) -> str:
-    """Simulates getting the current time for a city.
-
-    Args:
-        query: The name of the city to get the current time for.
-
-    Returns:
-        A string with the current time information.
-    """
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        tz_identifier = "America/Los_Angeles"
-    else:
-        return f"Sorry, I don't have timezone information for query: {query}."
-
-    tz = ZoneInfo(tz_identifier)
-    now = datetime.datetime.now(tz)
-    return f"The current time for query {query} is {now.strftime('%Y-%m-%d %H:%M:%S %Z%z')}"
-
-
-# TODO: Replace with Maya's bartending agent persona and tools if routing A2A requests directly here.
 root_agent = Agent(
     name="root_agent",
     model=Gemini(
         model="gemini-flash-latest",
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
-    instruction="You are a helpful AI assistant designed to provide accurate and useful information.",
-    tools=[get_weather, get_current_time],
+    instruction=get_combined_prompt(),
+    tools=get_all_tools(),
 )
 
 app = App(

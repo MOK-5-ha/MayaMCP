@@ -3,19 +3,19 @@
 import hashlib
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 # Registry: session_id -> {"llm": instance, "tts": instance, "gemini_hash": str, "cartesia_hash": str}
-_session_clients: Dict[str, Dict[str, Any]] = {}
+_session_clients: dict[str, dict[str, Any]] = {}
 _registry_lock = threading.Lock()
 
 # Per-session admission locks to prevent blocking the global registry
 # during memory-aware admission control (which may involve slow probes)
-_admission_locks: Dict[str, threading.Lock] = {}
+_admission_locks: dict[str, threading.Lock] = {}
 _admission_locks_lock = threading.Lock()
 
 # Import new session manager for memory-aware admission control
@@ -62,14 +62,14 @@ def _get_admission_lock(session_id: str) -> threading.Lock:
         return _admission_locks[session_id]
 
 
-def _remove_admission_locks(session_ids: List[str]) -> None:
+def _remove_admission_locks(session_ids: list[str]) -> None:
     """Remove per-session admission locks to prevent memory leaks."""
     with _admission_locks_lock:
         for session_id in session_ids:
             _admission_locks.pop(session_id, None)
 
 
-def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None):
+def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
     """Return a cached or newly created LLM instance for session.
 
     If API key has changed since last call, LLM is recreated.
@@ -172,7 +172,7 @@ def get_session_llm(session_id: str, api_key: str, tools: Optional[List] = None)
     return llm
 
 
-def get_session_tts(session_id: str, api_key: Optional[str] = None):
+def get_session_tts(session_id: str, api_key: str | None = None):
     """Return a cached or newly created Cartesia TTS client for the session.
 
     If ``api_key`` is ``None`` or empty, returns ``None`` (TTS disabled).
@@ -240,17 +240,17 @@ def get_session_tts(session_id: str, api_key: Optional[str] = None):
     return tts
 
 
-def cleanup_sessions(session_ids: List[str]) -> None:
+def cleanup_sessions(session_ids: list[str]) -> None:
     """Remove cached LLM and TTS clients for multiple sessions.
-    
+
     Attempts to close TTS clients for each session before discarding entries.
     Used by background cleanup processes to free resources.
-    
+
     Args:
         session_ids: List of session IDs to clean up.
     """
     # Collect entries under lock, then do I/O cleanup outside it.
-    evicted: List[tuple] = []
+    evicted: list[tuple] = []
     with _registry_lock:
         for session_id in session_ids:
             entry = _session_clients.pop(session_id, None)

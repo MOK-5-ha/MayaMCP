@@ -3,7 +3,7 @@ Configuration for Memvid integration
 Simplified from original memvid config
 """
 
-from typing import Any, Dict
+from typing import Any
 
 # QR Code settings (simplified)
 QR_VERSION = 10  # Smaller version for simpler setup
@@ -22,7 +22,7 @@ VIDEO_FPS = 15
 FRAME_HEIGHT = 256
 FRAME_WIDTH = 256
 
-def get_memvid_config() -> Dict[str, Any]:
+def get_memvid_config() -> dict[str, Any]:
     """Get Memvid configuration for Maya"""
     return {
         "qr": {

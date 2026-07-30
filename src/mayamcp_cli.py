@@ -126,7 +126,7 @@ def main():
             # Local/dev launch only; Modal serves via ASGI in deploy.py
             if os.getenv("PYTHON_ENV", "development").lower() != "production":
                 interface.queue().launch(
-                    server_name=os.getenv("HOST", "0.0.0.0"),
+                    server_name=os.getenv("HOST", "0.0.0.0"),  # nosec B104 - overridable via HOST env var; intentional for containerised deployment
                     server_port=int(os.getenv("PORT", "8000")),
                     debug=os.getenv("DEBUG", "False").lower() == "true",
                 )

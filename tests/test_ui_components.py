@@ -71,7 +71,7 @@ class TestSetupAvatar:
         result = setup_avatar(avatar_url=custom_url, save_path=custom_save_path)
 
         # Verify HTTP request was made to custom URL
-        mock_requests_get.assert_called_once_with(custom_url)
+        mock_requests_get.assert_called_once_with(custom_url, timeout=10)
 
         # Verify image was saved to custom path
         mock_image.save.assert_called_once_with(custom_save_path)

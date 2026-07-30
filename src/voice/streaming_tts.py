@@ -3,7 +3,7 @@
 import queue
 import threading
 import time
-from typing import Callable, Generator, Optional
+from collections.abc import Callable, Generator
 
 from ..config.logging_config import get_logger
 from .tts import get_voice_audio
@@ -14,23 +14,23 @@ logger = get_logger(__name__)
 def generate_streaming_audio(
     sentence_generator: Generator[str, None, None],
     cartesia_client,
-    voice_id: Optional[str] = None,
-    on_audio_ready: Optional[Callable[[bytes], None]] = None,
+    voice_id: str | None = None,
+    on_audio_ready: Callable[[bytes], None] | None = None,
     heartbeat_interval_seconds: float = 1.0
 ) -> Generator[dict, None, None]:
     """
     Generate streaming audio from sentence generator.
-    
+
     Args:
         sentence_generator: Generator yielding complete sentences
         cartesia_client: Initialized Cartesia client
         voice_id: Voice ID to use
-        on_audio_ready: Optional callback for when audio chunks are ready. 
+        on_audio_ready: Optional callback for when audio chunks are ready.
                         NOTE: This callback is invoked from a background worker thread and must be thread-safe.
                         Callers should marshal to the main/UI thread for GUI updates and use thread-safe
                         mechanisms for shared state.
         heartbeat_interval_seconds: Interval between heartbeat messages (default: 1.0s)
-        
+
     Yields:
         Dict with audio generation status and data
     """
@@ -160,16 +160,16 @@ class QueueIterator:
 def create_pipelined_tts_generator(
     sentence_stream: Generator[dict, None, None],
     cartesia_client,
-    voice_id: Optional[str] = None
+    voice_id: str | None = None
 ) -> Generator[dict, None, None]:
     """
     Create a generator that handles both text streaming and TTS pipelining.
-    
+
     Args:
         sentence_stream: Generator yielding sentence events from LLM
         cartesia_client: Initialized Cartesia client
         voice_id: Voice ID to use
-        
+
     Yields:
         Dict with combined streaming and TTS events
     """

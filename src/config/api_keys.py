@@ -1,14 +1,14 @@
 """API key management for MayaMCP."""
 
 import os
-from typing import Dict, Optional
 
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
-def get_gcp_project() -> Optional[str]:
+
+def get_gcp_project() -> str | None:
     """Retrieve GCP Project ID for Vertex AI mode."""
     project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
     return project.strip() if project and project.strip() else None
@@ -25,10 +25,10 @@ def is_vertex_ai_mode() -> bool:
     return get_gcp_project() is not None
 
 
-def get_api_keys() -> Dict[str, Optional[str]]:
+def get_api_keys() -> dict[str, str | None]:
     """
     Retrieve API keys and GCP project configuration from environment variables.
-    
+
     Returns:
         Dictionary containing API keys or GCP project settings.
     """
@@ -45,7 +45,8 @@ def get_api_keys() -> Dict[str, Optional[str]]:
     }
 
 
-def get_google_api_key() -> Optional[str]:
+def get_google_api_key() -> str | None:
     """Get Google API key specifically."""
     return get_api_keys()["google_api_key"]
+
 

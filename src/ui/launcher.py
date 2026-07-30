@@ -1,6 +1,6 @@
 """Gradio interface launcher."""
 
-from typing import Callable, Dict, List, MutableMapping, Optional
+from collections.abc import Callable, MutableMapping
 
 import gradio as gr
 
@@ -23,12 +23,12 @@ def create_avatar_with_overlay(
     balance: float = 1000.0,
     prev_tab: float = 0.0,
     prev_balance: float = 1000.0,
-    tip_percentage: Optional[int] = None,
+    tip_percentage: int | None = None,
     tip_amount: float = 0.0
 ) -> str:
     """
     Create avatar image with tab overlay component.
-    
+
     Args:
         avatar_path: Path to the avatar image
         tab_amount: Current tab total
@@ -37,10 +37,10 @@ def create_avatar_with_overlay(
         prev_balance: Previous balance (for animation)
         tip_percentage: Currently selected tip percentage (10, 15, 20) or None
         tip_amount: Current tip amount
-        
+
     Returns:
         HTML string with avatar and overlay
-        
+
     Requirements: 2.1, 7.2, 7.3
     """
     return create_tab_overlay_html(
@@ -56,9 +56,9 @@ def create_avatar_with_overlay(
 def launch_bartender_interface(
     handle_input_fn: Callable,
     clear_state_fn: Callable,
-    handle_key_submission_fn: Optional[Callable] = None,
-    handle_streaming_input_fn: Optional[Callable] = None,
-    avatar_path: Optional[str] = None
+    handle_key_submission_fn: Callable | None = None,
+    handle_streaming_input_fn: Callable | None = None,
+    avatar_path: str | None = None
 ) -> gr.Blocks:
     """
     Create the Gradio interface for Maya the bartender and return it.
@@ -216,11 +216,11 @@ def launch_bartender_interface(
         ]
 
         def handle_input_wrapper(
-            user_input: str, history: List[Dict[str, str]],
-            tab: float, balance: float, tip_pct: Optional[int], tip_amt: float,
+            user_input: str, history: list[dict[str, str]],
+            tab: float, balance: float, tip_pct: int | None, tip_amt: float,
             avatar: str, streaming_enabled: bool, request: gr.Request,
-            tools=None, rag_retriever=None, rag_api_key: Optional[str] = None,
-            app_state: Optional[MutableMapping] = None
+            tools=None, rag_retriever=None, rag_api_key: str | None = None,
+            app_state: MutableMapping | None = None
         ):
             """Wrapper that chooses streaming or traditional handler based on toggle."""
             if handle_streaming_input_fn:
@@ -296,10 +296,10 @@ def launch_bartender_interface(
         # --- Tip Button Click Handler ---
         def handle_tip_click_wrapper(
             tip_percentage_str: str,
-            current_tip_pct: Optional[int],
+            current_tip_pct: int | None,
             current_tab: float,
             current_balance: float,
-            history: List[Dict[str, str]],
+            history: list[dict[str, str]],
             current_avatar: str,
             request: gr.Request
         ):
@@ -321,7 +321,7 @@ def launch_bartender_interface(
                 )
 
             try:
-                percentage = int(tip_percentage_str.strip())
+                _percentage = int(tip_percentage_str.strip())  # parse to validate; ValueError triggers fallback
             except ValueError:
                 logger.warning(f"Invalid tip percentage: {tip_percentage_str}")
                 overlay_html = create_avatar_with_overlay(
