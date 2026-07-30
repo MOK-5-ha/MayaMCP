@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.config.api_keys import get_api_keys, get_gcp_location, get_gcp_project, is_vertex_ai_mode
+from src.config.api_keys import get_gcp_location, get_gcp_project, is_vertex_ai_mode
 from src.llm.client import _CLIENT_LOCK, get_genai_client
 
 
@@ -16,11 +16,13 @@ def reset_genai_client_singleton():
 
     with _CLIENT_LOCK:
         client_module._genai_client = None
-        client_module._genai_client_key = None
+        client_module._genai_client_project = None
+        client_module._genai_client_location = None
     yield
     with _CLIENT_LOCK:
         client_module._genai_client = None
-        client_module._genai_client_key = None
+        client_module._genai_client_project = None
+        client_module._genai_client_location = None
 
 
 def test_api_keys_gcp_project_resolution():
@@ -39,8 +41,8 @@ def test_api_keys_gcp_project_resolution():
         assert get_gcp_location() == "us-central1"
 
     with patch.dict(os.environ, {}, clear=True):
-        assert get_gcp_project() is None
-        assert is_vertex_ai_mode() is False
+        with pytest.raises(ValueError, match="GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured"):
+            get_gcp_project()
 
 
 def test_get_genai_client_vertex_ai_mode():
@@ -59,21 +61,9 @@ def test_get_genai_client_vertex_ai_mode():
             assert mock_client_cls.call_count == 1
 
 
-def test_get_genai_client_key_fallback():
-    """Test that get_genai_client falls back to AI Studio API key mode when GCP_PROJECT is unset."""
-    env = {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": "", "GEMINI_API_KEY": "AIzaSyDummyKey123"}
-    mock_client_instance = MagicMock()
-    with patch.dict(os.environ, env):
-        with patch("src.llm.client.genai.Client", return_value=mock_client_instance) as mock_client_cls:
-            client = get_genai_client()
-            mock_client_cls.assert_called_once_with(api_key="AIzaSyDummyKey123")
-            assert client is mock_client_instance
-
-
 def test_get_genai_client_error_when_no_credentials():
-    """Test that get_genai_client raises ValueError when neither GCP project nor API key is set."""
+    """Test that get_genai_client raises ValueError when neither GCP_PROJECT nor GOOGLE_CLOUD_PROJECT is set."""
     env = {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": "", "GEMINI_API_KEY": ""}
     with patch.dict(os.environ, env, clear=True):
-        with pytest.raises(ValueError, match="GCP Vertex AI configuration error"):
+        with pytest.raises(ValueError, match="GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured"):
             get_genai_client()
-

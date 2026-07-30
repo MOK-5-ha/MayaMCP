@@ -1,87 +1,98 @@
-"""Lightweight API key validation for BYOK authentication."""
+"""Validation for GCP Vertex AI Mode configuration."""
+
+import os
+from typing import Optional, Tuple
 
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Reuse SDK error classes from client.py
 try:
     from google import genai
 except ImportError:
     genai = None
 
-# Timeout in seconds for the validation request.
 _VALIDATION_TIMEOUT_S = 10
 
 
-def validate_gemini_key(api_key: str) -> tuple[bool, str]:
-    """Validate a Gemini API key with a lightweight API call.
+def validate_gemini_key(
+    api_key: Optional[str] = None,
+    gcp_project: Optional[str] = None,
+    gcp_location: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Validate GCP Vertex AI configuration with Application Default Credentials.
 
-    Makes a ``models.list()`` request (page_size=1) which consumes no
-    tokens and fetches only the first model entry to minimise latency.
+    Google AI Studio Key Mode has been permanently removed; this function validates
+    the GCP Project ID and Vertex AI connectivity.
 
     Args:
-        api_key: The Gemini API key to validate.
+        api_key: Optional deprecated parameter.
+        gcp_project: Optional explicit GCP Project ID.
+        gcp_location: Optional GCP Location.
 
     Returns:
         ``(True, "")`` on success, or ``(False, error_message)`` on failure.
     """
-    if not api_key or not api_key.strip():
-        return False, "Please enter a Gemini API key."
+    project = (
+        gcp_project or os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or ""
+    ).strip()
+    if not project:
+        return (
+            False,
+            "GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured. "
+            "Google AI Studio Key Mode has been permanently removed; this project "
+            "exclusively uses GCP Vertex AI Mode (Paid Tier). Please set GCP_PROJECT in your .env file.",
+        )
 
-    api_key = api_key.strip()
+    location = (
+        gcp_location or os.getenv("GCP_LOCATION") or "global"
+    ).strip() or "global"
 
     if genai is None:
-        logger.error("google-genai SDK not installed; cannot validate key")
+        logger.error("google-genai SDK not installed; cannot validate GCP Vertex AI mode")
         return False, "Server configuration error. Please try again later."
 
     try:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GEMINI_TIER"] = "paid"
         client = genai.Client(
-            api_key=api_key,
+            vertexai=True,
+            project=project,
+            location=location,
             http_options={"timeout": _VALIDATION_TIMEOUT_S},
         )
-        # Fetch only the first model entry — cheapest possible call,
-        # no tokens consumed, proves the key is valid.
         next(iter(client.models.list(config={"page_size": 1})), None)
-        logger.info("Gemini API key validated successfully")
+        logger.info("GCP Vertex AI Mode validated successfully for project %s", project)
         return True, ""
     except Exception as e:
         msg = str(e).lower()
         code = getattr(e, "status_code", None)
         error_code = getattr(e, "error_code", None)
 
-        # Rate limit / quota exceeded
-        if code == 429 or error_code == 429 or "429" in msg or "rate" in msg or "quota" in msg:
-            logger.warning(f"Gemini key validation hit rate limit: {e}")
+        if code == 429 or error_code == 429 or "429" in msg or "quota" in msg:
+            logger.warning(f"GCP Vertex AI key validation hit rate limit: {e}")
             return (
                 False,
-                "This API key has exceeded its rate limit. "
-                "Please wait a moment and try again, or enable billing in Google AI Studio.",
+                "GCP Vertex AI quota limit encountered. Please verify quota limits in GCP Console.",
             )
 
-        # Authentication / permission errors
         if (
             code in (401, 403)
             or error_code in (401, 403)
-            or "401" in msg
-            or "403" in msg
-            or "invalid" in msg
-            or "auth" in msg
             or "permission" in msg
             or "unauthenticated" in msg
+            or "credentials" in msg
         ):
-            logger.warning(f"Gemini key validation auth failure: {e}")
+            logger.warning(f"GCP Vertex AI validation auth failure: {e}")
             return (
                 False,
-                "Invalid API key. Please verify your key from Google AI Studio "
-                "(https://aistudio.google.com/app/apikey).",
+                "Application Default Credentials (ADC) or GCP permissions invalid for project "
+                f"'{project}'. Run 'gcloud auth application-default login' or verify project access.",
             )
 
-        # Network / timeout errors
         if "timeout" in msg or "connect" in msg or "network" in msg:
-            logger.warning(f"Gemini key validation network error: {e}")
+            logger.warning(f"GCP Vertex AI validation network error: {e}")
             return False, "Connection error. Please check your internet and try again."
 
-        # Unknown error
-        logger.error(f"Gemini key validation unexpected error: {e}")
-        return False, "Validation failed. Please try again or contact support."
+        logger.error(f"GCP Vertex AI validation unexpected error: {e}")
+        return False, f"Vertex AI validation failed for project '{project}': {e}"

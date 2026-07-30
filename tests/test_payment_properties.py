@@ -6,21 +6,19 @@ Each test is annotated with the property it validates from the design.
 """
 
 import pytest
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
 
 from src.utils.state_manager import (
+    DEFAULT_PAYMENT_STATE,
+    INSUFFICIENT_FUNDS,
     atomic_order_update,
     atomic_payment_complete,
+    get_current_order_state,
     get_payment_state,
     initialize_state,
-    get_current_order_state,
     update_order_state,
-    update_payment_state,
-    INSUFFICIENT_FUNDS,
-    CONCURRENT_MODIFICATION,
-    DEFAULT_PAYMENT_STATE,
 )
-
 
 # =============================================================================
 # Test Configuration
@@ -80,24 +78,24 @@ class TestBalanceDeductionConsistency:
         """
         # Precondition: price must be <= balance
         assume(price <= initial_balance)
-        
+
         # Setup: Create fresh session with specific balance
         store = {}
         session_id = "test_balance_deduction"
         initialize_state(session_id, store)
-        
+
         # Set initial balance
         store[session_id]['payment']['balance'] = initial_balance
         store[session_id]['payment']['tab_total'] = 0.0
         store[session_id]['payment']['version'] = 0
-        
+
         # Act: Perform order update
         success, error, new_balance = atomic_order_update(session_id, store, price)
-        
+
         # Assert: Order should succeed and balance should be exactly B - P
         assert success, f"Order should succeed: {error}"
         assert error == "", f"No error expected, got: {error}"
-        
+
         expected_balance = initial_balance - price
         assert abs(new_balance - expected_balance) < 0.001, (
             f"Balance deduction incorrect: "
@@ -111,14 +109,14 @@ class TestBalanceDeductionConsistency:
         store = {}
         session_id = "test_exact_balance"
         initialize_state(session_id, store)
-        
+
         store[session_id]['payment']['balance'] = initial_balance
-        
+
         # Use exact balance as price
         success, error, new_balance = atomic_order_update(
             session_id, store, initial_balance
         )
-        
+
         assert success, f"Exact balance order should succeed: {error}"
         assert abs(new_balance - 0.0) < 0.001, (
             f"Balance should be 0 after exact deduction, got {new_balance}"
@@ -129,14 +127,14 @@ class TestBalanceDeductionConsistency:
         store = {}
         session_id = "test_min_price"
         initialize_state(session_id, store)
-        
+
         initial_balance = 1000.00
         min_price = 0.01
-        
+
         success, error, new_balance = atomic_order_update(
             session_id, store, min_price
         )
-        
+
         assert success
         assert abs(new_balance - (initial_balance - min_price)) < 0.001
 
@@ -145,13 +143,13 @@ class TestBalanceDeductionConsistency:
         store = {}
         session_id = "test_large_amount"
         initialize_state(session_id, store)
-        
+
         large_price = 999.99
-        
+
         success, error, new_balance = atomic_order_update(
             session_id, store, large_price
         )
-        
+
         assert success
         expected = DEFAULT_PAYMENT_STATE['balance'] - large_price
         assert abs(new_balance - expected) < 0.001
@@ -183,32 +181,32 @@ class TestInsufficientFundsRejection:
         """
         # Price is balance + offset, ensuring P > B
         price = balance + price_offset
-        
+
         # Setup
         store = {}
         session_id = "test_insufficient"
         initialize_state(session_id, store)
-        
+
         store[session_id]['payment']['balance'] = balance
         initial_balance = balance
-        
+
         # Act
         success, error, returned_balance = atomic_order_update(
             session_id, store, price
         )
-        
+
         # Assert: Order should be rejected
         assert success is False, "Order should be rejected for insufficient funds"
         assert error == INSUFFICIENT_FUNDS, (
             f"Expected INSUFFICIENT_FUNDS, got: {error}"
         )
-        
+
         # Assert: Balance unchanged
         assert abs(returned_balance - initial_balance) < 0.001, (
             f"Balance should be unchanged: expected {initial_balance}, "
             f"got {returned_balance}"
         )
-        
+
         # Verify state is actually unchanged
         payment = get_payment_state(session_id, store)
         assert abs(payment['balance'] - initial_balance) < 0.001
@@ -218,11 +216,11 @@ class TestInsufficientFundsRejection:
         store = {}
         session_id = "test_zero_balance"
         initialize_state(session_id, store)
-        
+
         store[session_id]['payment']['balance'] = 0.0
-        
+
         success, error, balance = atomic_order_update(session_id, store, 0.01)
-        
+
         assert success is False
         assert error == INSUFFICIENT_FUNDS
         assert abs(balance - 0.0) < 0.001
@@ -232,15 +230,15 @@ class TestInsufficientFundsRejection:
         store = {}
         session_id = "test_barely_over"
         initialize_state(session_id, store)
-        
+
         balance = 100.00
         store[session_id]['payment']['balance'] = balance
         price = balance + 0.01
-        
+
         success, error, returned_balance = atomic_order_update(
             session_id, store, price
         )
-        
+
         assert success is False
         assert error == INSUFFICIENT_FUNDS
         assert abs(returned_balance - balance) < 0.001
@@ -250,14 +248,14 @@ class TestInsufficientFundsRejection:
         store = {}
         session_id = "test_large_price"
         initialize_state(session_id, store)
-        
+
         # Default balance is 1000
         very_large_price = 999999.99
-        
+
         success, error, balance = atomic_order_update(
             session_id, store, very_large_price
         )
-        
+
         assert success is False
         assert error == INSUFFICIENT_FUNDS
 
@@ -295,33 +293,33 @@ class TestStatePreservationOnRejection:
         store = {}
         session_id = f"test_preservation_{test_id}"
         initialize_state(session_id, store)
-        
+
         # Add existing order items
         for item in order_items:
             update_order_state(session_id, store, "add_item", item)
-        
+
         # Set remaining balance
         store[session_id]['payment']['balance'] = remaining_balance
-        
+
         # Capture state before rejection - make deep copy of order items
         order_before = [item.copy() for item in get_current_order_state(session_id, store)]
         payment_before = get_payment_state(session_id, store)
-        
+
         # Attempt order with price > remaining balance
         price = remaining_balance + price_offset
         success, error, _ = atomic_order_update(session_id, store, price)
-        
+
         # Assert rejection
         assert success is False
         assert error == INSUFFICIENT_FUNDS
-        
+
         # Assert order state unchanged
         order_after = get_current_order_state(session_id, store)
         assert order_after == order_before, (
             f"Order state changed after rejection: "
             f"before={order_before}, after={order_after}"
         )
-        
+
         # Assert payment state unchanged (except possibly version read)
         payment_after = get_payment_state(session_id, store)
         assert abs(payment_after['balance'] - payment_before['balance']) < 0.001
@@ -333,13 +331,13 @@ class TestStatePreservationOnRejection:
         store = {}
         session_id = f"test_empty_order_{uuid.uuid4()}"
         initialize_state(session_id, store)
-        
+
         store[session_id]['payment']['balance'] = 10.00
-        
+
         order_before = get_current_order_state(session_id, store).copy()
-        
+
         success, _, _ = atomic_order_update(session_id, store, 100.00)
-        
+
         assert success is False
         order_after = get_current_order_state(session_id, store)
         assert order_after == order_before == []
@@ -350,16 +348,16 @@ class TestStatePreservationOnRejection:
         store = {}
         session_id = f"test_single_item_{uuid.uuid4()}"
         initialize_state(session_id, store)
-        
+
         item = {'name': 'Beer', 'price': 5.00, 'category': 'beer'}
         update_order_state(session_id, store, "add_item", item)
-        
+
         store[session_id]['payment']['balance'] = 10.00
-        
+
         order_before = get_current_order_state(session_id, store).copy()
-        
+
         success, _, _ = atomic_order_update(session_id, store, 100.00)
-        
+
         assert success is False
         order_after = get_current_order_state(session_id, store)
         assert order_after == order_before
@@ -606,7 +604,12 @@ class TestPaymentCompletionStateReset:
 
 
 # Import for balance color tests
-from src.ui.tab_overlay import get_balance_color, COLOR_NORMAL, COLOR_LOW_FUNDS, COLOR_DEPLETED
+from src.ui.tab_overlay import (
+    COLOR_DEPLETED,
+    COLOR_LOW_FUNDS,
+    COLOR_NORMAL,
+    get_balance_color,
+)
 
 
 class TestBalanceColorSelection:
@@ -687,8 +690,9 @@ class TestBalanceColorSelection:
 
 
 # Import for animation queue tests
-from src.ui.tab_overlay import AnimationQueue, TabUpdate
 import time
+
+from src.ui.tab_overlay import AnimationQueue, TabUpdate
 
 
 class TestAnimationQueueLengthConsistency:
@@ -724,24 +728,24 @@ class TestAnimationQueueLengthConsistency:
         to prevent collapse behavior, testing the basic queue length property.
         """
         queue = AnimationQueue()
-        
+
         # Add updates with simulated time gaps > 100ms to prevent collapse
         running_tab = 0.0
         for i, amount in enumerate(updates):
             prev_tab = running_tab
             running_tab += amount
-            
+
             update = TabUpdate(
                 start_tab=prev_tab,
                 end_tab=running_tab,
                 start_balance=1000.0 - prev_tab,
                 end_balance=1000.0 - running_tab
             )
-            
+
             # Simulate time passing to prevent collapse (>100ms between updates)
             queue._last_enqueue_time = 0  # Reset to ensure no collapse
             queue.enqueue(update)
-        
+
         # Assert: queue length equals number of updates (capped at MAX_DEPTH)
         expected_length = min(len(updates), AnimationQueue.MAX_DEPTH)
         assert queue.get_queue_length() == expected_length, (
@@ -751,7 +755,7 @@ class TestAnimationQueueLengthConsistency:
     def test_single_update_queue_length(self):
         """Edge case: single update"""
         queue = AnimationQueue()
-        
+
         update = TabUpdate(
             start_tab=0.0,
             end_tab=10.0,
@@ -759,17 +763,17 @@ class TestAnimationQueueLengthConsistency:
             end_balance=990.0
         )
         queue.enqueue(update)
-        
+
         assert queue.get_queue_length() == 1
 
     def test_rapid_consecutive_updates_collapse(self):
         """Edge case: rapid consecutive updates should collapse"""
         queue = AnimationQueue()
-        
+
         # Simulate rapid updates within 100ms window
         # These should collapse into a single animation
         base_time = time.time() * 1000
-        
+
         # First update
         queue._last_enqueue_time = base_time
         queue.enqueue(TabUpdate(
@@ -778,7 +782,7 @@ class TestAnimationQueueLengthConsistency:
             start_balance=1000.0,
             end_balance=990.0
         ))
-        
+
         # Second update within 100ms - should collapse
         queue._last_enqueue_time = base_time + 50  # 50ms later
         queue.enqueue(TabUpdate(
@@ -787,10 +791,10 @@ class TestAnimationQueueLengthConsistency:
             start_balance=990.0,
             end_balance=975.0
         ))
-        
+
         # Should have collapsed to 1 item
         assert queue.get_queue_length() == 1
-        
+
         # The collapsed item should have start from first, end from last
         item = queue._queue[0]
         assert item.start_tab == 0.0
@@ -799,7 +803,7 @@ class TestAnimationQueueLengthConsistency:
     def test_updates_with_same_amount(self):
         """Edge case: updates with same amount"""
         queue = AnimationQueue()
-        
+
         for i in range(5):
             queue._last_enqueue_time = 0  # Reset to prevent collapse
             queue.enqueue(TabUpdate(
@@ -808,13 +812,13 @@ class TestAnimationQueueLengthConsistency:
                 start_balance=1000.0 - i * 10.0,
                 end_balance=1000.0 - (i + 1) * 10.0
             ))
-        
+
         assert queue.get_queue_length() == 5
 
     def test_queue_max_depth_enforcement(self):
         """Test that queue respects MAX_DEPTH limit"""
         queue = AnimationQueue()
-        
+
         # Add more than MAX_DEPTH updates
         for i in range(10):
             queue._last_enqueue_time = 0  # Reset to prevent collapse
@@ -824,14 +828,14 @@ class TestAnimationQueueLengthConsistency:
                 start_balance=1000.0,
                 end_balance=990.0
             ))
-        
+
         # Queue should be capped at MAX_DEPTH
         assert queue.get_queue_length() == AnimationQueue.MAX_DEPTH
 
     def test_process_next_reduces_queue_length(self):
         """Test that processing reduces queue length"""
         queue = AnimationQueue()
-        
+
         for i in range(3):
             queue._last_enqueue_time = 0
             queue.enqueue(TabUpdate(
@@ -840,13 +844,13 @@ class TestAnimationQueueLengthConsistency:
                 start_balance=1000.0,
                 end_balance=990.0
             ))
-        
+
         assert queue.get_queue_length() == 3
-        
+
         # Process one
         queue.process_next()
         assert queue.get_queue_length() == 2
-        
+
         # Process another
         queue.process_next()
         assert queue.get_queue_length() == 1
@@ -854,7 +858,7 @@ class TestAnimationQueueLengthConsistency:
     def test_cancel_all_clears_queue(self):
         """Test that cancel_all clears the queue"""
         queue = AnimationQueue()
-        
+
         for i in range(3):
             queue._last_enqueue_time = 0
             queue.enqueue(TabUpdate(
@@ -863,9 +867,9 @@ class TestAnimationQueueLengthConsistency:
                 start_balance=1000.0,
                 end_balance=990.0
             ))
-        
+
         assert queue.get_queue_length() == 3
-        
+
         queue.cancel_all()
         assert queue.get_queue_length() == 0
 
@@ -876,9 +880,8 @@ class TestAnimationQueueLengthConsistency:
 
 from src.utils.state_manager import (
     calculate_tip,
-    set_tip,
     get_payment_total,
-    VALID_TIP_PERCENTAGES,
+    set_tip,
 )
 
 
@@ -981,7 +984,7 @@ class TestTipToggleBehavior:
 
         # First: Set tip with percentage P
         tip_amount, total = set_tip(session_id, store, percentage)
-        
+
         # Verify tip was set
         payment = get_payment_state(session_id, store)
         assert payment['tip_percentage'] == percentage
@@ -1029,7 +1032,7 @@ class TestTipToggleBehavior:
 
         set_tip(session_id, store, 15)
         set_tip(session_id, store, 15)
-        
+
         payment = get_payment_state(session_id, store)
         assert payment['tip_percentage'] is None
         assert payment['tip_amount'] == 0.0
@@ -1043,7 +1046,7 @@ class TestTipToggleBehavior:
 
         set_tip(session_id, store, 20)
         set_tip(session_id, store, 20)
-        
+
         payment = get_payment_state(session_id, store)
         assert payment['tip_percentage'] is None
         assert payment['tip_amount'] == 0.0
@@ -1110,9 +1113,9 @@ class TestTotalCalculationWithTip:
         initialize_state(session_id, store)
 
         store[session_id]['payment']['tab_total'] = 100.00
-        
+
         tip_amount, total = set_tip(session_id, store, 15)
-        
+
         assert tip_amount == 15.00
         assert total == 115.00
         assert get_payment_total(session_id, store) == 115.00
@@ -1164,7 +1167,7 @@ class TestTipReplacementOnNewSelection:
         # Assert: Tip is completely replaced with P2 calculation
         expected_tip = round(tab_total * (p2 / 100), 2)
         payment_after_p2 = get_payment_state(session_id, store)
-        
+
         assert payment_after_p2['tip_percentage'] == p2, (
             f"tip_percentage should be {p2}, got {payment_after_p2['tip_percentage']}"
         )
@@ -1251,7 +1254,7 @@ class TestTipResetOnPaymentCompletion:
 
         # Assert: Payment succeeded and tip is reset
         assert success, "Payment completion should succeed"
-        
+
         payment_after = get_payment_state(session_id, store)
         assert payment_after['tip_percentage'] is None, (
             f"tip_percentage should be None after payment, got {payment_after['tip_percentage']}"
@@ -1312,12 +1315,11 @@ class TestTipResetOnPaymentCompletion:
 # =============================================================================
 
 from src.ui.tab_overlay import (
+    TIP_BUTTON_HIGHLIGHT_COLOR,
+    TIP_PERCENTAGES,
+    create_tip_buttons_html,
     generate_tip_notification,
     generate_tip_removal_notification,
-    create_tip_buttons_html,
-    TIP_BUTTON_HIGHLIGHT_COLOR,
-    TIP_BUTTON_DEFAULT_BG,
-    TIP_PERCENTAGES,
 )
 
 
@@ -1444,52 +1446,52 @@ class TestTipButtonVisualState:
     def test_10_percent_selected(self):
         """Test visual state when 10% is selected"""
         html = create_tip_buttons_html(100.00, 10)
-        
+
         # 10% button should have highlight color
         assert TIP_BUTTON_HIGHLIGHT_COLOR in html
-        
+
         # Count occurrences - should be 2 (background + border for one button)
         assert html.count(TIP_BUTTON_HIGHLIGHT_COLOR) == 2
 
     def test_15_percent_selected(self):
         """Test visual state when 15% is selected"""
         html = create_tip_buttons_html(100.00, 15)
-        
+
         assert TIP_BUTTON_HIGHLIGHT_COLOR in html
         assert html.count(TIP_BUTTON_HIGHLIGHT_COLOR) == 2
 
     def test_20_percent_selected(self):
         """Test visual state when 20% is selected"""
         html = create_tip_buttons_html(100.00, 20)
-        
+
         assert TIP_BUTTON_HIGHLIGHT_COLOR in html
         assert html.count(TIP_BUTTON_HIGHLIGHT_COLOR) == 2
 
     def test_no_selection(self):
         """Test visual state when no tip is selected"""
         html = create_tip_buttons_html(100.00, None)
-        
+
         # No buttons should have highlight color
         assert TIP_BUTTON_HIGHLIGHT_COLOR not in html
 
     def test_buttons_disabled_when_tab_zero(self):
         """Test that buttons are disabled when tab is $0"""
         html = create_tip_buttons_html(0.00, None)
-        
+
         # Buttons should be hidden (display: none)
         assert 'display: none' in html
 
     def test_buttons_enabled_when_tab_nonzero(self):
         """Test that buttons are enabled when tab is non-zero"""
         html = create_tip_buttons_html(50.00, None)
-        
+
         # Buttons should be visible (display: flex)
         assert 'display: flex' in html
 
     def test_all_three_buttons_present(self):
         """Test that all three tip buttons are present"""
         html = create_tip_buttons_html(100.00, None)
-        
+
         for percentage in TIP_PERCENTAGES:
             assert f'{percentage}%' in html, (
                 f"Button for {percentage}% should be present"

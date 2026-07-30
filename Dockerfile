@@ -40,6 +40,6 @@ EXPOSE 8080
 
 # DS-0026: Health check against the FastAPI liveness endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')" || exit 1
 
 CMD ["uv", "run", "uvicorn", "src.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]

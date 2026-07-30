@@ -43,7 +43,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 - **FastAPI 0.141.1 & Decoupled Gradio UI**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, exposing root `/` for native REST (`/api/v1/*`) and Agent-to-Agent (`/a2a/*`) interfaces.
 - **Google ADK 2.0 Integration**: Completely migrated the conversational orchestrator to Google's Agent Development Kit (ADK) using `google-adk`. Replaced legacy `langchain` and native `google-genai` wrappers with ADK's `Agent`, `Runner`, and `Gemini` models.
-- **Unified GenAI Client**: Centralized API key and session registry management using ADK's lazy-loading patterns to support Bring Your Own Key (BYOK) dynamic initialization.
+- **Unified GenAI Client & 100% GCP Vertex AI Mode**: Centralized provider authentication and session registry management using GCP Vertex AI mode (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`), removing Google AI Studio API key dependencies.
 - **Distributed State Management**: Thread-safe per-session synchronization (`RLock`) supporting Modal's distributed `modal.Dict` sharing across multi-container deployments (`max_containers > 1`).
 
 ### REST & SSE API Endpoints (`/api/v1`)
@@ -64,7 +64,7 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 
 ### Model Information
 
-- Default model: Google Gemini 3 Flash (model id: `gemini-3.0-flash`)
+- Default model: Google Gemini 3 Flash Lite (model id: `gemini-3.1-flash-lite`)
 - You can override the model via `GEMINI_MODEL_VERSION` in your `.env`
 
 ## Security
@@ -97,18 +97,15 @@ git clone <repository-url>
 cd MayaMCP
 ```
 
-1. Create `.env` file with your environment configuration:
+2. Create `.env` file with your GCP Vertex AI configuration:
 
 ```bash
-# Option A: GCP Vertex AI Mode (Recommended for high-throughput 300+ RPM paid tier)
+# GCP Vertex AI Configuration (Exclusively uses GCP billing credits)
 GCP_PROJECT=your_gcp_project_id_here
 GCP_LOCATION=global
 GEMINI_TIER=paid
 
-# Option B: Google AI Studio Mode (API Key)
-GEMINI_API_KEY=your_google_api_key_here
-
-# Provider Keys & Evals
+# Third-Party Service Keys
 CARTESIA_API_KEY=your_cartesia_api_key_here
 WANDB_API_KEY=your_wandb_api_key_here  # Optional: For Weights & Biases Weave evaluations
 
@@ -122,7 +119,7 @@ PYTHON_ENV=development
 DEBUG=True
 ```
 
-1. Install and run Maya (recommended):
+3. Install and run Maya (recommended):
 
 ```bash
 python3 -m venv .venv
@@ -148,21 +145,26 @@ Note: `pip install -e .` installs dependencies from `requirements.txt` and sets 
 ### Verifying Environment & High-Throughput Quota
 
 ```bash
-# 1. Verify your environment setup (Vertex AI vs AI Studio)
+# 1. Verify your environment setup (GCP Vertex AI Mode)
 python verify_environment.py
 
-# 2. Test high-throughput quota burst performance (25 parallel requests)
-python scripts/verify_burst_throughput.py
+# 2. Test high-throughput quota burst performance (20 parallel requests)
+python burst_test.py 20
 ```
 
 Note: `pip install -r requirements.txt` installs the Agent Development Kit (`google-adk`) and the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project has been fully migrated to ADK 2.0 and does not use LangChain.
-## API Keys Required
 
-### Google Gemini API
+## API Keys & Credentials Required
 
-1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Create an API key
-3. Add to `.env` as `GEMINI_API_KEY`
+### GCP Vertex AI (Google Cloud Platform)
+
+1. Set up a GCP Project with billing enabled.
+2. Ensure Vertex AI API is enabled.
+3. Authenticate locally with Application Default Credentials:
+   ```bash
+   gcloud auth application-default login
+   ```
+4. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
 
 ### Cartesia TTS API
 
@@ -317,9 +319,6 @@ This project includes comprehensive tests for all major components. Tests are or
 
 Prerequisites: Python 3.12+ and pip installed; activate your virtual environment if using one.
 
-#### Option 3: Using PYTHONPATH (Alternative)
-
-
 ### Test Organization
 
 - **Unit Tests**: Test individual functions and classes in isolation (using `DummyLLM` and ADK test doubles instead of legacy `MagicMock`).
@@ -340,44 +339,16 @@ The project uses `pytest.ini` for test configuration with the following features
 - Colorized output for better readability
 - Warning suppression for cleaner test output
 
-### Writing Tests
+### Troubleshooting
 
-When writing new tests:
+**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test methods above. The `tests/conftest.py` file automatically handles path setup for pytest runs.
 
-1. Place test files in the `tests/` directory
-2. Use descriptive test names following the `test_*.py` pattern
-3. Use appropriate pytest markers to categorize tests
-4. Include both positive and negative test cases
-5. Mock external dependencies when possible
-6. Use descriptive assertion messages
+**Missing Dependencies**: Install requirements and test tooling:
 
-Example test structure:
-
-```python
-# tests/test_bartender.py
-"""Minimal example tests for bartender order processing."""
-
-
-def test_order_processing_success():
-    """Order with a valid drink should be processed successfully."""
-    # TODO: replace with real setup and assertions
-    pass
-
-
-def test_order_processing_invalid_drink():
-    """Ordering an unknown drink should be handled gracefully."""
-    # TODO: replace with real setup and assertions
-    pass
+```bash
+pip install -r requirements.txt
+pip install pytest pytest-mock pytest-cov
 ```
-
-### CI/CD Integration
-
-Tests are designed to run in CI environments with:
-
-- No external API dependencies for unit tests
-- Mocked third-party services for integration tests
-- Configurable test execution based on available resources
-- Proper exit codes for build pipeline integration
 
 ### Evaluations (Weave)
 
@@ -390,36 +361,7 @@ The project includes an LLM-as-judge evaluation pipeline using [Weave by Weights
    ```
 
 **Tier-Based Concurrency**: 
-- If you are on the Gemini Free Tier, evaluations run sequentially to respect the 15 RPM limit (set `GEMINI_TIER=free`).
-- If you are on a Paid Tier, evaluations will run concurrently for faster execution (set `GEMINI_TIER=paid`).
-
-**Note on Mocking**: When running standard pytest suites, always ensure the Native SDK and global `RateLimiter` are mocked properly (see `tests/conftest.py` for examples) to avoid accumulating state and hitting burst limits.
-
-### Troubleshooting
-
-**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test methods above. The `tests/conftest.py` file automatically handles path setup for pytest runs.
-
-**Missing Dependencies**: Install requirements and test tooling:
-
-```bash
-pip install -r requirements.txt
-pip install pytest pytest-mock pytest-cov
-```
-
-Example:
-```bash
-# optional: create and activate a clean virtual environment
-python -m venv .venv && source .venv/bin/activate
-
-# install project and test dependencies
-pip install -r requirements.txt
-pip install pytest pytest-mock pytest-cov
-
-# run tests
-pytest -q
-```
-
-**API Key Issues**: Most tests use mocked services, but some integration tests may require API keys. Check individual test files for specific requirements.
+- GCP Vertex AI Mode runs concurrently on Paid Tier (`GEMINI_TIER=paid`).
 
 ## Error Handling and Graceful Fallbacks
 
@@ -470,14 +412,16 @@ Use these to:
 - Monitor headroom vs. actual usage
 - Iterate on `MODAL_MEMORY_MB` and `MODAL_MAX_CONTAINERS` based on load and p95 latency
 
-API keys (`GEMINI_API_KEY`, `CARTESIA_API_KEY`) are still expected via environment variables/secrets as before.
+Environment configuration (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`, `CARTESIA_API_KEY`) is expected via environment variables/secrets as before.
 
 ### Deployment checklist
 
 Use this quick checklist when deploying on Modal:
 
-- API keys configured
-  - `GEMINI_API_KEY`
+- GCP & Service Credentials configured
+  - `GCP_PROJECT`
+  - `GCP_LOCATION`
+  - `GEMINI_TIER=paid`
   - `CARTESIA_API_KEY`
 - Resource tuning (optional)
   - `MODAL_MEMORY_MB` (e.g., 4096, 8192)
@@ -485,4 +429,3 @@ Use this quick checklist when deploying on Modal:
 - Expected startup logs
   - `Configured resources: MODAL_MEMORY_MB=..., MODAL_MAX_CONTAINERS=...`
   - `Container memory usage at start: ...`
-

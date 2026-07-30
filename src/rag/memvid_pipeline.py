@@ -55,8 +55,8 @@ Question: {query_oneline}
 Answer:"""
 
     try:
-        # Call Google GenAI via singleton client
-        client = get_genai_client(api_key)
+        # Call Google GenAI via singleton client in Vertex AI mode
+        client = get_genai_client()
         resp = client.models.generate_content(model=model_version, contents=prompt)
 
         return getattr(resp, "text", "") or ""

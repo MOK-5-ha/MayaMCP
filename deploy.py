@@ -47,7 +47,7 @@ if MODAL_MAX_CONTAINERS <= 0:
 maya_secrets_list = [modal.Secret.from_name("maya-secrets")]
 
 # Build local overrides dict, only including non-empty host env values for required keys
-REQUIRED_KEYS = ["GEMINI_API_KEY", "CARTESIA_API_KEY", "MAYA_MASTER_KEY"]
+REQUIRED_KEYS = ["GCP_PROJECT", "GCP_LOCATION", "GEMINI_TIER", "CARTESIA_API_KEY", "MAYA_MASTER_KEY"]
 overrides = {}
 for key in REQUIRED_KEYS:
     val = os.environ.get(key)
@@ -140,17 +140,18 @@ def serve_maya():
 
 
 
-    # Keys are now optional for the main app (BYOK) but still used for RAG initialisation
-    google_api_key = os.getenv("GEMINI_API_KEY")
-    if not (google_api_key and google_api_key.strip()):
-        google_api_key = None
-        logger.info("No server-side Gemini API key found; RAG will use session keys or be skipped")
+    # Configure 100% GCP Vertex AI Mode
+    gcp_project = (os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip()
+    if gcp_project:
+        logger.info(f"Initialized GCP Vertex AI Mode for project: {gcp_project}")
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GEMINI_TIER"] = "paid"
     else:
-        google_api_key = google_api_key.strip()
+        logger.warning("GCP_PROJECT not configured in Modal environment")
 
     # Initialize state
     initialize_state()
-    
+
     # Resolve singletons once during module init
     try:
         from utils.session_manager import get_session_manager
@@ -161,18 +162,18 @@ def serve_maya():
         logger.error(f"Failed to initialize monitors: {e}")
         session_manager = None
         memory_monitor = None
-    
+
     # Initialize session manager and start background cleanup
     cleanup_thread = None
     stop_event = threading.Event()
-    
+
     try:
         from utils.session_manager import cleanup_expired_sessions_background
         cleanup_thread = cleanup_expired_sessions_background(
             interval_seconds=300, stop_event=stop_event, session_manager=session_manager
         )
         logger.info("Session manager initialized with background cleanup")
-        
+
         # Store thread reference for shutdown
         cleanup_thread_ref = [cleanup_thread]
     except Exception as e:
@@ -188,9 +189,9 @@ def serve_maya():
     rag_documents = None
     rag_retriever = None
 
-    if google_api_key:
+    if gcp_project:
         try:
-            logger.info("Initializing Memvid RAG system...")
+            logger.info("Initializing Memvid RAG system in Vertex AI Mode...")
             rag_retriever, rag_documents = initialize_memvid_store()
             logger.info(f"Memvid RAG initialized with {len(rag_documents)} documents")
         except Exception as e:
@@ -202,7 +203,7 @@ def serve_maya():
             except Exception as e2:
                 logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
     else:
-        logger.info("Skipping RAG initialization (no server-side Gemini key)")
+        logger.info("Skipping RAG initialization (no GCP_PROJECT)")
 
     # NOTE: LLM and TTS are NOT initialised here (BYOK mode).
     # Per-session clients are lazily created via src/llm/session_registry.
@@ -214,7 +215,7 @@ def serve_maya():
         rag_index=rag_index,
         rag_documents=rag_documents,
         rag_retriever=rag_retriever,
-        rag_api_key=google_api_key,
+        rag_api_key=None,
         app_state=state_store
     )
 
@@ -279,16 +280,11 @@ def serve_maya():
             logger.warning(f"Memory health check failed: {e}")
         
         # Check RAG availability (either Memvid or FAISS)
-        # Only mandatory if server-side key is provided (non-BYOK for RAG)
-        if google_api_key is not None:
-            rag_available = False
-            if rag_retriever is not None or rag_index is not None:
-                # Check that we have documents
-                if rag_documents and len(rag_documents) > 0:
-                    rag_available = True
-            
-            if not rag_available:
-                checks.append("RAG not initialized or no documents available")
+        rag_available = False
+        if rag_retriever is not None or rag_index is not None:
+            # Check that we have documents
+            if rag_documents and len(rag_documents) > 0:
+                rag_available = True
 
         if checks:
             return PlainTextResponse(

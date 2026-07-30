@@ -1,8 +1,10 @@
 import types
-from types import SimpleNamespace
+
 import pytest
 
 from src.conversation import processor as proc
+
+
 class DummyResponse:
     def __init__(self, text):
         self.text = text
@@ -13,11 +15,12 @@ from google.adk.models import Gemini
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
+
 class DummyLLM(Gemini):
     def __init__(self, content="base response", **kwargs):
         super().__init__(model="gemini-2.5-flash", **kwargs)
         self._content = content
-        
+
     async def generate_content_async(self, request, stream=False):
         class MockCandidate:
             def __init__(self, text):
@@ -50,7 +53,6 @@ class StubTool:
 @pytest.fixture
 def stub_get_menu(monkeypatch):
     # Ensure get_menu.invoke works without LangChain runtime complexities
-    from src import llm as llm_pkg
     from src.llm import tools as tools_mod
     stub = StubTool()
     monkeypatch.setattr(tools_mod, "get_menu", stub, raising=True)

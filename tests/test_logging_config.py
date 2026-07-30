@@ -5,9 +5,9 @@ Unit tests for src.config.logging_config module.
 
 import logging
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 from src.config.logging_config import get_logger, setup_logging
 

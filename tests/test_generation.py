@@ -6,12 +6,14 @@ Unit tests for generation pathways using google-genai:
 - src.rag.memvid_pipeline.generate_memvid_response
 """
 
+import os
 from types import SimpleNamespace as NS
 
 import pytest
 
 import src.llm.client as llm_client
 import src.rag.memvid_pipeline as memvid_pipeline
+
 
 class _FakeModels:
     """Fake models attribute for a mock genai.Client."""
@@ -35,17 +37,17 @@ class _FakeModels:
 @pytest.fixture
 def mock_genai_client(monkeypatch):
     """Fixture that mocks get_genai_client to return a fake client."""
-    mock_data = {'key': None, 'client': None}
+    mock_data = {'project': None, 'location': None, 'client': None}
     fake_models = _FakeModels()
 
-    def fake_get_genai_client(api_key: str):
-        mock_data['key'] = api_key
+    def fake_get_genai_client(gcp_project=None, gcp_location=None, api_key=None, **kwargs):
+        mock_data['project'] = gcp_project or os.getenv("GCP_PROJECT") or "dummy-gcp-project"
+        mock_data['location'] = gcp_location or os.getenv("GCP_LOCATION") or "global"
         client = NS(models=fake_models)
         mock_data['client'] = client
         return client
 
     monkeypatch.setattr('src.llm.client.get_genai_client', fake_get_genai_client)
-
     monkeypatch.setattr('src.rag.memvid_pipeline.get_genai_client', fake_get_genai_client)
 
     return {'data': mock_data, 'models': fake_models}
@@ -59,11 +61,11 @@ def test_call_gemini_api_uses_genai_client(mock_genai_client, monkeypatch):
     cfg = {"temperature": 0.7, "top_p": 0.9, "top_k": 1, "max_output_tokens": 128}
 
     # Act
-    resp = llm_client.call_gemini_api(prompt_content=prompt, config=cfg, api_key='k')
+    resp = llm_client.call_gemini_api(prompt_content=prompt, config=cfg, gcp_project='my-gcp-proj')
 
     # Assert
     assert getattr(resp, 'text', None) == "OK"
-    assert mock_genai_client['data']['key'] == 'k'
+    assert mock_genai_client['data']['project'] == 'my-gcp-proj'
     models = mock_genai_client['models']
     assert models.call_count == 1, "Expected exactly one API call"
     assert models.last_call is not None
@@ -94,7 +96,7 @@ def test_memvid_pipeline_generate_response(mock_genai_client):
 
     # Assert
     assert out == "OK"
-    assert mock_genai_client['data']['key'] == 'xyz'
+    assert mock_genai_client['data']['project'] == 'dummy-gcp-project'
     models = mock_genai_client['models']
     assert models.call_count == 1, "Expected exactly one API call"
     assert models.last_call['model'] == 'gemini-3.0-flash'

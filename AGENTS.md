@@ -75,19 +75,18 @@ mypy src/                 # Type checking
 Ruff config is in `pyproject.toml`. Rules: E, W, F, I, B, C4, UP.
 
 ## Environment Variables
-Copy `.env.example` to `.env`. Maya runs in BYOK (Bring Your Own Key) mode — users provide API keys via the UI.
+Copy `.env.example` to `.env`. Maya operates in 100% GCP Vertex AI Mode using Application Default Credentials (ADC) and GCP billing credits. Optional session overrides can be provided via the UI.
 
-Required (for server-side fallback):
-- `GEMINI_API_KEY` — Google AI Studio API key (or `GCP_PROJECT` for Vertex AI mode)
+Required:
+- `GCP_PROJECT` — Google Cloud Platform Project ID (for Vertex AI mode ADC authentication)
+- `GCP_LOCATION` — GCP Location (defaults to `global`)
+- `GEMINI_TIER` — Locked to `paid` (high-throughput concurrency quota)
 - `CARTESIA_API_KEY` — Cartesia TTS API key
 
 Optional:
-- `GCP_PROJECT` — GCP Project ID for Vertex AI mode (uses GCP Billing Account trial credits)
-- `GCP_LOCATION` — Vertex AI deployment region (defaults to `global`)
-- `GEMINI_TIER` — Set to `paid` for high-throughput 300+ RPM quota mode
-- `GEMINI_MODEL_VERSION` — defaults to `gemini-3-flash-preview`
+- `GEMINI_MODEL_VERSION` — defaults to `gemini-3.1-flash-lite`
 - `TEMPERATURE` — defaults to `1.0`
-- `MAX_OUTPUT_TOKENS` — defaults to `2048`
+- `MAX_OUTPUT_TOKENS` — defaults to `8192`
 - `MAYA_MASTER_KEY` — Fernet key for encrypting session data (ephemeral if unset)
 - `CDP_API_KEY_ID` — Coinbase CDP API key ID
 - `CDP_API_KEY_SECRET` — Coinbase CDP API key secret
@@ -95,11 +94,14 @@ Optional:
 - `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional, has default)
 
 ## Key Architecture Rules
-- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client(api_key=...)` instead of instantiating `genai.Client` directly (this applies to sessions, registration modules, and integration tests to ensure proper caching). `get_genai_client()` automatically detects **GCP Vertex AI Mode** when `GCP_PROJECT` or `GOOGLE_CLOUD_PROJECT` is set, falling back to **Google AI Studio Mode** via `GEMINI_API_KEY` / BYOK session keys.
+- **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode (`GEMINI_API_KEY`, `LLM_API_KEY`) and free-tier throttles are permanently removed.
+- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client()` instead of instantiating `genai.Client` directly.
+- **UI Contract Synchronization**: When modifying backend configuration semantics (such as shifting from API keys to Vertex AI ADC), all UI form labels, placeholders, Pydantic schemas, and modal instruction markdown must be updated in lockstep.
+- **Dynamic Model Verification**: Diagnostic scripts (`verify_environment.py`) must import and inspect `get_model_config()["model_version"]` to guarantee exact parity with runtime LLM configuration.
 - **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments.
 - **Security scanning**: Inputs are checked for prompt injection/toxicity before processing; outputs are checked before returning to user. See `src/security/`.
 - **Payment state**: Thread-safe per-session locking with atomic updates and version checks. Always acquire the session lock before modifying payment state. See `src/utils/state_manager.py`.
-- **BYOK mode**: Per-session LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
+- **Vertex AI Mode Sessions**: Per-session LLM clients are lazily created via `src/llm/session_registry.py` utilizing Application Default Credentials (ADC).
 - **Lazy Streaming Pipelining**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs (e.g. streaming LLM outputs to TTS). Consume them lazily (using queue-based iterators if passing items between threads) to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired, preventing payload misalignment.
 - **Intent Routing Safety**: When implementing deterministic intent routing (e.g., bypassing the LLM for hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`) as it is prone to false positives. Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to guarantee precise matching.
@@ -123,6 +125,7 @@ Optional:
 
 ## Don't
 - Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client`)
+- Use Google AI Studio API key mode (`GEMINI_API_KEY`) or free-tier rate limits
 - Hardcode API keys or secrets
 - Skip error handling for external API calls
 - Break the graceful fallback chain
