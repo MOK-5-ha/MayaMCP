@@ -91,7 +91,11 @@ async def verify_environment() -> bool:
         client = google.genai.Client(vertexai=True, project=project, location=location)
         print("✓ Client instantiated in Vertex AI mode (vertexai=True)")
 
-        model = os.getenv("GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite")
+        try:
+            from src.config.model_config import get_model_config
+            model = get_model_config()["model_version"]
+        except ImportError:
+            model = os.getenv("GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite")
         print(f"Testing inference connectivity against model '{model}'...")
 
         def _test_call():

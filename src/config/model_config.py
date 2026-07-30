@@ -52,13 +52,13 @@ def get_model_config() -> dict[str, Any]:
         Dictionary containing model configuration.
     """
     model_version = os.getenv(
-        "GEMINI_MODEL_VERSION", "gemini-3-flash-preview"
+        "GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite"
     )
     default_temp = _get_default_temperature(model_version)
     return {
         "model_version": model_version,
         "temperature": _parse_float_env("TEMPERATURE", default_temp),
-        "max_output_tokens": _parse_int_env("MAX_OUTPUT_TOKENS", 2048),
+        "max_output_tokens": _parse_int_env("MAX_OUTPUT_TOKENS", 8192),
         "top_p": 0.95,
         "top_k": 1
     }
@@ -84,6 +84,8 @@ def get_cartesia_config() -> dict[str, Any]:
 
 # Known valid Gemini model identifiers (non-exhaustive; update as needed)
 KNOWN_GEMINI_MODELS: list[str] = [
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
     "gemini-3-flash-preview",
     "gemini-3-pro-preview",
     "gemini-3-pro-image-preview",
