@@ -24,9 +24,13 @@ def get_session_store(request: Request) -> MutableMapping:
     return _SESSION_STORE
 
 
-def resolve_session_id(x_session_id: Optional[str] = None) -> str:
-    if x_session_id and x_session_id.strip():
-        return x_session_id.strip()
+def resolve_session_id(
+    x_session_id: Optional[str] = None,
+    query_session_id: Optional[str] = None
+) -> str:
+    candidate = x_session_id or query_session_id
+    if candidate and candidate.strip():
+        return candidate.strip()
     return f"sess_{secrets.token_urlsafe(12)}"
 
 

@@ -189,3 +189,17 @@ def test_concurrent_session_status_and_keys_race_safety(client):
     status_resp = client.get("/api/v1/session/status", headers={"X-Session-ID": session_id})
     assert status_resp.json()["has_valid_keys"] is True
 
+
+@patch("src.routers.chat.process_order_stream", return_value=iter([]))
+@patch("src.routers.chat.has_valid_keys", return_value=True)
+@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key"})
+@patch("src.routers.chat.get_session_llm")
+def test_chat_stream_query_session_id_and_initial_session_event(mock_llm, mock_keys, mock_has_keys, mock_stream, client):
+    response = client.get("/api/v1/chat/stream?message=hello&session_id=query-session-777")
+    assert response.status_code == 200
+    assert response.headers["X-Session-ID"] == "query-session-777"
+    lines = response.text.split("\n\n")
+    assert len(lines) >= 1
+    event_data = json.loads(lines[0].replace("data: ", ""))
+    assert event_data == {"type": "session", "session_id": "query-session-777"}
+

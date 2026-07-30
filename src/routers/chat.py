@@ -2,7 +2,7 @@ import asyncio
 import base64
 import json
 from typing import AsyncGenerator, Optional
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
 from ..conversation.processor import process_order, process_order_stream
@@ -118,25 +118,30 @@ def chat_endpoint(
 async def chat_stream_endpoint(
     message: str,
     http_req: Request,
+    session_id: Optional[str] = Query(None),
     x_session_id: Optional[str] = Header(None)
 ):
-    session_id = resolve_session_id(x_session_id)
+    effective_session_id = resolve_session_id(x_session_id, session_id)
     store = get_session_store(http_req)
     
-    if not has_valid_keys(session_id, store):
+    if not has_valid_keys(effective_session_id, store):
         raise HTTPException(
             status_code=400,
             detail="Please provide your API keys first before streaming."
         )
 
-    api_key_state = get_api_key_state(session_id, store)
+    api_key_state = get_api_key_state(effective_session_id, store)
     gemini_key = api_key_state["gemini_key"]
 
-    current_history = get_session_chat_history(session_id, store)
+    current_history = get_session_chat_history(effective_session_id, store)
     
     async def sse_generator() -> AsyncGenerator[str, None]:
         try:
-            llm = get_session_llm(session_id, gemini_key)
+            # Emit session initialization event for EventSource clients
+            init_event = {"type": "session", "session_id": effective_session_id}
+            yield f"data: {json.dumps(init_event)}\n\n"
+
+            llm = get_session_llm(effective_session_id, gemini_key)
 
             stream = process_order_stream(
                 user_input_text=message,
@@ -144,7 +149,7 @@ async def chat_stream_endpoint(
                 llm=llm,
                 rag_retriever=None,
                 api_key=gemini_key,
-                session_id=session_id,
+                session_id=effective_session_id,
                 app_state=store,
             )
             while True:
@@ -155,7 +160,7 @@ async def chat_stream_endpoint(
                     final_text = event.get("content") or event.get("full_response") or ""
                     if final_text:
                         updated_hist = append_to_history(current_history, message, final_text)
-                        set_session_chat_history(session_id, updated_hist, store)
+                        set_session_chat_history(effective_session_id, updated_hist, store)
                 yield f"data: {json.dumps(event)}\n\n"
         except SessionLimitExceededError as limit_err:
             error_event = {"type": "error", "content": f"Bar capacity reached: {limit_err}"}
@@ -167,5 +172,5 @@ async def chat_stream_endpoint(
     return StreamingResponse(
         sse_generator(),
         media_type="text/event-stream",
-        headers={"X-Session-ID": session_id}
+        headers={"X-Session-ID": effective_session_id}
     )
