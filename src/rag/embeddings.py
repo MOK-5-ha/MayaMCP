@@ -42,6 +42,7 @@ def _get_embed_client():
     """Return a genai Client for embedding calls, supporting Vertex AI mode or API key mode."""
     api_key = get_google_api_key()
     project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    project = project.strip() if project else None
     if not api_key and not project:
         logger.error("Neither GCP_PROJECT/GOOGLE_CLOUD_PROJECT nor GEMINI_API_KEY set; cannot generate embeddings.")
         return None

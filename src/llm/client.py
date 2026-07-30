@@ -88,7 +88,7 @@ _genai_client_key: str | None = None
 _CLIENT_LOCK = threading.Lock()
 
 
-def get_genai_client(api_key: Optional[str] = None) -> genai.Client:
+def get_genai_client(api_key: str | None = None) -> genai.Client:
     """Return a singleton genai.Client, creating it if needed.
 
     Thread-safe. Supports GCP Vertex AI Mode (via GCP_PROJECT / GOOGLE_CLOUD_PROJECT)
