@@ -12,6 +12,11 @@ from .components import (
     create_streaming_toggle,
     setup_avatar,
 )
+from .handlers import (
+    clear_chat_state,
+    handle_gradio_input,
+    handle_gradio_streaming_input,
+)
 from .tab_overlay import create_tab_overlay_html
 
 logger = get_logger(__name__)
@@ -54,8 +59,8 @@ def create_avatar_with_overlay(
     )
 
 def launch_bartender_interface(
-    handle_input_fn: Callable,
-    clear_state_fn: Callable,
+    handle_input_fn: Callable | None = None,
+    clear_state_fn: Callable | None = None,
     handle_key_submission_fn: Callable | None = None,
     handle_streaming_input_fn: Callable | None = None,
     avatar_path: str | None = None
@@ -64,15 +69,23 @@ def launch_bartender_interface(
     Create the Gradio interface for Maya the bartender and return it.
 
     Args:
-        handle_input_fn: Function to handle user input
-        clear_state_fn: Function to clear chat state
-        handle_key_submission_fn: Function to validate and store API keys (BYOK).
-                                  If None, the default handle_key_submission is used.
+        handle_input_fn: Function to handle user input (defaults to handle_gradio_input)
+        clear_state_fn: Function to clear chat state (defaults to clear_chat_state)
+        handle_key_submission_fn: Function to validate and store API keys (defaults to handle_key_submission)
+        handle_streaming_input_fn: Function to handle streaming input (defaults to handle_gradio_streaming_input)
         avatar_path: Path to avatar image (will setup default if None)
 
     Returns:
         gr.Blocks: The interface object (not launched), suitable for external serving
     """
+    if handle_input_fn is None:
+        handle_input_fn = handle_gradio_input
+    if clear_state_fn is None:
+        clear_state_fn = clear_chat_state
+    if handle_key_submission_fn is None:
+        handle_key_submission_fn = handle_key_submission
+    if handle_streaming_input_fn is None:
+        handle_streaming_input_fn = handle_gradio_streaming_input
     # Setup avatar if not provided
     if avatar_path is None:
         try:

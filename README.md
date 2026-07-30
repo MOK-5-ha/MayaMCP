@@ -160,7 +160,11 @@ Note: `pip install -r requirements.txt` installs the Agent Development Kit (`goo
 
 1. Set up a GCP Project with billing enabled.
 2. Ensure Vertex AI API is enabled.
-3. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
+3. Authenticate locally with Application Default Credentials:
+   ```bash
+   gcloud auth application-default login
+   ```
+4. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
 
 ### Cartesia TTS API
 

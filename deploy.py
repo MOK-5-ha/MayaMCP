@@ -215,7 +215,7 @@ def serve_maya():
         rag_index=rag_index,
         rag_documents=rag_documents,
         rag_retriever=rag_retriever,
-        rag_api_key=google_api_key,
+        rag_api_key=None,
         app_state=state_store
     )
 
@@ -280,16 +280,11 @@ def serve_maya():
             logger.warning(f"Memory health check failed: {e}")
         
         # Check RAG availability (either Memvid or FAISS)
-        # Only mandatory if server-side key is provided (non-BYOK for RAG)
-        if google_api_key is not None:
-            rag_available = False
-            if rag_retriever is not None or rag_index is not None:
-                # Check that we have documents
-                if rag_documents and len(rag_documents) > 0:
-                    rag_available = True
-            
-            if not rag_available:
-                checks.append("RAG not initialized or no documents available")
+        rag_available = False
+        if rag_retriever is not None or rag_index is not None:
+            # Check that we have documents
+            if rag_documents and len(rag_documents) > 0:
+                rag_available = True
 
         if checks:
             return PlainTextResponse(
