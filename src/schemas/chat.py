@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     user_input: str = Field(..., description="User input string sent to Maya")
-    streaming: bool = Field(False, description="Whether to request SSE streaming response")
+    streaming: bool = Field(False, description="Reserved for future SSE streaming support; POST /chat always returns a synchronous JSON response")
     avatar_path: str = Field("assets/bartender_avatar.jpg", description="Path to bartender avatar image")
 
 
