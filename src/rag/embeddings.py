@@ -36,11 +36,15 @@ def _retry_return_none(_retry_state: RetryCallState):
 logger = get_logger(__name__)
 
 
+import os
+
+
 def _get_embed_client():
-    """Return a genai Client for embedding calls, or None if no API key."""
+    """Return a genai Client for embedding calls, supporting Vertex AI mode or API key mode."""
     api_key = get_google_api_key()
-    if not api_key:
-        logger.error("GEMINI_API_KEY not set; cannot generate embeddings.")
+    project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not api_key and not project:
+        logger.error("Neither GCP_PROJECT/GOOGLE_CLOUD_PROJECT nor GEMINI_API_KEY set; cannot generate embeddings.")
         return None
     return get_genai_client(api_key)
 
