@@ -156,7 +156,7 @@ def get_session_llm(
     from google.adk.models import Gemini
     from google.genai import Client
 
-    from .client import get_model_name
+    from .client import get_genai_client, get_model_name
 
     class VertexGemini(Gemini):
         def __init__(self, project_id: str, loc: str, **kwargs):
@@ -167,10 +167,8 @@ def get_session_llm(
         @property
         def api_client(self) -> Client:
             if not hasattr(self, '_client'):
-                os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
-                os.environ["GEMINI_TIER"] = "paid"
-                self._client = Client(
-                    vertexai=True, project=self._project_id, location=self._loc
+                self._client = get_genai_client(
+                    gcp_project=self._project_id, gcp_location=self._loc
                 )
             return self._client
 
