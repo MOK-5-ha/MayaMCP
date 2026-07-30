@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class TipRequest(BaseModel):
     tip_percentage: Optional[int] = Field(None, description="Tip percentage (e.g. 15, 20, 25)")
-    tip_amount: Optional[float] = Field(None, description="Explicit tip amount in dollars")
+    tip_amount: Optional[float] = Field(None, description="Explicit tip amount in dollars", ge=0.0)
 
 
 class PaymentStateResponse(BaseModel):

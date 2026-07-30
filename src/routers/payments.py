@@ -1,12 +1,12 @@
 """Payment management endpoints."""
 
 from typing import Optional
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from ..schemas.payment import PaymentStateResponse, TipRequest
 from ..utils.helpers import get_overlay_payment_data
 from ..utils.state_manager import get_payment_state, update_payment_state
-from .session import _SESSION_STORE
+from .session import get_session_store
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -16,9 +16,13 @@ def _resolve_session_id(x_session_id: Optional[str]) -> str:
 
 
 @router.get("/tab", response_model=PaymentStateResponse)
-def get_payment_tab(x_session_id: Optional[str] = Header(None)) -> PaymentStateResponse:
+def get_payment_tab(
+    request: Request,
+    x_session_id: Optional[str] = Header(None)
+) -> PaymentStateResponse:
     session_id = _resolve_session_id(x_session_id)
-    payment_state = get_payment_state(session_id, _SESSION_STORE)
+    store = get_session_store(request)
+    payment_state = get_payment_state(session_id, store)
     tab_total, balance, tip_percentage, tip_amount = get_overlay_payment_data(payment_state)
     
     return PaymentStateResponse(
@@ -32,23 +36,25 @@ def get_payment_tab(x_session_id: Optional[str] = Header(None)) -> PaymentStateR
 
 @router.post("/tip", response_model=PaymentStateResponse)
 def add_or_update_tip(
-    request: TipRequest,
+    tip_req: TipRequest,
+    request: Request,
     x_session_id: Optional[str] = Header(None)
 ) -> PaymentStateResponse:
     session_id = _resolve_session_id(x_session_id)
+    store = get_session_store(request)
     
-    if request.tip_percentage is not None and request.tip_percentage not in {10, 15, 20}:
+    if tip_req.tip_percentage is not None and tip_req.tip_percentage not in {10, 15, 20}:
         raise HTTPException(status_code=400, detail="Tip percentage must be 10, 15, or 20")
 
     kwargs = {}
-    if request.tip_percentage is not None:
-        kwargs["tip_percentage"] = request.tip_percentage
-    if request.tip_amount is not None:
-        kwargs["tip_amount"] = request.tip_amount
+    if tip_req.tip_percentage is not None:
+        kwargs["tip_percentage"] = tip_req.tip_percentage
+    if tip_req.tip_amount is not None:
+        kwargs["tip_amount"] = tip_req.tip_amount
 
-    update_payment_state(session_id, _SESSION_STORE, kwargs)
+    update_payment_state(session_id, store, kwargs)
     
-    updated_state = get_payment_state(session_id, _SESSION_STORE)
+    updated_state = get_payment_state(session_id, store)
     tab_total, balance, tip_percentage, tip_amount = get_overlay_payment_data(updated_state)
     
     return PaymentStateResponse(

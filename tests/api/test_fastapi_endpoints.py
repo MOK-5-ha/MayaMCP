@@ -116,3 +116,21 @@ def test_payments_add_tip(client):
     assert response.status_code == 200
     data = response.json()
     assert data["tip_percentage"] == 20
+
+
+def test_payments_negative_tip_amount_rejected(client):
+    payload = {"tip_amount": -5.0}
+    response = client.post(
+        "/api/v1/payments/tip",
+        json=payload,
+        headers={"X-Session-ID": "test-session-123"}
+    )
+    assert response.status_code == 422
+
+
+def test_add_to_order_negative_quantity_rejected():
+    from src.llm.tools import add_to_order_with_balance
+    result = add_to_order_with_balance(item_name="Martini", quantity=-1)
+    assert result["status"] == "error"
+    assert result["error"] == "INVALID_QUANTITY"
+

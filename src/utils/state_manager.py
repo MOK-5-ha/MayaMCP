@@ -641,6 +641,26 @@ def get_conversation_state(session_id: Optional[str] = None, store: Optional[Mut
     data = _get_session_data(session_id, store)
     return data['conversation'].copy()
 
+def get_session_chat_history(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> List[Dict[str, str]]:
+    """Get list of conversation turns for session."""
+    session_id, store = _get_store_and_session(session_id, store)
+    data = _get_session_data(session_id, store)
+    conv = data.get('conversation', {})
+    return list(conv.get('chat_history', []))
+
+def set_session_chat_history(session_id: Optional[str] = None, history: Optional[List[Dict[str, str]]] = None, store: Optional[MutableMapping] = None) -> None:
+    """Store list of conversation turns for session."""
+    if history is None:
+        return
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        if 'conversation' not in data:
+            data['conversation'] = copy.deepcopy(DEFAULT_CONVERSATION_STATE)
+        data['conversation']['chat_history'] = list(history)
+        _save_session_data(session_id, store, data)
+
 def get_order_history(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> Dict[str, Any]:
     """Get order history."""
     session_id, store = _get_store_and_session(session_id, store)

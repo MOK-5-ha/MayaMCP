@@ -257,6 +257,7 @@ def serve_maya():
         description="FastAPI backend for MayaMCP AI Bartender",
         lifespan=app_lifespan
     )
+    web_app.state.session_store = state_store
 
     from src.routers import chat_router, payments_router, session_router
     web_app.include_router(chat_router, prefix="/api/v1")

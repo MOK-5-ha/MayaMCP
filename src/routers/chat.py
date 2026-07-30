@@ -3,7 +3,7 @@
 import base64
 import json
 from typing import AsyncGenerator, Optional
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from ..conversation.processor import process_order, process_order_stream
@@ -19,12 +19,14 @@ from ..utils.state_manager import (
     get_api_key_state,
     get_current_order_state,
     get_payment_state,
+    get_session_chat_history,
     has_valid_keys,
+    set_session_chat_history,
 )
 from ..voice.tts import get_voice_audio
 from ..ui.api_key_modal import create_quota_error_html
 
-from .session import _SESSION_STORE
+from .session import get_session_store
 
 router = APIRouter(tags=["Chat"])
 
@@ -35,34 +37,40 @@ def _resolve_session_id(x_session_id: Optional[str]) -> str:
 
 @router.post("/chat", response_model=ChatResponse)
 def chat_endpoint(
-    request: ChatRequest,
+    chat_req: ChatRequest,
+    http_req: Request,
     x_session_id: Optional[str] = Header(None)
 ) -> ChatResponse:
     session_id = _resolve_session_id(x_session_id)
+    store = get_session_store(http_req)
     
-    if not has_valid_keys(session_id, _SESSION_STORE):
+    if not has_valid_keys(session_id, store):
         raise HTTPException(
             status_code=400,
             detail="Please provide your API keys first before sending messages."
         )
 
-    api_key_state = get_api_key_state(session_id, _SESSION_STORE)
+    api_key_state = get_api_key_state(session_id, store)
     gemini_key = api_key_state["gemini_key"]
     cartesia_key = api_key_state.get("cartesia_key")
 
     llm = get_session_llm(session_id, gemini_key)
     cartesia_client = get_session_tts(session_id, cartesia_key)
 
+    current_history = get_session_chat_history(session_id, store)
+
     try:
         response_text, updated_history, _, updated_order, _ = process_order(
-            user_input_text=request.user_input,
-            current_session_history=[],
+            user_input_text=chat_req.user_input,
+            current_session_history=current_history,
             llm=llm,
             rag_retriever=None,
             api_key=gemini_key,
             session_id=session_id,
-            app_state=_SESSION_STORE,
+            app_state=store,
         )
+
+        set_session_chat_history(session_id, updated_history, store)
 
         audio_b64 = None
         if cartesia_client and response_text and response_text.strip():
@@ -73,7 +81,7 @@ def chat_endpoint(
             except Exception:
                 pass
 
-        payment_state = get_payment_state(session_id, _SESSION_STORE)
+        payment_state = get_payment_state(session_id, store)
         tab_total, balance, tip_percentage, tip_amount = get_overlay_payment_data(payment_state)
 
         return ChatResponse(
@@ -95,8 +103,8 @@ def chat_endpoint(
         if is_quota_error(e):
             return ChatResponse(
                 response_text="It looks like your API key has hit its rate limit.",
-                history=[],
-                current_order=get_current_order_state(session_id, _SESSION_STORE),
+                history=current_history,
+                current_order=get_current_order_state(session_id, store),
                 quota_error_html=create_quota_error_html()
             )
         raise HTTPException(status_code=500, detail=str(e))
@@ -105,34 +113,38 @@ def chat_endpoint(
 @router.get("/chat/stream")
 async def chat_stream_endpoint(
     message: str,
+    http_req: Request,
     x_session_id: Optional[str] = Header(None)
 ):
     session_id = _resolve_session_id(x_session_id)
+    store = get_session_store(http_req)
     
-    if not has_valid_keys(session_id, _SESSION_STORE):
+    if not has_valid_keys(session_id, store):
         raise HTTPException(
             status_code=400,
             detail="Please provide your API keys first before streaming."
         )
 
-    api_key_state = get_api_key_state(session_id, _SESSION_STORE)
+    api_key_state = get_api_key_state(session_id, store)
     gemini_key = api_key_state["gemini_key"]
-    cartesia_key = api_key_state.get("cartesia_key")
 
     llm = get_session_llm(session_id, gemini_key)
+    current_history = get_session_chat_history(session_id, store)
     
     async def sse_generator() -> AsyncGenerator[str, None]:
         try:
             stream = process_order_stream(
                 user_input_text=message,
-                current_session_history=[],
+                current_session_history=current_history,
                 llm=llm,
                 rag_retriever=None,
                 api_key=gemini_key,
                 session_id=session_id,
-                app_state=_SESSION_STORE,
+                app_state=store,
             )
             for event in stream:
+                if event.get("type") == "complete" and "history" in event:
+                    set_session_chat_history(session_id, event["history"], store)
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as err:
             error_event = {"type": "error", "content": str(err)}
