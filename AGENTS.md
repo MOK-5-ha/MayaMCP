@@ -75,7 +75,7 @@ mypy src/                 # Type checking
 Ruff config is in `pyproject.toml`. Rules: E, W, F, I, B, C4, UP.
 
 ## Environment Variables
-Copy `.env.example` to `.env`. Maya runs in BYOK (Bring Your Own Key) mode — users provide API keys via the UI.
+Copy `.env.example` to `.env`. Maya operates in 100% GCP Vertex AI Mode using Application Default Credentials (ADC) and GCP billing credits. Optional session overrides can be provided via the UI.
 
 Required:
 - `GCP_PROJECT` — Google Cloud Platform Project ID (for Vertex AI mode ADC authentication)
@@ -96,6 +96,8 @@ Optional:
 ## Key Architecture Rules
 - **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode (`GEMINI_API_KEY`, `LLM_API_KEY`) and free-tier throttles are permanently removed.
 - **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client()` instead of instantiating `genai.Client` directly.
+- **UI Contract Synchronization**: When modifying backend configuration semantics (such as shifting from API keys to Vertex AI ADC), all UI form labels, placeholders, Pydantic schemas, and modal instruction markdown must be updated in lockstep.
+- **Dynamic Model Verification**: Diagnostic scripts (`verify_environment.py`) must import and inspect `get_model_config()["model_version"]` to guarantee exact parity with runtime LLM configuration.
 - **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments.
 - **Security scanning**: Inputs are checked for prompt injection/toxicity before processing; outputs are checked before returning to user. See `src/security/`.
 - **Payment state**: Thread-safe per-session locking with atomic updates and version checks. Always acquire the session lock before modifying payment state. See `src/utils/state_manager.py`.
