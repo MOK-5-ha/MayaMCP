@@ -71,18 +71,14 @@ def main():
         # Initialize RAG system - Memvid only
         rag_retriever = None
 
-        if google_api_key:
-            try:
-                logger.info("Attempting to initialize Memvid-based RAG...")
-                rag_retriever, rag_documents = initialize_memvid_store()
-                logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
-            except Exception as e:
-                logger.warning(f"Memvid initialization failed: {e}. Continuing without RAG.")
-        else:
-            logger.info("Skipping RAG initialization (no server-side Gemini key)")
+        try:
+            logger.info("Attempting to initialize Memvid-based RAG...")
+            rag_retriever, rag_documents = initialize_memvid_store()
+            logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
+        except Exception as e:
+            logger.warning(f"Memvid initialization failed: {e}. Continuing without RAG.")
 
         # NOTE: LLM and TTS are NOT initialised here.
-        # Each user session provides their own keys (BYOK).
         # Per-session clients are lazily created via src/llm/session_registry.
 
         # Initialize app state for local run (ephemeral, in-memory)
@@ -93,7 +89,7 @@ def main():
             handle_gradio_input,
             tools=tools,
             rag_retriever=rag_retriever,
-            rag_api_key=google_api_key,
+            rag_api_key=None,
             app_state=app_state
         )
 
@@ -101,7 +97,7 @@ def main():
             handle_gradio_streaming_input,
             tools=tools,
             rag_retriever=rag_retriever,
-            rag_api_key=google_api_key,
+            rag_api_key=None,
             app_state=app_state
         )
 

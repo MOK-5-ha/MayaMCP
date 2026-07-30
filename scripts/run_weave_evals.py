@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import asyncio
+from uuid import uuid4
 from dotenv import load_dotenv
 
 # Load env vars
@@ -190,7 +191,7 @@ class MayaWeaveModel(ModelClass):
     def predict(self, turns: list[str]) -> dict:
         llm = get_genai_client(gcp_project=GCP_PROJECT, gcp_location=GCP_LOCATION)
         history = []
-        session_id = f"weave_session_{int(time.time())}"
+        session_id = f"weave_session_{int(time.time())}_{uuid4().hex}"
         app_state = {}
         
         responses = []

@@ -91,6 +91,12 @@ def get_session_llm(
     project = (
         gcp_project or os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or ""
     ).strip()
+    if not project:
+        raise ValueError(
+            "GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured. "
+            "Google AI Studio Key Mode has been permanently removed; this project "
+            "exclusively uses GCP Vertex AI Mode (Paid Tier). Please set GCP_PROJECT in your .env file."
+        )
     location = (
         gcp_location or os.getenv("GCP_LOCATION") or "global"
     ).strip() or "global"
