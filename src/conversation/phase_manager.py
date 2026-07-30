@@ -1,6 +1,6 @@
 """Conversation phase management for Maya."""
 
-from typing import MutableMapping
+from collections.abc import MutableMapping
 
 from ..config.logging_config import get_logger
 from ..utils.helpers import determine_next_phase
@@ -43,10 +43,10 @@ class ConversationPhaseManager:
     def update_phase(self, order_placed: bool = False) -> str:
         """
         Update conversation phase based on current state and actions.
-        
+
         Args:
             order_placed: Whether an order was just placed
-            
+
         Returns:
             New conversation phase
         """
@@ -70,10 +70,10 @@ class ConversationPhaseManager:
     def should_use_rag(self, user_input: str) -> bool:
         """
         Determine if RAG should be used for this input.
-        
+
         Args:
             user_input: User's input text
-            
+
         Returns:
             True if RAG should be used
         """

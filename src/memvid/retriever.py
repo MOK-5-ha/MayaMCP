@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .config import get_memvid_config
 from .utils import check_dependencies, decode_qr, extract_frame
@@ -19,7 +19,7 @@ class MemvidRetriever:
     Simplified retriever for Maya's video memory
     """
 
-    def __init__(self, video_file: str, index_file: str, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, video_file: str, index_file: str, config: dict[str, Any] | None = None):
         self.video_file = str(Path(video_file).absolute())
         self.index_file = str(Path(index_file).absolute())
         self.config = config or get_memvid_config()
@@ -54,7 +54,7 @@ class MemvidRetriever:
 
         logger.info(f"Initialized retriever with {len(self.index_data['chunks'])} chunks")
 
-    def _load_index(self) -> Tuple[Dict[str, Any], bool]:
+    def _load_index(self) -> tuple[dict[str, Any], bool]:
         """Load index file, returns (data, success)"""
         try:
             with open(self.index_file) as f:
@@ -83,7 +83,7 @@ class MemvidRetriever:
         except Exception as e:
             logger.error(f"Video verification failed: {e}")
 
-    def search_simple(self, query: str, top_k: int = 5) -> List[str]:
+    def search_simple(self, query: str, top_k: int = 5) -> list[str]:
         """
         Simple text-based search (optimized for performance)
         """
@@ -108,7 +108,7 @@ class MemvidRetriever:
         # Sort by score and return top results
         scored_chunks.sort(reverse=True, key=lambda x: x[0])
 
-        for score, chunk_info in scored_chunks[:top_k]:
+        for _score, chunk_info in scored_chunks[:top_k]:
             # Try to get full text from video
             full_text = self._get_chunk_from_video(chunk_info["frame"])
             if full_text:
@@ -119,7 +119,7 @@ class MemvidRetriever:
 
         return results
 
-    def _get_chunk_from_video(self, frame_number: int) -> Optional[str]:
+    def _get_chunk_from_video(self, frame_number: int) -> str | None:
         """Get chunk text from video frame"""
         if not self.dependencies_available:
             return None
@@ -152,7 +152,7 @@ class MemvidRetriever:
             logger.warning(f"Failed to extract chunk from frame {frame_number}: {e}")
             return None
 
-    def get_all_chunks(self) -> List[str]:
+    def get_all_chunks(self) -> list[str]:
         """Get all chunks from video memory"""
         results = []
 
@@ -167,14 +167,14 @@ class MemvidRetriever:
 
         return results
 
-    def get_chunk_by_id(self, chunk_id: int) -> Optional[str]:
+    def get_chunk_by_id(self, chunk_id: int) -> str | None:
         """Get specific chunk by ID"""
         for chunk_info in self.index_data["chunks"]:
             if chunk_info["id"] == chunk_id:
                 return self._get_chunk_from_video(chunk_info["frame"])
         return None
 
-    def search(self, query: str, top_k: int = 5) -> List[str]:
+    def search(self, query: str, top_k: int = 5) -> list[str]:
         """
         Main search interface - uses simple search for now
         """
@@ -187,7 +187,7 @@ class MemvidRetriever:
 
         return results
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get retriever statistics"""
         return {
             "video_file": self.video_file,

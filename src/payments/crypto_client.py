@@ -11,7 +11,7 @@ import asyncio
 import os
 import secrets
 import threading
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..config.logging_config import get_logger
 
@@ -21,14 +21,11 @@ logger = get_logger(__name__)
 DEFAULT_RECEIVER_ADDRESS = "0x4252e0c9A3da5A2700e7d91cb50aEf522D0C6Fe8"
 
 
-class CryptoPaymentError(Exception):
-    """Base exception for Crypto payment operations."""
-    pass
 
 
 class CryptoPaymentClient:
     """Client for Coinbase CDP SDK stablecoin payment operations.
-    
+
     Supports:
     - Optimistic transaction processing
     - Background transaction dispatch on Base Sepolia
@@ -53,22 +50,22 @@ class CryptoPaymentClient:
 
     def generate_tx_hash(self) -> str:
         """Generate a random 32-byte transaction hash to use as an optimistic reference.
-        
+
         Returns:
             66-character hex string starting with 0x
         """
         return "0x" + secrets.token_hex(32)
 
-    def process_payment_optimistically(self, amount: float, session_id: str) -> Dict[str, Any]:
+    def process_payment_optimistically(self, amount: float, session_id: str) -> dict[str, Any]:
         """Process a stablecoin payment optimistically.
-        
-        Generates a transaction hash reference instantly and launches the actual 
+
+        Generates a transaction hash reference instantly and launches the actual
         CDP transaction processing in the background (or simulates it if not configured).
-        
+
         Args:
             amount: Payment amount in dollars (USDC equivalent)
             session_id: The session ID of the customer
-            
+
         Returns:
             Dict containing:
             - tx_hash: The transaction hash (optimistic or actual)
@@ -96,7 +93,7 @@ class CryptoPaymentClient:
                     daemon=True
                 ).start()
         else:
-            logger.info(f"CDP credentials not configured. Simulating transaction on thread.")
+            logger.info("CDP credentials not configured. Simulating transaction on thread.")
             # For simulated mode, we can spawn a thread that sleep-succeeds,
             # or optionally fails if the user explicitly tests a failure scenario
             threading.Thread(
@@ -127,7 +124,7 @@ class CryptoPaymentClient:
                     account = await cdp.evm.create_account(name=f"Temp_{session_id[:8]}")
                     # Attempt to get faucet ETH for gas if it's a new account
                     try:
-                        await cdp.evm.request_faucet(address=account.address, network="base-sepolia", token="eth")
+                        await cdp.evm.request_faucet(address=account.address, network="base-sepolia", token="eth")  # nosec B106 - 'eth' is a blockchain token symbol, not a password
                         logger.debug(f"Faucet request sent for temporary account: {account.address}")
                     except Exception as fe:
                         logger.warning(f"Could not request faucet ETH for gas: {fe}")
@@ -140,7 +137,7 @@ class CryptoPaymentClient:
                     transfer = await account.transfer(
                         to=self.receiver_address,
                         amount=amount,
-                        token="usdc",
+                        token="usdc",  # nosec B106 - 'usdc' is a blockchain token symbol, not a password
                         network="base-sepolia"
                     )
                     actual_tx_hash = getattr(transfer, "transaction_hash", optimistic_tx_hash) or optimistic_tx_hash
@@ -150,7 +147,7 @@ class CryptoPaymentClient:
                     transfer = await account.transfer(
                         to=self.receiver_address,
                         amount=amount * 0.0001,  # Convert mock amount to a tiny fractional ETH amount
-                        token="eth",
+                        token="eth",  # nosec B106 - 'eth' is a blockchain token symbol, not a password
                         network="base-sepolia"
                     )
                     actual_tx_hash = getattr(transfer, "transaction_hash", optimistic_tx_hash) or optimistic_tx_hash
@@ -159,7 +156,7 @@ class CryptoPaymentClient:
                 # Poll transaction confirmation
                 # Wait 5 seconds to simulate block confirmation
                 await asyncio.sleep(5)
-                
+
                 # Check status
                 logger.info(f"Background payment transaction completed successfully for session {session_id} (tx_hash={actual_tx_hash}).")
                 self._update_payment_status(session_id, 'completed', tx_hash=actual_tx_hash)
@@ -181,14 +178,14 @@ class CryptoPaymentClient:
             logger.info(f"Simulated payment success for session {session_id}")
             self._update_payment_status(session_id, 'completed', tx_hash=tx_hash)
 
-    def _update_payment_status(self, session_id: str, status: str, tx_hash: Optional[str] = None):
+    def _update_payment_status(self, session_id: str, status: str, tx_hash: str | None = None):
         """Update payment status (and optional actual on-chain tx hash) in state manager safely."""
         from ..llm.tools import get_global_store
         from ..utils.state_manager import update_payment_state
         store = get_global_store()
 
         try:
-            updates: Dict[str, Any] = {'payment_status': status}
+            updates: dict[str, Any] = {'payment_status': status}
             if tx_hash:
                 updates['crypto_tx_hash'] = tx_hash
             update_payment_state(session_id, store, updates)

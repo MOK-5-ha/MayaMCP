@@ -1,19 +1,19 @@
 """Helper functions for conversation management."""
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-def detect_order_inquiry(user_input: str) -> Dict[str, Any]:
+def detect_order_inquiry(user_input: str) -> dict[str, Any]:
     """
     Detect if the user is asking about their order or bill in conversational ways.
-    
+
     Args:
         user_input: User's input text
-        
+
     Returns:
         Dictionary with intent and confidence.
     """
@@ -74,14 +74,14 @@ def detect_order_inquiry(user_input: str) -> Dict[str, Any]:
     else:
         return {'intent': None, 'confidence': 0}
 
-def determine_next_phase(current_state: Dict, order_placed: bool) -> str:
+def determine_next_phase(current_state: dict, order_placed: bool) -> str:
     """
     Determine the next conversation phase based on current state and whether an order was placed.
-    
+
     Args:
         current_state: Current conversation state
         order_placed: Whether an order was just placed
-        
+
     Returns:
         Next conversation phase
     """
@@ -116,14 +116,14 @@ def determine_next_phase(current_state: Dict, order_placed: bool) -> str:
     # Default fallback
     return 'small_talk'
 
-def detect_speech_acts(user_input: str, conversation_context: List[str] = None) -> Dict[str, Any]:
+def detect_speech_acts(user_input: str, conversation_context: list[str] = None) -> dict[str, Any]:
     """
     Detect speech acts using Austin's framework for better intent recognition.
-    
+
     Args:
         user_input: Current user input
         conversation_context: Previous conversation messages for context
-        
+
     Returns:
         Dictionary with speech act type, intent, and confidence
     """
@@ -214,13 +214,13 @@ def detect_speech_acts(user_input: str, conversation_context: List[str] = None) 
 
     return {'intent': None, 'speech_act': None, 'confidence': 0, 'drink_context': drink_context}
 
-def extract_drink_context(conversation_history: List[str]) -> str:
+def extract_drink_context(conversation_history: list[str]) -> str:
     """
     Extract drink mentions from recent conversation history.
-    
+
     Args:
         conversation_history: List of recent conversation messages
-        
+
     Returns:
         String containing drink context or empty string
     """
@@ -246,10 +246,10 @@ def is_casual_conversation(user_input: str) -> bool:
     """
     Determine if user input is casual conversation vs order-related.
     Enhanced with speech act detection.
-    
+
     Args:
         user_input: User's input text
-        
+
     Returns:
         True if this appears to be casual conversation
     """
@@ -272,8 +272,8 @@ def is_casual_conversation(user_input: str) -> bool:
 
 
 def append_to_history(
-    history: List[Dict[str, str]], user_text: str, assistant_text: str
-) -> List[Dict[str, str]]:
+    history: list[dict[str, str]], user_text: str, assistant_text: str
+) -> list[dict[str, str]]:
     """
     Append user and assistant messages to history and return a new list.
     """
@@ -284,11 +284,11 @@ def append_to_history(
 
 
 def get_overlay_payment_data(
-    payment_state: Dict[str, Any]
-) -> Tuple[float, float, Optional[int], float]:
+    payment_state: dict[str, Any]
+) -> tuple[float, float, int | None, float]:
     """
     Get payment data formatted for tab overlay.
-    
+
     Returns:
         Tuple of (tab_total, balance, tip_percentage, tip_amount)
     """

@@ -9,7 +9,6 @@ Environment Variables:
 import logging
 import os
 import re
-from typing import Optional
 
 
 class RedactingFormatter(logging.Formatter):
@@ -34,17 +33,17 @@ class RedactingFormatter(logging.Formatter):
         return redacted_msg
 
 def setup_logging(
-    level: Optional[str] = None,
-    format_string: Optional[str] = None
+    level: str | None = None,
+    format_string: str | None = None
 ) -> logging.Logger:
     """
     Set up logging configuration for the application.
-    
+
     Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR). 
+        level: Logging level (DEBUG, INFO, WARNING, ERROR).
                Defaults to INFO, or DEBUG if DEBUG env var is True.
         format_string: Custom format string for log messages.
-        
+
     Returns:
         Configured logger instance.
     """
@@ -74,10 +73,10 @@ def setup_logging(
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger with the specified name.
-    
+
     Args:
         name: Logger name (typically __name__)
-        
+
     Returns:
         Logger instance.
     """
@@ -87,7 +86,7 @@ def get_logger(name: str) -> logging.Logger:
 def should_log_sensitive() -> bool:
     """
     Check if sensitive interaction content should be logged.
-    
+
     Returns:
         True if LOG_SENSITIVE_RESPONSES is explicitly set to 'true'.
     """

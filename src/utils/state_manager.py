@@ -4,7 +4,8 @@ import os
 import re
 import threading
 import time
-from typing import Any, Dict, List, Literal, MutableMapping, Optional, Tuple
+from collections.abc import MutableMapping
+from typing import Any, Literal
 
 from typing_extensions import TypedDict
 
@@ -33,11 +34,11 @@ class PaymentState(TypedDict):
     """Payment state schema with strict typing."""
     balance: float          # >= 0, default: 1000.00
     tab_total: float        # >= 0, default: 0.00
-    tip_percentage: Optional[Literal[10, 15, 20]]  # None when no tip selected
+    tip_percentage: Literal[10, 15, 20] | None  # None when no tip selected
     tip_amount: float       # >= 0, default: 0.00
-    crypto_tx_hash: Optional[str]  # None or Base Sepolia tx hash pattern: ^0x[a-fA-F0-9]{64}$
+    crypto_tx_hash: str | None  # None or Base Sepolia tx hash pattern: ^0x[a-fA-F0-9]{64}$
     payment_status: Literal['pending', 'processing', 'completed', 'failed']  # default: 'pending'
-    idempotency_key: Optional[str]    # None or format: {session_id}_{unix_timestamp}
+    idempotency_key: str | None    # None or format: {session_id}_{unix_timestamp}
     version: int            # >= 0, default: 0
     needs_reconciliation: bool  # default: False
 
@@ -79,17 +80,17 @@ class PaymentStateValidationError(ValueError):
     pass
 
 
-def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -> bool:
+def validate_payment_state(state: dict[str, Any], allow_partial: bool = False) -> bool:
     """
     Validate payment state against all constraints.
-    
+
     Args:
         state: Payment state dictionary to validate
         allow_partial: If True, only validate fields that are present
-        
+
     Returns:
         True if valid
-        
+
     Raises:
         PaymentStateValidationError: If validation fails
     """
@@ -186,13 +187,13 @@ def validate_payment_state(state: Dict[str, Any], allow_partial: bool = False) -
 def is_valid_status_transition(current_status: str, new_status: str) -> bool:
     """
     Check if a payment status transition is valid.
-    
+
     Status transitions: pending -> processing -> completed/failed, etc.
-    
+
     Args:
         current_status: Current payment status
         new_status: Proposed new status
-        
+
     Returns:
         True if transition is valid, False otherwise
     """
@@ -210,21 +211,21 @@ def is_valid_status_transition(current_status: str, new_status: str) -> bool:
 # Session locks for concurrency control (thread-safe access)
 # Using regular Dict (NOT WeakValueDictionary) to ensure lock instances persist
 # until explicit cleanup - prevents race conditions from premature GC
-_session_locks: Dict[str, threading.Lock] = {}
+_session_locks: dict[str, threading.Lock] = {}
 _session_locks_mutex = threading.Lock()  # Protects _session_locks dict
 
 # Track last access time for session expiry
-_session_last_access: Dict[str, float] = {}
+_session_last_access: dict[str, float] = {}
 
 def _parse_int_env(env_var: str, default: int, description: str) -> int:
     """
     Parse integer environment variable with defensive error handling.
-    
+
     Args:
         env_var: Environment variable name
         default: Default value if parsing fails
         description: Description for logging
-        
+
     Returns:
         Parsed integer value or default
     """
@@ -249,7 +250,7 @@ def _parse_int_env(env_var: str, default: int, description: str) -> int:
 
 
 # Track retry counts for cleanup failures
-_session_retry_counts: Dict[str, int] = {}
+_session_retry_counts: dict[str, int] = {}
 
 # Default session expiry time (1 hour)
 SESSION_EXPIRY_SECONDS = _parse_int_env(
@@ -261,7 +262,7 @@ MAX_SESSION_CLEANUP_RETRIES = 3
 MAX_BACKOFF = 300  # Maximum 5 minutes backoff
 
 # Background cleanup thread
-_cleanup_thread: Optional[threading.Thread] = None
+_cleanup_thread: threading.Thread | None = None
 _cleanup_stop_event = threading.Event()
 CLEANUP_INTERVAL_SECONDS = _parse_int_env(
     "MAYA_CLEANUP_INTERVAL_SECONDS", 300, "cleanup interval seconds"
@@ -271,14 +272,14 @@ CLEANUP_INTERVAL_SECONDS = _parse_int_env(
 def get_session_lock(session_id: str) -> threading.Lock:
     """
     Get or create lock for session. Thread-safe via mutex.
-    
+
     Lock instance persists until explicit cleanup via cleanup_session_lock().
     This ensures the same lock instance is always returned for a given session,
     preventing race conditions that could occur with WeakValueDictionary.
-    
+
     Args:
         session_id: Unique identifier for the user session.
-        
+
     Returns:
         threading.Lock instance for the session.
     """
@@ -293,10 +294,10 @@ def get_session_lock(session_id: str) -> threading.Lock:
 def cleanup_session_lock(session_id: str) -> None:
     """
     Remove session lock when session is invalidated.
-    
+
     MUST be called from reset_session_state() to prevent memory leaks.
     Safe to call even if lock doesn't exist.
-    
+
     Args:
         session_id: Unique identifier for user session.
     """
@@ -309,7 +310,7 @@ def cleanup_session_lock(session_id: str) -> None:
 def _cleanup_expired_sessions() -> None:
     """
     Background task to cleanup expired sessions and their resources.
-    
+
     Runs every CLEANUP_INTERVAL_SECONDS to remove sessions that haven't
     been accessed for SESSION_EXPIRY_SECONDS.
     """
@@ -404,7 +405,7 @@ def _cleanup_expired_sessions() -> None:
 def start_session_cleanup() -> None:
     """
     Start the background session cleanup thread.
-    
+
     Should be called during application initialization.
     """
     global _cleanup_thread
@@ -425,7 +426,7 @@ def start_session_cleanup() -> None:
 def stop_session_cleanup() -> None:
     """
     Stop the background session cleanup thread.
-    
+
     Should be called during application shutdown.
     """
     global _cleanup_thread
@@ -453,7 +454,7 @@ def stop_session_cleanup() -> None:
 def is_cleanup_running() -> bool:
     """
     Check if the background session cleanup thread is running.
-    
+
     Returns:
         True if cleanup thread exists and is alive, False otherwise.
     """
@@ -495,18 +496,18 @@ DEFAULT_API_KEY_STATE = {
 # =============================================================================
 # For backward compatibility with code that doesn't pass session_id and store,
 # we maintain a global store and default session ID.
-_global_store: Dict[str, Any] = {}
+_global_store: dict[str, Any] = {}
 DEFAULT_SESSION_ID = "default"
 
 
-def _get_store_and_session(session_id: Optional[str], store: Optional[MutableMapping]) -> Tuple[str, MutableMapping]:
+def _get_store_and_session(session_id: str | None, store: MutableMapping | None) -> tuple[str, MutableMapping]:
     """
     Get the store and session_id, using defaults for backward compatibility.
-    
+
     Args:
         session_id: Session ID or None for default
         store: Store or None for global store
-        
+
     Returns:
         Tuple of (session_id, store)
     """
@@ -517,7 +518,7 @@ def _get_store_and_session(session_id: Optional[str], store: Optional[MutableMap
     return session_id, store
 
 
-def _deep_copy_defaults() -> Dict[str, Any]:
+def _deep_copy_defaults() -> dict[str, Any]:
     """Create a deep copy of all default state to avoid mutation issues."""
     import copy
     return {
@@ -529,14 +530,14 @@ def _deep_copy_defaults() -> Dict[str, Any]:
     }
 
 
-def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
+def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
     """
     Retrieve session data from the store, initializing it if necessary.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping (dict or modal.Dict) to store state.
-        
+
     Returns:
         The session data dictionary.
     """
@@ -573,7 +574,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         # 3. Ensure fields exist within existing payment state
         payment = session_data['payment']
         payment_needs_update = False
-        
+
         # Migrate stripe_payment_id -> crypto_tx_hash if it exists
         if 'stripe_payment_id' in payment:
             payment.pop('stripe_payment_id')
@@ -582,7 +583,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         elif 'crypto_tx_hash' not in payment:
             payment['crypto_tx_hash'] = None
             payment_needs_update = True
-            
+
         if 'tip_percentage' not in payment:
             payment['tip_percentage'] = None
             payment_needs_update = True
@@ -599,10 +600,10 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
 
     return session_data
 
-def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, Any]) -> None:
+def _save_session_data(session_id: str, store: MutableMapping, data: dict[str, Any]) -> None:
     """
     Save session data back to the store.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to update.
@@ -621,10 +622,10 @@ def _save_session_data(session_id: str, store: MutableMapping, data: Dict[str, A
     store[session_id] = data
 
 
-def initialize_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> None:
+def initialize_state(session_id: str | None = None, store: MutableMapping | None = None) -> None:
     """
     Initialize or reset state variables for a session.
-    
+
     Args:
         session_id: Session ID to initialize (defaults to "default" for backward compatibility).
         store: Storage backend (defaults to global store for backward compatibility).
@@ -635,20 +636,20 @@ def initialize_state(session_id: Optional[str] = None, store: Optional[MutableMa
     store[session_id] = _deep_copy_defaults()
     logger.info(f"State initialized for session {session_id}")
 
-def get_conversation_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> Dict[str, Any]:
+def get_conversation_state(session_id: str | None = None, store: MutableMapping | None = None) -> dict[str, Any]:
     """Get current conversation state."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
     return data['conversation'].copy()
 
-def get_session_chat_history(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> List[Dict[str, str]]:
+def get_session_chat_history(session_id: str | None = None, store: MutableMapping | None = None) -> list[dict[str, str]]:
     """Get list of conversation turns for session."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
     conv = data.get('conversation', {})
     return list(conv.get('chat_history', []))
 
-def set_session_chat_history(session_id: Optional[str] = None, history: Optional[List[Dict[str, str]]] = None, store: Optional[MutableMapping] = None) -> None:
+def set_session_chat_history(session_id: str | None = None, history: list[dict[str, str]] | None = None, store: MutableMapping | None = None) -> None:
     """Store list of conversation turns for session."""
     if history is None:
         return
@@ -661,19 +662,19 @@ def set_session_chat_history(session_id: Optional[str] = None, history: Optional
         data['conversation']['chat_history'] = list(history)
         _save_session_data(session_id, store, data)
 
-def get_order_history(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> Dict[str, Any]:
+def get_order_history(session_id: str | None = None, store: MutableMapping | None = None) -> dict[str, Any]:
     """Get order history."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
     return data['history'].copy()
 
-def get_current_order_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> List[Dict[str, Any]]:
+def get_current_order_state(session_id: str | None = None, store: MutableMapping | None = None) -> list[dict[str, Any]]:
     """Get current order state."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
     return data['current_order']['order'].copy()
 
-def update_conversation_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None, updates: Optional[Dict[str, Any]] = None) -> None:
+def update_conversation_state(session_id: str | None = None, store: MutableMapping | None = None, updates: dict[str, Any] | None = None) -> None:
     """Update conversation state."""
     if updates is None:
         logger.warning("update_conversation_state called with updates=None")
@@ -687,7 +688,7 @@ def update_conversation_state(session_id: Optional[str] = None, store: Optional[
         _save_session_data(session_id, store, data)
     logger.debug(f"Conversation state updated for {session_id}: {updates}")
 
-def update_order_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None, action: str = "", item_data: Optional[Any] = None) -> None:
+def update_order_state(session_id: str | None = None, store: MutableMapping | None = None, action: str = "", item_data: Any | None = None) -> None:
     """Update order state based on action."""
     session_id, store = _get_store_and_session(session_id, store)
 
@@ -737,7 +738,7 @@ def update_order_state(session_id: Optional[str] = None, store: Optional[Mutable
         # Save changes
         _save_session_data(session_id, store, session_data)
 
-def reset_session_state(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> None:
+def reset_session_state(session_id: str | None = None, store: MutableMapping | None = None) -> None:
     """Reset all session state and cleanup session lock."""
     session_id, store = _get_store_and_session(session_id, store)
     # Cleanup session lock to prevent memory leaks
@@ -755,7 +756,7 @@ def reset_session_state(session_id: Optional[str] = None, store: Optional[Mutabl
     initialize_state(session_id, store)
     logger.info(f"Session state reset for {session_id}")
 
-def is_order_finished(session_id: Optional[str] = None, store: Optional[MutableMapping] = None) -> bool:
+def is_order_finished(session_id: str | None = None, store: MutableMapping | None = None) -> bool:
     """Check if current order is finished."""
     session_id, store = _get_store_and_session(session_id, store)
     data = _get_session_data(session_id, store)
@@ -768,14 +769,14 @@ def is_order_finished(session_id: Optional[str] = None, store: Optional[MutableM
 def calculate_tip(tab_total: float, percentage: int) -> float:
     """
     Calculate tip amount from tab total and percentage.
-    
+
     Args:
         tab_total: Current tab amount (drinks only, no previous tip)
         percentage: 10, 15, or 20
-        
+
     Returns:
         Tip amount rounded to 2 decimal places
-        
+
     Raises:
         ValueError: If percentage is not in {10, 15, 20}
     """
@@ -789,22 +790,22 @@ def calculate_tip(tab_total: float, percentage: int) -> float:
 def set_tip(
     session_id: str,
     store: MutableMapping,
-    percentage: Optional[int]
-) -> Tuple[float, float]:
+    percentage: int | None
+) -> tuple[float, float]:
     """
     Set tip percentage and calculate tip amount.
-    
+
     Implements toggle behavior: if the same percentage is already selected,
     calling set_tip with that percentage will remove the tip.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
         percentage: 10, 15, 20 to set tip, or None to remove tip
-        
+
     Returns:
         Tuple of (tip_amount, total) where total = tab_total + tip_amount
-        
+
     Raises:
         ValueError: If percentage is not None and not in {10, 15, 20}
     """
@@ -845,11 +846,11 @@ def set_tip(
 def get_payment_total(session_id: str, store: MutableMapping) -> float:
     """
     Get total payment amount including tab and tip.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
-        
+
     Returns:
         Total amount (tab_total + tip_amount)
     """
@@ -857,14 +858,14 @@ def get_payment_total(session_id: str, store: MutableMapping) -> float:
     return payment['tab_total'] + payment['tip_amount']
 
 
-def get_payment_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
+def get_payment_state(session_id: str, store: MutableMapping) -> dict[str, Any]:
     """
     Get payment state for session.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
-        
+
     Returns:
         Copy of the payment state dictionary.
     """
@@ -873,15 +874,15 @@ def get_payment_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
 
 
 def update_payment_state(session_id: str, store: MutableMapping,
-                         updates: Dict[str, Any]) -> None:
+                         updates: dict[str, Any]) -> None:
     """
     Update payment state with validation.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
         updates: Dictionary of fields to update.
-        
+
     Raises:
         PaymentStateValidationError: If updates would result in invalid state.
     """
@@ -923,28 +924,28 @@ def atomic_order_update(
     session_id: str,
     store: MutableMapping,
     item_price: float,
-    expected_version: Optional[int] = None
-) -> Tuple[bool, str, float]:
+    expected_version: int | None = None
+) -> tuple[bool, str, float]:
     """
     Atomically check balance, deduct, and add to tab.
-    
+
     This function acquires the session lock, checks if the user has sufficient
     balance, and if so, atomically deducts from balance and adds to tab.
     Uses optimistic locking with version checks.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
         item_price: Price of the item to add.
         expected_version: Expected version for optimistic locking. If None,
                          reads current version (for first-time callers).
-    
+
     Returns:
         Tuple of (success, error_code_or_empty, new_balance):
         - On success: (True, "", new_balance)
         - On insufficient funds: (False, "INSUFFICIENT_FUNDS", current_balance)
         - On version mismatch: (False, "CONCURRENT_MODIFICATION", current_balance)
-    
+
     Note:
         On CONCURRENT_MODIFICATION, the client should ask the user to retry.
         No automatic retry is performed.
@@ -996,11 +997,11 @@ def atomic_order_update(
 def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
     """
     Atomically reset tab, tip, and mark as paid.
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
-        
+
     Returns:
         True if successful, False if an exception occurs.
     """
@@ -1034,9 +1035,9 @@ def atomic_payment_complete(session_id: str, store: MutableMapping) -> bool:
 # API Key State Functions (BYOK)
 # =============================================================================
 
-def get_api_key_state(session_id: str, store: MutableMapping) -> Dict[str, Any]:
+def get_api_key_state(session_id: str, store: MutableMapping) -> dict[str, Any]:
     """Get API key state for session (decrypted).
-    
+
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
@@ -1075,7 +1076,7 @@ def set_api_keys(
     session_id: str,
     store: MutableMapping,
     gemini_key: str,
-    cartesia_key: Optional[str] = None,
+    cartesia_key: str | None = None,
 ) -> None:
     """Store user-provided API keys for a session (encrypted).
 

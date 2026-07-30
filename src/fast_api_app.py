@@ -145,6 +145,12 @@ except Exception as gradio_err:
 
 # Main execution
 if __name__ == "__main__":
+    import os
+
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=os.getenv("HOST", "0.0.0.0"),  # nosec B104 - intentional; overridable via HOST env var
+        port=int(os.getenv("PORT", "8000")),
+    )

@@ -1,7 +1,6 @@
 """UI component setup and management."""
 
 import io
-from typing import Optional, Tuple
 
 import gradio as gr
 import requests
@@ -13,16 +12,16 @@ logger = get_logger(__name__)
 
 
 def setup_avatar(
-    avatar_url: Optional[str] = None,
+    avatar_url: str | None = None,
     save_path: str = "assets/bartender_avatar.jpg"
 ) -> str:
     """
     Download and setup the bartender avatar image.
-    
+
     Args:
         avatar_url: URL to download avatar from. Uses default if None.
         save_path: Path to save the avatar image
-        
+
     Returns:
         Path to the saved avatar image
     """
@@ -32,7 +31,7 @@ def setup_avatar(
 
     try:
         # Download avatar
-        response = requests.get(avatar_url)
+        response = requests.get(avatar_url, timeout=10)
         if response.status_code == 200:
             avatar_bytes = response.content
             avatar_image = Image.open(io.BytesIO(avatar_bytes))
@@ -60,12 +59,12 @@ def setup_avatar(
 
 
 def create_streaming_components(
-) -> Tuple[gr.Chatbot, gr.Audio, gr.Textbox, gr.Textbox, gr.Audio]:
+) -> tuple[gr.Chatbot, gr.Audio, gr.Textbox, gr.Textbox, gr.Audio]:
     """
     Create Gradio components for streaming interface.
-    
+
     Returns:
-        Tuple of (chatbot_display, agent_audio_output, msg_input, 
+        Tuple of (chatbot_display, agent_audio_output, msg_input,
                   streaming_text_display, streaming_audio_player)
     """
     # Main chatbot for conversation history
@@ -126,7 +125,7 @@ def create_streaming_components(
 def create_streaming_toggle():
     """
     Create toggle for streaming vs traditional mode.
-    
+
     Returns:
         gr.Checkbox: Streaming mode toggle
     """
