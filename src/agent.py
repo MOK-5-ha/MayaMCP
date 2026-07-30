@@ -18,8 +18,11 @@ from zoneinfo import ZoneInfo
 import os
 
 if os.getenv("INTEGRATION_TEST") == "TRUE":
-    # Set dummy keys
-    os.environ["GEMINI_API_KEY"] = "dummy-key"
+    # Set dummy GCP project and Vertex AI settings
+    os.environ["GCP_PROJECT"] = "dummy-gcp-project"
+    os.environ["GCP_LOCATION"] = "global"
+    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+    os.environ["GEMINI_TIER"] = "paid"
     os.environ["CARTESIA_API_KEY"] = "dummy-key"
     
     try:

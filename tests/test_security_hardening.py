@@ -5,10 +5,10 @@ Test script for security hardening features.
 
 import time
 
+import src.utils.state_manager as state_manager
 from src.security.scanner import scan_input, scan_output
 from src.utils.rate_limiter import check_rate_limits, get_rate_limiter
 from src.utils.state_manager import start_session_cleanup, stop_session_cleanup
-import src.utils.state_manager as state_manager
 
 
 def test_rate_limiting():
@@ -20,12 +20,12 @@ def test_rate_limiting():
 
     # Validate rate limiter configuration
     assert limiter is not None, "Rate limiter should be initialized"
-    
+
     # Backup existing limits and temporarily set to small values for fast test run
     old_session_limit = limiter.session_limit
     old_app_limit = limiter.app_limit
     old_burst_limit = limiter.burst_limit
-    
+
     limiter.session_limit = 5
     limiter.app_limit = 10
     limiter.burst_limit = 3
@@ -49,7 +49,7 @@ def test_rate_limiting():
 
         # Test burst limit - run up to burst_limit + 1 to ensure denial happens
         expected_max_requests = limiter.burst_limit + 1
-        
+
         for i in range(expected_max_requests):
             allowed, reason = check_rate_limits(session_id)
             total_requests += 1
@@ -64,7 +64,7 @@ def test_rate_limiting():
         assert not allowed, (
             "Rate limiting should deny a request after burst limit"
         )
-        
+
         # Assert that total_requests equals expected (intended behavior)
         assert total_requests == expected_max_requests, (
             f"Expected {expected_max_requests} total requests before denial, "
@@ -87,7 +87,7 @@ def test_session_cleanup():
 
     try:
         # Poll for cleanup thread to be alive with timeout
-        
+
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval
         start_time = time.time()
@@ -102,12 +102,12 @@ def test_session_cleanup():
             raise AssertionError(
                 "Cleanup thread failed to start within timeout"
             )
-            
+
     finally:
         # Stop cleanup
         stop_session_cleanup()
         print("Session cleanup stopped")
-        
+
         # Verify thread stopped with timeout
         timeout = 1.0  # 1 second timeout
         poll_interval = 0.01  # 10ms polling interval

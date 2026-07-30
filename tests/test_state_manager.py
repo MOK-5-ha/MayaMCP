@@ -3,33 +3,21 @@
 Unit tests for src.utils.state_manager module.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-import sys
-import os
+from unittest.mock import patch
 
+import pytest
 
 from src.utils.state_manager import (
-    initialize_state,
+    atomic_payment_complete,
+    cleanup_session_lock,
     get_conversation_state,
-    get_order_history,
     get_current_order_state,
+    get_order_history,
+    initialize_state,
+    is_order_finished,
+    reset_session_state,
     update_conversation_state,
     update_order_state,
-    reset_session_state,
-    is_order_finished,
-    get_payment_state,
-    update_payment_state,
-    atomic_order_update,
-    atomic_payment_complete,
-    validate_payment_state,
-    is_valid_status_transition,
-    get_session_lock,
-    cleanup_session_lock,
-    PaymentStateValidationError,
-    DEFAULT_PAYMENT_STATE,
-    INSUFFICIENT_FUNDS,
-    CONCURRENT_MODIFICATION,
 )
 
 
@@ -279,7 +267,7 @@ class TestStateManager:
         """Test that appropriate logging calls are made."""
         store = {}
         session_id = "log_test_session"
-        
+
         # Test initialize_state logging
         initialize_state(session_id, store)
         # Check that info was called and message contains expected content
@@ -338,6 +326,6 @@ class TestStateManager:
         # Mock _get_session_data to raise an exception
         with patch('src.utils.state_manager._get_session_data', side_effect=Exception("Database error")):
             result = atomic_payment_complete(self.session_id, self.store)
-            
+
             assert result is False
 

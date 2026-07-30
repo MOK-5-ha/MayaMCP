@@ -1,10 +1,8 @@
 """Embedding generation for RAG system."""
 
-
 from google.genai import types
 from tenacity import RetryCallState, retry, stop_after_attempt, wait_exponential
 
-from ..config.api_keys import get_google_api_key
 from ..config.logging_config import get_logger
 from ..llm.client import get_genai_client
 from ..utils.errors import classify_and_log_genai_error
@@ -35,18 +33,13 @@ def _retry_return_none(_retry_state: RetryCallState):
 logger = get_logger(__name__)
 
 
-import os
-
-
 def _get_embed_client():
-    """Return a genai Client for embedding calls, supporting Vertex AI mode or API key mode."""
-    api_key = get_google_api_key()
-    project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
-    project = project.strip() if project else None
-    if not api_key and not project:
-        logger.error("Neither GCP_PROJECT/GOOGLE_CLOUD_PROJECT nor GEMINI_API_KEY set; cannot generate embeddings.")
+    """Return a genai Client for embedding calls in Vertex AI mode, or None if unconfigured."""
+    try:
+        return get_genai_client()
+    except Exception as e:
+        logger.error(f"GCP Vertex AI client unconfigured; cannot generate embeddings: {e}")
         return None
-    return get_genai_client(api_key)
 
 
 def _parse_embedding_values(emb) -> list[float] | None:

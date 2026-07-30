@@ -1,8 +1,14 @@
 """Unit tests for UI handlers."""
 
-from unittest.mock import Mock, patch, MagicMock
-from src.ui.handlers import handle_gradio_input, clear_chat_state, handle_gradio_input_stream, handle_gradio_streaming_input
+from unittest.mock import Mock, patch
+
 from src.llm.session_registry import SessionLimitExceededError
+from src.ui.handlers import (
+    clear_chat_state,
+    handle_gradio_input,
+    handle_gradio_input_stream,
+    handle_gradio_streaming_input,
+)
 
 
 def _make_request(session_id="test_session"):
@@ -412,7 +418,7 @@ class TestHandleGradioStreamingInput:
         """Test handle_gradio_streaming_input correctly routes to streaming handler."""
         mock_handle_stream.return_value = ["event"]
         req = _make_request()
-        
+
         result = handle_gradio_streaming_input(
             user_input="Hi",
             session_history_state=[],
@@ -424,7 +430,7 @@ class TestHandleGradioStreamingInput:
             request=req,
             app_state={}
         )
-        
+
         mock_handle_stream.assert_called_once_with(
             "Hi", [], 0.0, 1000.0, None, 0.0, req, None, None, None, {}, 'assets/bartender_avatar.jpg'
         )
@@ -438,10 +444,10 @@ class TestHandleGradioStreamingInput:
     ):
         """Test streaming handler when session limit is exceeded."""
         mock_process_order_stream.side_effect = SessionLimitExceededError("Limit reached")
-        
+
         test_state = {}
         _seed_session_keys(test_state)
-        
+
         generator = handle_gradio_input_stream(
             user_input="Hi",
             session_history_state=[],
@@ -452,11 +458,11 @@ class TestHandleGradioStreamingInput:
             request=_make_request(),
             app_state=test_state
         )
-        
+
         events = list(generator)
         assert len(events) == 1
         event = events[0]
-        
+
         assert event['type'] == 'error'
         assert "at capacity" in event['content']
         # handler should append the echoed user turn and the error turn

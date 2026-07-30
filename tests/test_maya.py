@@ -3,22 +3,22 @@
 Test script to verify Maya's functionality. Used by Claude.
 """
 
-import sys
 import os
-import pytest
-from pathlib import Path
+import sys
 from contextlib import contextmanager
-from typing import Optional, Tuple, Any, Generator
+from pathlib import Path
+from typing import Generator
+
+import pytest
 
 # Compute absolute path to src directory based on this test file's location
 test_file_dir = Path(__file__).resolve().parent
 
 from src.config import get_api_keys, setup_logging
-from src.llm import get_all_tools
-
-from src.voice import initialize_cartesia_client
 from src.conversation.processor import process_order
+from src.llm import get_all_tools
 from src.utils.state_manager import initialize_state
+from src.voice import initialize_cartesia_client
 
 
 class MayaTestComponents:

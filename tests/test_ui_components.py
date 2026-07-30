@@ -1,8 +1,9 @@
 """Unit tests for UI components."""
 
 from unittest.mock import Mock, patch
-import io
+
 import requests
+
 from src.ui.components import setup_avatar
 
 

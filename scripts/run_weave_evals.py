@@ -7,8 +7,12 @@ from dotenv import load_dotenv
 
 # Load env vars
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GCP_PROJECT = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "dummy-gcp-project"
+GCP_LOCATION = os.getenv("GCP_LOCATION", "global")
 WANDB_API_KEY = os.getenv("WANDB_API_KEY")
+
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+os.environ["GEMINI_TIER"] = "paid"
 
 # Disable rate limits during evals
 os.environ["MAYA_SESSION_RATE_LIMIT"] = "9999"
@@ -30,16 +34,7 @@ elif os.getenv("WEAVE_FORCE") == "1":
 
 if use_weave:
     import weave
-    # Check Gemini Tier to determine parallelism and rate limits
-    is_paid_tier = os.getenv("GEMINI_TIER", "free").lower() == "paid"
-
-    if not is_paid_tier:
-        # Free tier: 15 RPM limits, force sequential evaluation
-        os.environ["WEAVE_PARALLELISM"] = "1"
-    else:
-        # Paid tier: allows high concurrency
-        os.environ["WEAVE_PARALLELISM"] = "10"
-
+    os.environ["WEAVE_PARALLELISM"] = "10"
     weave.init("mayamcp-evals")
     ModelClass = weave.Model
     op_decorator = weave.op
@@ -193,7 +188,7 @@ class MayaWeaveModel(ModelClass):
     
     @op_decorator()
     def predict(self, turns: list[str]) -> dict:
-        llm = get_genai_client(api_key=GEMINI_API_KEY or "dummy-key")
+        llm = get_genai_client(gcp_project=GCP_PROJECT, gcp_location=GCP_LOCATION)
         history = []
         session_id = f"weave_session_{int(time.time())}"
         app_state = {}
@@ -201,18 +196,13 @@ class MayaWeaveModel(ModelClass):
         responses = []
         final_order = []
         
-        is_paid_tier = os.getenv("GEMINI_TIER", "free").lower() == "paid"
         for turn in turns:
-            # Respect rate limits between turns for free tier
-            if not is_paid_tier:
-                time.sleep(1)
-            
             response, _, history, order, _, _ = process_order(
                 turn,
                 history,
                 llm,
                 None,
-                GEMINI_API_KEY or "dummy-key",
+                None,
                 session_id,
                 app_state
             )
@@ -245,7 +235,7 @@ def judge_scorer(turns: list[str], expected_logic: str, output: dict) -> dict:
         }
 
     from google import genai
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(vertexai=True, project=GCP_PROJECT, location=GCP_LOCATION)
     model_version = os.getenv("GEMINI_MODEL_VERSION", "gemini-2.5-flash")
     
     judge_prompt = f"""

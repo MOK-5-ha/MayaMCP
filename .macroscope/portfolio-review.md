@@ -2,6 +2,9 @@
 include:
   - "src/**/*"
   - "tests/**/*"
+  - "scripts/**/*"
+  - "burst_test.py"
+  - "verify_environment.py"
 ---
 # MayaMCP Portfolio Project Review Agent
 
@@ -17,10 +20,9 @@ When reviewing code, pull requests, and commits:
 ## MayaMCP Architectural Rules (Enforce These)
 While being lenient on enterprise dogma, you **must** strictly enforce these specific project rules derived from the steering docs (AGENTS.md):
 
-1. **Unified GenAI Routing:** All LLM calls must go through `src/llm/client.py`. Flag any code that attempts to call the Google SDK directly in other modules.
-2. **Dual GenAI Authentication & BYOK:** 
-   - Supports **GCP Vertex AI Mode** (when `GCP_PROJECT` or `GOOGLE_CLOUD_PROJECT` is set, leveraging GCP Billing credits at 300+ RPM paid tier) and **Google AI Studio Mode** (via `GEMINI_API_KEY` or user BYOK session key).
-   - LLM/TTS clients are lazily created via `src/llm/session_registry.py`.
+1. **Unified GenAI Routing & 100% GCP Vertex AI Mode:** All LLM calls must go through `src/llm/client.py` and run strictly in GCP Vertex AI Mode (`vertexai=True`, `GCP_PROJECT` / `GOOGLE_CLOUD_PROJECT`, `GEMINI_TIER=paid`). Flag any code introducing Google AI Studio keys (`GEMINI_API_KEY`, `LLM_API_KEY`) or calling the SDK directly outside `src/llm/client.py`.
+2. **Vertex AI Sessions & Fallbacks:** 
+   - LLM/TTS clients are lazily created via `src/llm/session_registry.py` in Vertex AI mode using ADC.
    - Ensure the graceful fallback chain remains intact: `Memvid → FAISS → no-RAG`, `Cartesia → text-only`, `Coinbase CDP → mock crypto payments`.
 3. **Thread-Safe Payments:** Payment state requires thread-safe, per-session locking with atomic updates. Flag any modifications to payment state that fail to acquire the session lock (see `src/utils/state_manager.py`).
 4. **Security Scanning:** Ensure inputs are checked for prompt injection/toxicity, and outputs are scanned before returning to the user (`src/security/`).

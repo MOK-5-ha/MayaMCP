@@ -4,11 +4,9 @@ Simplified unit tests for src.memvid.utils module.
 Focus on functions that can be reliably tested.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-import json
-import base64
-import gzip
 
 from src.memvid.utils import chunk_text
 
@@ -117,7 +115,7 @@ class TestChunkText:
     def test_chunk_text_overlap_too_large(self):
         """Test chunk_text raises ValueError when overlap >= chunk_size."""
         text = "Some text that doesn't matter much."
-        
+
         # Test overlap == chunk_size
         with pytest.raises(ValueError, match="Overlap must be smaller than chunk size"):
             chunk_text(text, chunk_size=50, overlap=50)
@@ -167,8 +165,9 @@ class TestDependencyRelatedFunctions:
     @patch('src.memvid.utils.QR_AVAILABLE', False)
     def test_functions_handle_missing_dependencies_gracefully(self):
         """Test that functions handle missing dependencies gracefully."""
-        from src.memvid.utils import encode_to_qr, decode_qr, qr_to_frame, extract_frame
         import numpy as np
+
+        from src.memvid.utils import decode_qr, extract_frame, qr_to_frame
 
         # All should return None when dependencies are missing
         assert decode_qr(np.zeros((10, 10), dtype=np.uint8)) is None

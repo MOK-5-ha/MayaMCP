@@ -3,15 +3,15 @@
 Unit tests for src.voice.tts module.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, Mock
-from tenacity import RetryError, stop_after_attempt
 
 from src.voice.tts import (
+    CARTESIA_RETRYABLE_EXCEPTIONS,
     clean_text_for_tts,
-    initialize_cartesia_client,
     get_voice_audio,
-    CARTESIA_RETRYABLE_EXCEPTIONS
+    initialize_cartesia_client,
 )
 
 

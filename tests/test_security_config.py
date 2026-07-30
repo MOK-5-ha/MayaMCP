@@ -1,6 +1,8 @@
-import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
+
 from src.security.config import ScanConfig
+
 
 @given(
     st.booleans(),
@@ -19,8 +21,8 @@ def test_config_roundway_consistency(pi_enabled, pi_threshold, tox_enabled, tox_
         toxicity_enabled=tox_enabled,
         toxicity_threshold=tox_threshold
     )
-    
+
     serialized = config.to_dict()
     deserialized = ScanConfig.from_dict(serialized)
-    
+
     assert deserialized == config

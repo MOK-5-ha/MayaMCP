@@ -9,10 +9,10 @@ import os
 import sys
 from functools import partial
 
-from config import (
-    get_api_keys,
-    setup_logging,
+from config.api_keys import (
+    configure_provider_env,
 )
+from config.logging_config import setup_logging
 from config.model_config import get_model_config, is_valid_gemini_model
 from llm import get_all_tools
 from rag import initialize_memvid_store
@@ -32,17 +32,18 @@ def main():
     """Main application entry point."""
     # Setup logging
     logger = setup_logging()
-    logger.info("Starting MayaMCP - AI Bartending Agent (BYOK mode)")
+    logger.info("Starting MayaMCP - AI Bartending Agent (GCP Vertex AI Mode - Paid Tier)")
 
     try:
-        # Load API keys (optional now -- used only for RAG initialisation)
-        api_keys = get_api_keys()
-        google_api_key = api_keys.get("google_api_key")
+        # Configure and validate GCP Vertex AI Mode environment
+        provider_cfg = configure_provider_env()
+        logger.info(
+            "Initialized GCP Vertex AI Mode: project=%s, location=%s, tier=paid",
+            provider_cfg["gcp_project"],
+            provider_cfg["gcp_location"],
+        )
 
-        if google_api_key:
-            logger.info("Found GEMINI_API_KEY in environment (will use for RAG)")
-        else:
-            logger.info("No GEMINI_API_KEY in environment; RAG will use session keys or be skipped")
+
 
         # Proactive model validation (warning-only)
         model_cfg = get_model_config()

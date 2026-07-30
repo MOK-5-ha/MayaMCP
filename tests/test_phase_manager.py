@@ -3,15 +3,14 @@
 Unit tests for src.conversation.phase_manager module.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-import sys
-import os
-
-
+from unittest.mock import patch
 
 from src.conversation.phase_manager import ConversationPhaseManager
-from src.utils.state_manager import initialize_state, update_conversation_state, cleanup_session_lock
+from src.utils.state_manager import (
+    cleanup_session_lock,
+    initialize_state,
+    update_conversation_state,
+)
 
 
 class TestConversationPhaseManager:
@@ -55,7 +54,7 @@ class TestConversationPhaseManager:
         from src.utils.state_manager import get_conversation_state
         state = get_conversation_state(self.session_id, self.store)
         assert state['turn_count'] == 1
-        
+
         self.manager.increment_turn()
         state = get_conversation_state(self.session_id, self.store)
         assert state['turn_count'] == 2
@@ -80,9 +79,9 @@ class TestConversationPhaseManager:
         """Test handle_order_placed updates state correctly."""
         # Set up some turn count
         update_conversation_state(self.session_id, self.store, {'turn_count': 5, 'small_talk_count': 3})
-        
+
         self.manager.handle_order_placed()
-        
+
         from src.utils.state_manager import get_conversation_state
         state = get_conversation_state(self.session_id, self.store)
         assert state['last_order_time'] == 5
@@ -99,7 +98,7 @@ class TestConversationPhaseManager:
         """Test update_phase with order placement."""
         update_conversation_state(self.session_id, self.store, {'turn_count': 5})
         new_phase = self.manager.update_phase(order_placed=True)
-        
+
         from src.utils.state_manager import get_conversation_state
         state = get_conversation_state(self.session_id, self.store)
         # last_order_time should be updated
@@ -127,9 +126,9 @@ class TestConversationPhaseManager:
             'small_talk_count': 5,
             'last_order_time': 8
         })
-        
+
         self.manager.reset_phase()
-        
+
         from src.utils.state_manager import get_conversation_state
         state = get_conversation_state(self.session_id, self.store)
         assert state['phase'] == 'greeting'
@@ -154,17 +153,17 @@ class TestConversationPhaseManager:
         """Test a complete conversation workflow."""
         # Start conversation
         assert self.manager.get_current_phase() == 'greeting'
-        
+
         # Increment turns
         self.manager.increment_turn()
         self.manager.increment_turn()
-        
+
         # Update phase
         self.manager.update_phase()
-        
+
         # Place an order
         self.manager.update_phase(order_placed=True)
-        
+
         # Reset
         self.manager.reset_phase()
         assert self.manager.get_current_phase() == 'greeting'
@@ -174,11 +173,11 @@ class TestConversationPhaseManager:
         # Multiple increments
         for _ in range(100):
             self.manager.increment_turn()
-        
+
         from src.utils.state_manager import get_conversation_state
         state = get_conversation_state(self.session_id, self.store)
         assert state['turn_count'] == 100
-        
+
         # Reset and verify
         self.manager.reset_phase()
         state = get_conversation_state(self.session_id, self.store)
@@ -195,7 +194,7 @@ class TestConversationPhaseManager:
             "   ",
             "12345"
         ]
-        
+
         for input_text in test_inputs:
             result = self.manager.should_use_rag(input_text)
             assert isinstance(result, bool), f"should_use_rag('{input_text}') returned {type(result)}"
@@ -206,10 +205,10 @@ class TestConversationPhaseManager:
         session_id2 = "test_session_2"
         initialize_state(session_id2, store2)
         manager2 = ConversationPhaseManager(session_id2, store2)
-        
+
         # Modify first manager's state
         update_conversation_state(self.session_id, self.store, {'phase': 'order_taking', 'turn_count': 5})
-        
+
         # Second manager should still have initial state
         assert manager2.get_current_phase() == 'greeting'
         from src.utils.state_manager import get_conversation_state
