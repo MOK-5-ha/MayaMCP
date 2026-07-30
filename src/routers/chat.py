@@ -14,7 +14,7 @@ from ..llm.session_registry import (
 )
 from ..schemas.chat import ChatRequest, ChatResponse
 from ..utils.errors import is_quota_error
-from ..utils.helpers import get_overlay_payment_data
+from ..utils.helpers import append_to_history, get_overlay_payment_data
 from ..utils.state_manager import (
     get_api_key_state,
     get_current_order_state,
@@ -54,12 +54,12 @@ def chat_endpoint(
     gemini_key = api_key_state["gemini_key"]
     cartesia_key = api_key_state.get("cartesia_key")
 
-    llm = get_session_llm(session_id, gemini_key)
-    cartesia_client = get_session_tts(session_id, cartesia_key)
-
     current_history = get_session_chat_history(session_id, store)
 
     try:
+        llm = get_session_llm(session_id, gemini_key)
+        cartesia_client = get_session_tts(session_id, cartesia_key)
+
         response_text, updated_history, _, updated_order, _ = process_order(
             user_input_text=chat_req.user_input,
             current_session_history=current_history,
@@ -128,11 +128,12 @@ async def chat_stream_endpoint(
     api_key_state = get_api_key_state(session_id, store)
     gemini_key = api_key_state["gemini_key"]
 
-    llm = get_session_llm(session_id, gemini_key)
     current_history = get_session_chat_history(session_id, store)
     
     async def sse_generator() -> AsyncGenerator[str, None]:
         try:
+            llm = get_session_llm(session_id, gemini_key)
+
             stream = process_order_stream(
                 user_input_text=message,
                 current_session_history=current_history,
@@ -143,9 +144,15 @@ async def chat_stream_endpoint(
                 app_state=store,
             )
             for event in stream:
-                if event.get("type") == "complete" and "history" in event:
-                    set_session_chat_history(session_id, event["history"], store)
+                if event.get("type") == "complete":
+                    final_text = event.get("content") or event.get("full_response") or ""
+                    if final_text:
+                        updated_hist = append_to_history(current_history, message, final_text)
+                        set_session_chat_history(session_id, updated_hist, store)
                 yield f"data: {json.dumps(event)}\n\n"
+        except SessionLimitExceededError as limit_err:
+            error_event = {"type": "error", "content": f"Bar capacity reached: {limit_err}"}
+            yield f"data: {json.dumps(error_event)}\n\n"
         except Exception as err:
             error_event = {"type": "error", "content": str(err)}
             yield f"data: {json.dumps(error_event)}\n\n"

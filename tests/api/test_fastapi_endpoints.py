@@ -128,9 +128,37 @@ def test_payments_negative_tip_amount_rejected(client):
     assert response.status_code == 422
 
 
+def test_payments_both_tip_percentage_and_amount_rejected(client):
+    payload = {"tip_percentage": 20, "tip_amount": 5.0}
+    response = client.post(
+        "/api/v1/payments/tip",
+        json=payload,
+        headers={"X-Session-ID": "test-session-123"}
+    )
+    assert response.status_code == 400
+    assert "Provide either tip_percentage or tip_amount" in response.json()["detail"]
+
+
 def test_add_to_order_negative_quantity_rejected():
     from src.llm.tools import add_to_order_with_balance
     result = add_to_order_with_balance(item_name="Martini", quantity=-1)
     assert result["status"] == "error"
     assert result["error"] == "INVALID_QUANTITY"
+
+
+@patch("src.routers.chat.get_session_llm")
+@patch("src.routers.chat.has_valid_keys", return_value=True)
+@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key"})
+def test_chat_session_limit_exceeded_returns_429(mock_keys_state, mock_has_keys, mock_llm, client):
+    from src.llm.session_registry import SessionLimitExceededError
+    mock_llm.side_effect = SessionLimitExceededError("Bar capacity reached")
+    
+    payload = {"user_input": "whiskey"}
+    response = client.post(
+        "/api/v1/chat",
+        json=payload,
+        headers={"X-Session-ID": "valid-session"}
+    )
+    assert response.status_code == 429
+    assert "Bar capacity reached" in response.json()["detail"]
 

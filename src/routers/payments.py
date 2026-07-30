@@ -43,6 +43,12 @@ def add_or_update_tip(
     session_id = _resolve_session_id(x_session_id)
     store = get_session_store(request)
     
+    if tip_req.tip_percentage is not None and tip_req.tip_amount is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either tip_percentage or tip_amount, not both."
+        )
+
     if tip_req.tip_percentage is not None and tip_req.tip_percentage not in {10, 15, 20}:
         raise HTTPException(status_code=400, detail="Tip percentage must be 10, 15, or 20")
 
