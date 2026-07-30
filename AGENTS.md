@@ -10,11 +10,13 @@ src/
 ├── memvid/          # Memvid RAG implementation
 ├── payments/        # Coinbase CDP crypto payment client and logic
 ├── rag/             # RAG pipeline (embeddings, retrieval, vector store)
+├── routers/         # FastAPI REST & SSE v1 API routers (chat, payments, session)
+├── schemas/         # Pydantic v2 data transfer schemas
 ├── security/        # Input/output scanning, encryption, scan config
 ├── ui/              # Gradio components, handlers, tab overlay, BYOK modal
 ├── utils/           # Errors, helpers, state management
 └── voice/           # Cartesia TTS integration
-tests/               # pytest suite (unit, integration, property-based)
+tests/               # pytest suite (unit, integration, property-based, API)
 assets/              # Static files (avatar, media)
 deploy.py            # Modal Labs deployment
 run_maya.sh          # Dev runner script
@@ -106,6 +108,10 @@ Optional:
 - **Optimistic Payment Status Transitions**: In zero-latency optimistic payment flows, `completed → failed` transitions MUST be allowed in `VALID_STATUS_TRANSITIONS` so async background processing tasks can record failures without raising validation exceptions.
 - **Deterministic Payment Failure Testing**: Order amounts of `$99.99` trigger simulated background transaction failures in `CryptoPaymentClient._simulate_payment_lifecycle` for testing "register malfunction" apology flows in BDD and Weave evaluations.
 - **Async Background Task Dispatch**: When dispatching background tasks from synchronous tool functions, attempt `asyncio.get_running_loop().create_task()` first. If no event loop is active, spawn a daemon thread (`threading.Thread(daemon=True)`) running `asyncio.run()`.
+- **FastAPI Distributed Session Store**: In FastAPI routers, always use `get_session_store(request)` to read `request.app.state.session_store` dynamically (falling back to local `_SESSION_STORE`), ensuring session and payment state are shared across multi-container Modal deployments (`max_containers > 1`).
+- **Async Event Loop Unblocking for SSE**: In `async def` SSE streaming endpoints, never iterate synchronous blocking generators directly with a `for` loop. Offload iteration using `await asyncio.to_thread(_fetch_next_stream_event, stream)` to prevent blocking FastAPI's asyncio event loop thread.
+- **EventSource Session Resolution**: Browser `EventSource` APIs cannot set custom request headers or inspect response headers. SSE streaming endpoints MUST support `session_id` via URL query parameters (`session_id=...`) and yield an initial `{"type": "session", "session_id": "..."}` SSE event upon connection.
+- **Lock Ordering & Deadlock Prevention**: Never hold `_session_locks_mutex` while acquiring a per-session `RLock`. Background cleanup routines must snapshot expired session IDs under mutex lock, release `_session_locks_mutex`, acquire `session_lock`, and re-check `_session_last_access` under `_session_locks_mutex` before evicting session resources.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`

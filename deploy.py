@@ -252,8 +252,17 @@ def serve_maya():
         yield
         shutdown_cleanup_thread()
 
-    web_app = FastAPI(lifespan=app_lifespan)
+    web_app = FastAPI(
+        title="MayaMCP Backend API",
+        description="FastAPI backend for MayaMCP AI Bartender",
+        lifespan=app_lifespan
+    )
+    web_app.state.session_store = state_store
 
+    from routers import chat_router, payments_router, session_router
+    web_app.include_router(chat_router, prefix="/api/v1")
+    web_app.include_router(payments_router, prefix="/api/v1")
+    web_app.include_router(session_router, prefix="/api/v1")
 
     @web_app.get("/healthz")
     def healthz():
@@ -293,7 +302,7 @@ def serve_maya():
     return mount_gradio_app(
         app=web_app,
         blocks=interface,
-        path="/"
+        path="/ui"
     )
 
 @app.local_entrypoint()

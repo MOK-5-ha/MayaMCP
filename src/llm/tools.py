@@ -113,9 +113,15 @@ class PaymentError(Enum):
     # INVALID_TIP_PERCENTAGE: tip percentage not in {10, 15, 20}
     INVALID_TIP_PERCENTAGE = "INVALID_TIP_PERCENTAGE"
 
+    # INVALID_QUANTITY: item quantity less than 1
+    INVALID_QUANTITY = "INVALID_QUANTITY"
+
 
 # Human-readable message templates for each error code
 PAYMENT_ERROR_MESSAGES: dict[PaymentError, str] = {
+    PaymentError.INVALID_QUANTITY: (
+        "Quantity must be at least 1."
+    ),
     PaymentError.INSUFFICIENT_FUNDS: (
         "Insufficient funds: your balance is ${balance:.2f} "
         "but the item costs ${price:.2f}."
@@ -272,6 +278,10 @@ def add_to_order_with_balance(
     """
     if modifiers is None:
         modifiers = []
+
+    if quantity < 1:
+        logger.warning(f"add_to_order_with_balance called with invalid quantity {quantity}")
+        return create_tool_error(PaymentError.INVALID_QUANTITY)
 
     # Get session context
     session_id = get_current_session()
