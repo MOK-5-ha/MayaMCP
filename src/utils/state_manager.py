@@ -335,6 +335,12 @@ def _cleanup_expired_sessions() -> None:
                         acquired = True
 
                     with _session_locks_mutex:
+                        current_last_access = _session_last_access.get(session_id)
+                        # Re-verify session expiration before proceeding with eviction
+                        if current_last_access is not None and (time.time() - current_last_access <= SESSION_EXPIRY_SECONDS):
+                            logger.info(f"Skipping cleanup for session {session_id} - accessed during lock acquisition")
+                            continue
+
                         _session_locks.pop(session_id, None)
                         _session_last_access.pop(session_id, None)
 
