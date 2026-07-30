@@ -5,7 +5,12 @@ from typing import MutableMapping, Optional
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from ..schemas.session import KeySubmissionRequest, SessionStatusResponse
-from ..utils.state_manager import has_valid_keys, reset_session_state, set_api_keys
+from ..utils.state_manager import (
+    get_session_lock,
+    has_valid_keys,
+    reset_session_state,
+    set_api_keys,
+)
 
 router = APIRouter(prefix="/session", tags=["Session"])
 
@@ -34,7 +39,9 @@ def get_session_status(
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id
     store = get_session_store(request)
-    valid = has_valid_keys(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        valid = has_valid_keys(session_id, store)
     return SessionStatusResponse(
         session_id=session_id,
         has_valid_keys=valid,
