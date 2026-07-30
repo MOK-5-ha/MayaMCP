@@ -162,3 +162,30 @@ def test_chat_session_limit_exceeded_returns_429(mock_keys_state, mock_has_keys,
     assert response.status_code == 429
     assert "Bar capacity reached" in response.json()["detail"]
 
+
+def test_concurrent_session_status_and_keys_race_safety(client):
+    import threading
+    session_id = "race-test-session-999"
+    results = []
+
+    def call_status():
+        resp = client.get("/api/v1/session/status", headers={"X-Session-ID": session_id})
+        results.append(("status", resp.status_code))
+
+    def call_submit_keys():
+        payload = {"gemini_key": "race-test-key-valid"}
+        resp = client.post("/api/v1/session/keys", json=payload, headers={"X-Session-ID": session_id})
+        results.append(("keys", resp.status_code))
+
+    t1 = threading.Thread(target=call_status)
+    t2 = threading.Thread(target=call_submit_keys)
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # Verify keys are valid after concurrent operations
+    status_resp = client.get("/api/v1/session/status", headers={"X-Session-ID": session_id})
+    assert status_resp.json()["has_valid_keys"] is True
+

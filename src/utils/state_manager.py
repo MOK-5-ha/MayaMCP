@@ -269,7 +269,7 @@ CLEANUP_INTERVAL_SECONDS = _parse_int_env(
 )
 
 
-def get_session_lock(session_id: str) -> threading.Lock:
+def get_session_lock(session_id: str) -> threading.RLock:
     """
     Get or create lock for session. Thread-safe via mutex.
 
@@ -281,11 +281,11 @@ def get_session_lock(session_id: str) -> threading.Lock:
         session_id: Unique identifier for the user session.
 
     Returns:
-        threading.Lock instance for the session.
+        threading.RLock instance for the session.
     """
     with _session_locks_mutex:
         if session_id not in _session_locks:
-            _session_locks[session_id] = threading.Lock()
+            _session_locks[session_id] = threading.RLock()
         # Update last access time
         _session_last_access[session_id] = time.time()
         return _session_locks[session_id]
@@ -549,9 +549,12 @@ def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
             return batch_cache.get_cached_data()
 
     if session_id not in store:
-        logger.info(f"Initializing new session state for {session_id}")
-        store[session_id] = _deep_copy_defaults()
-        return store[session_id]
+        lock = get_session_lock(session_id)
+        with lock:
+            if session_id not in store:
+                logger.info(f"Initializing new session state for {session_id}")
+                store[session_id] = _deep_copy_defaults()
+            return store[session_id]
 
     import copy
     session_data = store[session_id]
@@ -1120,6 +1123,8 @@ def has_valid_keys(session_id: str, store: MutableMapping) -> bool:
     Returns:
         True if the session has at least a validated Gemini key.
     """
-    data = _get_session_data(session_id, store)
-    api_keys = data.get('api_keys', {})
-    return bool(api_keys.get('keys_validated') and api_keys.get('gemini_key'))
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        api_keys = data.get('api_keys', {})
+        return bool(api_keys.get('keys_validated') and api_keys.get('gemini_key'))
