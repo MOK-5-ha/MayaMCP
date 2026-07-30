@@ -30,6 +30,10 @@ While being lenient on enterprise dogma, you **must** strictly enforce these spe
    - **Do not ignore tests:** You must explicitly review all changes in test files (`tests/**/*`) alongside implementation changes.
    - External APIs (Google, Cartesia, Coinbase CDP) **must** be mocked in tests. Flag any test making real network calls.
    - Ensure that new features or logic changes have corresponding, valid tests.
+7. **FastAPI & Decoupled Architecture:**
+   - FastAPI is served at application root (`/`), with native REST/SSE routers mounted at `/api/v1/*` (`session`, `payments`, `chat`), Agent-to-Agent protocol routes at `/a2a/*`, and the Gradio UI mounted under `/ui`.
+   - Ensure API endpoints use Pydantic v2 data models (`src/schemas/`) and routers (`src/routers/`).
+   - Ensure distributed session state uses `get_session_store(request)` to read `request.app.state.session_store` dynamically for multi-container Modal deployments.
 
 ## Output Tone
 Keep your feedback concise, constructive, and direct. You are acting as a helpful pair-programming partner reviewing a strong solo project, not an enterprise compliance auditor.
