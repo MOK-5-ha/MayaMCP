@@ -82,7 +82,9 @@ def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
     Returns:
         Initialized ``ChatGoogleGenerativeAI`` instance with tools bound.
     """
-    key_hash = _key_hash(api_key)
+    project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    effective_key = api_key if (api_key and api_key.strip()) else (f"vertexai:{project.strip()}" if project else "")
+    key_hash = _key_hash(effective_key)
 
     # Check for existing session first (fast path)
     with _registry_lock:
@@ -141,7 +143,7 @@ def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
     from google.adk.models import Gemini
     from google.genai import Client
 
-    from .client import get_model_name
+    from .client import get_genai_client, get_model_name
 
     class BYOKGemini(Gemini):
         def __init__(self, api_key: str, **kwargs):
@@ -151,7 +153,7 @@ def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
         @property
         def api_client(self) -> Client:
             if not hasattr(self, '_client'):
-                self._client = Client(api_key=self._api_key)
+                self._client = get_genai_client(self._api_key)
             return self._client
 
     llm = BYOKGemini(api_key=api_key, model=get_model_name())

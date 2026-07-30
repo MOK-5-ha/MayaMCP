@@ -23,7 +23,12 @@ nano .env
 
 **Required Variables:**
 ```bash
-# API Keys (server-side fallbacks)
+# Option A: GCP Vertex AI Mode (Uses GCP Billing Account trial credits for high 300+ RPM quota)
+GCP_PROJECT=your_gcp_project_id_here
+GCP_LOCATION=global
+GEMINI_TIER=paid
+
+# Option B: Google AI Studio API Key (server-side fallback)
 GEMINI_API_KEY=your_gemini_api_key_here
 CARTESIA_API_KEY=your_cartesia_api_key_here
 

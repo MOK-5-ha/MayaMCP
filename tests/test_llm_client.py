@@ -16,6 +16,9 @@ from src.llm.client import (
 )
 
 
+import os
+
+
 class TestLLMClient:
     """Test cases for LLM client functions."""
 
@@ -26,10 +29,11 @@ class TestLLMClient:
         monkeypatch.setattr('src.llm.client._genai_client_key', None)
 
         mock_client = MagicMock()
-        with patch('src.llm.client.genai.Client', return_value=mock_client) as mock_ctor:
-            result = get_genai_client("test_api_key")
-            mock_ctor.assert_called_once_with(api_key="test_api_key")
-            assert result is mock_client
+        with patch.dict(os.environ, {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": ""}):
+            with patch('src.llm.client.genai.Client', return_value=mock_client) as mock_ctor:
+                result = get_genai_client("test_api_key")
+                mock_ctor.assert_called_once_with(api_key="test_api_key")
+                assert result is mock_client
 
     def test_get_genai_client_singleton(self, monkeypatch):
         """Test get_genai_client returns the same client on repeated calls."""
@@ -37,11 +41,12 @@ class TestLLMClient:
         monkeypatch.setattr('src.llm.client._genai_client_key', None)
 
         mock_client = MagicMock()
-        with patch('src.llm.client.genai.Client', return_value=mock_client) as mock_ctor:
-            c1 = get_genai_client("key1")
-            c2 = get_genai_client("key1")
-            assert c1 is c2
-            mock_ctor.assert_called_once()
+        with patch.dict(os.environ, {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": ""}):
+            with patch('src.llm.client.genai.Client', return_value=mock_client) as mock_ctor:
+                c1 = get_genai_client("key1")
+                c2 = get_genai_client("key1")
+                assert c1 is c2
+                mock_ctor.assert_called_once()
 
     def test_get_genai_client_key_rotation(self, monkeypatch):
         """Test get_genai_client recreates client when key changes."""
@@ -50,12 +55,13 @@ class TestLLMClient:
 
         mock_client1 = MagicMock()
         mock_client2 = MagicMock()
-        with patch('src.llm.client.genai.Client', side_effect=[mock_client1, mock_client2]) as mock_ctor:
-            c1 = get_genai_client("key1")
-            c2 = get_genai_client("key2")
-            assert c1 is mock_client1
-            assert c2 is mock_client2
-            assert mock_ctor.call_count == 2
+        with patch.dict(os.environ, {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": ""}):
+            with patch('src.llm.client.genai.Client', side_effect=[mock_client1, mock_client2]) as mock_ctor:
+                c1 = get_genai_client("key1")
+                c2 = get_genai_client("key2")
+                assert c1 is mock_client1
+                assert c2 is mock_client2
+                assert mock_ctor.call_count == 2
 
     def test_build_generate_config(self):
         """Test build_generate_config maps config dictionary correctly."""

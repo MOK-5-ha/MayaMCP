@@ -97,18 +97,25 @@ git clone <repository-url>
 cd MayaMCP
 ```
 
-1. Create `.env` file with your API keys:
+1. Create `.env` file with your environment configuration:
 
 ```bash
-# API Keys
+# Option A: GCP Vertex AI Mode (Recommended for high-throughput 300+ RPM paid tier)
+GCP_PROJECT=your_gcp_project_id_here
+GCP_LOCATION=global
+GEMINI_TIER=paid
+
+# Option B: Google AI Studio Mode (API Key)
 GEMINI_API_KEY=your_google_api_key_here
+
+# Provider Keys & Evals
 CARTESIA_API_KEY=your_cartesia_api_key_here
 WANDB_API_KEY=your_wandb_api_key_here  # Optional: For Weights & Biases Weave evaluations
 
 # Model Configuration (optional)
-GEMINI_MODEL_VERSION=gemini-3.0-flash
-TEMPERATURE=0.7
-MAX_OUTPUT_TOKENS=2048
+GEMINI_MODEL_VERSION=gemini-3.1-flash-lite
+TEMPERATURE=1.0
+MAX_OUTPUT_TOKENS=8192
 
 ### Environment Configuration (optional)
 PYTHON_ENV=development
@@ -137,6 +144,16 @@ Legacy script (optional):
 ```
 
 Note: `pip install -e .` installs dependencies from `requirements.txt` and sets up the `mayamcp` console command.
+
+### Verifying Environment & High-Throughput Quota
+
+```bash
+# 1. Verify your environment setup (Vertex AI vs AI Studio)
+python verify_environment.py
+
+# 2. Test high-throughput quota burst performance (25 parallel requests)
+python scripts/verify_burst_throughput.py
+```
 
 Note: `pip install -r requirements.txt` installs the Agent Development Kit (`google-adk`) and the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project has been fully migrated to ADK 2.0 and does not use LangChain.
 ## API Keys Required

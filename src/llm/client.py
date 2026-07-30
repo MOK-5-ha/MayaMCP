@@ -1,6 +1,7 @@
 """LLM client initialization and API calls."""
 
 import logging
+import os
 import threading
 from collections.abc import Generator
 from typing import Any
@@ -87,20 +88,48 @@ _genai_client_key: str | None = None
 _CLIENT_LOCK = threading.Lock()
 
 
-def get_genai_client(api_key: str) -> genai.Client:
+def get_genai_client(api_key: str | None = None) -> genai.Client:
     """Return a singleton genai.Client, creating it if needed.
 
-    Thread-safe. If *api_key* differs from the key used to create the
-    current client the client is recreated (supports key rotation).
+    Thread-safe. Supports GCP Vertex AI Mode (via GCP_PROJECT / GOOGLE_CLOUD_PROJECT)
+    and AI Studio Mode (via api_key or GEMINI_API_KEY). If configuration changes, the client is recreated.
     """
     global _genai_client, _genai_client_key
-    if _genai_client is not None and _genai_client_key == api_key:
+
+    # 1. Resolve GCP Project ID strictly without hardcoded fallback or process mutation
+    project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if project and project.strip():
+        raw_location = os.getenv("GCP_LOCATION", "global").strip()
+        location = raw_location if raw_location else "global"
+        client_key = f"vertexai:{project.strip()}:{location}"
+
+        if _genai_client is not None and _genai_client_key == client_key:
+            return _genai_client
+
+        with _CLIENT_LOCK:
+            if _genai_client is None or _genai_client_key != client_key:
+                _genai_client = genai.Client(vertexai=True, project=project.strip(), location=location)
+                _genai_client_key = client_key
+            local_client = _genai_client
+        return local_client
+
+    # 2. Check for AI Studio API Key Mode
+    effective_key = api_key or os.getenv("GEMINI_API_KEY")
+    if not effective_key or not effective_key.strip():
+        raise ValueError(
+            "GCP Vertex AI configuration error: Neither GCP_PROJECT nor GOOGLE_CLOUD_PROJECT "
+            "nor GEMINI_API_KEY is set. Please set GCP_PROJECT or GEMINI_API_KEY in your environment or .env file."
+        )
+
+    effective_key = effective_key.strip()
+
+    if _genai_client is not None and _genai_client_key == effective_key:
         return _genai_client
 
     with _CLIENT_LOCK:
-        if _genai_client is None or _genai_client_key != api_key:
-            _genai_client = genai.Client(api_key=api_key)
-            _genai_client_key = api_key
+        if _genai_client is None or _genai_client_key != effective_key:
+            _genai_client = genai.Client(api_key=effective_key)
+            _genai_client_key = effective_key
         local_client = _genai_client
     return local_client
 

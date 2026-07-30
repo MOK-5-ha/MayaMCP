@@ -21,17 +21,15 @@ class TestApiKeys:
     @patch('src.config.api_keys.os.getenv')
     def test_get_api_keys_both_present(self, mock_getenv):
         """Test get_api_keys when both keys are present."""
-        mock_getenv.side_effect = lambda key: {
+        mock_getenv.side_effect = lambda key, default=None: {
             'GEMINI_API_KEY': 'test_google_key',
             'CARTESIA_API_KEY': 'test_cartesia_key'
-        }.get(key)
+        }.get(key, default)
         
         result = get_api_keys()
         
-        assert result == {
-            'google_api_key': 'test_google_key',
-            'cartesia_api_key': 'test_cartesia_key'
-        }
+        assert result['google_api_key'] == 'test_google_key'
+        assert result['cartesia_api_key'] == 'test_cartesia_key'
         
         # Verify correct environment variable names were checked
         mock_getenv.assert_any_call('GEMINI_API_KEY')
@@ -40,44 +38,40 @@ class TestApiKeys:
     @patch('src.config.api_keys.os.getenv')
     def test_get_api_keys_missing_keys(self, mock_getenv):
         """Test get_api_keys when keys are missing."""
-        mock_getenv.return_value = None
+        mock_getenv.side_effect = lambda key, default=None: default
         
         result = get_api_keys()
         
-        assert result == {
-            'google_api_key': None,
-            'cartesia_api_key': None
-        }
+        assert result['google_api_key'] is None
+        assert result['cartesia_api_key'] is None
+        assert result['gcp_project'] is None
+        assert result['is_vertex_ai'] is False
 
     @patch('src.config.api_keys.os.getenv')
     def test_get_api_keys_partial_keys(self, mock_getenv):
         """Test get_api_keys when only some keys are present."""
-        mock_getenv.side_effect = lambda key: {
+        mock_getenv.side_effect = lambda key, default=None: {
             'GEMINI_API_KEY': 'test_google_key',
             'CARTESIA_API_KEY': None
-        }.get(key)
+        }.get(key, default)
         
         result = get_api_keys()
         
-        assert result == {
-            'google_api_key': 'test_google_key',
-            'cartesia_api_key': None
-        }
+        assert result['google_api_key'] == 'test_google_key'
+        assert result['cartesia_api_key'] is None
 
     @patch('src.config.api_keys.os.getenv')
     def test_get_api_keys_empty_strings(self, mock_getenv):
         """Test get_api_keys when keys are empty strings."""
-        mock_getenv.side_effect = lambda key: {
+        mock_getenv.side_effect = lambda key, default=None: {
             'GEMINI_API_KEY': '',
             'CARTESIA_API_KEY': ''
-        }.get(key)
+        }.get(key, default)
         
         result = get_api_keys()
         
-        assert result == {
-            'google_api_key': '',
-            'cartesia_api_key': ''
-        }
+        assert result['google_api_key'] == ''
+        assert result['cartesia_api_key'] == ''
 
 
     @patch('src.config.api_keys.get_api_keys')
@@ -120,10 +114,10 @@ class TestApiKeys:
     @patch('src.config.api_keys.os.getenv')
     def test_integration_all_functions(self, mock_getenv):
         """Test integration of all API key functions together."""
-        mock_getenv.side_effect = lambda key: {
+        mock_getenv.side_effect = lambda key, default=None: {
             'GEMINI_API_KEY': 'integration_google_key',
             'CARTESIA_API_KEY': 'integration_cartesia_key'
-        }.get(key)
+        }.get(key, default)
         
         # Test all functions work together
         api_keys = get_api_keys()
@@ -136,10 +130,10 @@ class TestApiKeys:
     @patch('src.config.api_keys.os.getenv')
     def test_whitespace_keys(self, mock_getenv):
         """Test handling of keys with whitespace."""
-        mock_getenv.side_effect = lambda key: {
+        mock_getenv.side_effect = lambda key, default=None: {
             'GEMINI_API_KEY': '  whitespace_key  ',
             'CARTESIA_API_KEY': '\t\nkey_with_newlines\t\n'
-        }.get(key)
+        }.get(key, default)
         
         result = get_api_keys()
         

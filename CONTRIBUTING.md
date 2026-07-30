@@ -7,7 +7,7 @@ Thank you for contributing to MayaMCP! This document provides guidelines for hum
 When writing code for MayaMCP, please adhere to the DRY (Don't Repeat Yourself) principle.
 
 - **Centralized Logic**: Extract repetitive code into well-named helper functions following the single responsibility principle. Most utility functions should live in `src/utils/helpers.py`.
-- **Unified LLM Client**: All GenAI calls must go through `src/llm/client.py`. Do not call the Google SDK directly in other modules. Always use `get_genai_client(api_key=...)`.
+- **Unified LLM Client**: All GenAI calls must go through `src/llm/client.py`. Do not call the Google SDK directly in other modules. Always use `get_genai_client(api_key=...)`. Client creation automatically supports dual mode: **GCP Vertex AI Mode** (via `GCP_PROJECT` or `GOOGLE_CLOUD_PROJECT` for 300+ RPM paid tier quota) and **Google AI Studio Mode** (via API key or user BYOK session key). Use `python verify_environment.py` to validate your environment configuration.
 - **Intent Routing Safety**: When implementing deterministic intent routing (e.g., hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`). Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to prevent false positives.
 - **Streaming Pipeline Guidelines**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs. Consume them lazily to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired.
