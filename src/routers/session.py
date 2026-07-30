@@ -1,7 +1,8 @@
 """Session management endpoints."""
 
+import secrets
 from typing import MutableMapping, Optional
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from ..schemas.session import KeySubmissionRequest, SessionStatusResponse
 from ..utils.state_manager import has_valid_keys, reset_session_state, set_api_keys
@@ -18,16 +19,20 @@ def get_session_store(request: Request) -> MutableMapping:
     return _SESSION_STORE
 
 
-def _resolve_session_id(x_session_id: Optional[str]) -> str:
-    return x_session_id.strip() if x_session_id and x_session_id.strip() else "default"
+def resolve_session_id(x_session_id: Optional[str] = None) -> str:
+    if x_session_id and x_session_id.strip():
+        return x_session_id.strip()
+    return f"sess_{secrets.token_urlsafe(12)}"
 
 
 @router.get("/status", response_model=SessionStatusResponse)
 def get_session_status(
     request: Request,
+    response: Response,
     x_session_id: Optional[str] = Header(None)
 ) -> SessionStatusResponse:
-    session_id = _resolve_session_id(x_session_id)
+    session_id = resolve_session_id(x_session_id)
+    response.headers["X-Session-ID"] = session_id
     store = get_session_store(request)
     valid = has_valid_keys(session_id, store)
     return SessionStatusResponse(
@@ -41,9 +46,11 @@ def get_session_status(
 def submit_session_keys(
     request_data: KeySubmissionRequest,
     request: Request,
+    response: Response,
     x_session_id: Optional[str] = Header(None)
 ) -> dict:
-    session_id = _resolve_session_id(x_session_id)
+    session_id = resolve_session_id(x_session_id)
+    response.headers["X-Session-ID"] = session_id
     if not request_data.gemini_key or not request_data.gemini_key.strip():
         raise HTTPException(status_code=400, detail="Gemini API key is required.")
     
@@ -65,9 +72,11 @@ def submit_session_keys(
 @router.post("/reset")
 def reset_session(
     request: Request,
+    response: Response,
     x_session_id: Optional[str] = Header(None)
 ) -> dict:
-    session_id = _resolve_session_id(x_session_id)
+    session_id = resolve_session_id(x_session_id)
+    response.headers["X-Session-ID"] = session_id
     store = get_session_store(request)
     reset_session_state(session_id, store)
     return {

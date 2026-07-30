@@ -1,9 +1,8 @@
-"""Chat REST and SSE streaming endpoints."""
-
+import asyncio
 import base64
 import json
 from typing import AsyncGenerator, Optional
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from ..conversation.processor import process_order, process_order_stream
@@ -26,22 +25,27 @@ from ..utils.state_manager import (
 from ..voice.tts import get_voice_audio
 from ..ui.api_key_modal import create_quota_error_html
 
-from .session import get_session_store
+from .session import get_session_store, resolve_session_id
 
 router = APIRouter(tags=["Chat"])
 
 
-def _resolve_session_id(x_session_id: Optional[str]) -> str:
-    return x_session_id.strip() if x_session_id and x_session_id.strip() else "default"
+def _fetch_next_stream_event(stream_iterator):
+    try:
+        return False, next(stream_iterator)
+    except StopIteration:
+        return True, None
 
 
 @router.post("/chat", response_model=ChatResponse)
 def chat_endpoint(
     chat_req: ChatRequest,
     http_req: Request,
+    http_resp: Response,
     x_session_id: Optional[str] = Header(None)
 ) -> ChatResponse:
-    session_id = _resolve_session_id(x_session_id)
+    session_id = resolve_session_id(x_session_id)
+    http_resp.headers["X-Session-ID"] = session_id
     store = get_session_store(http_req)
     
     if not has_valid_keys(session_id, store):
@@ -116,7 +120,7 @@ async def chat_stream_endpoint(
     http_req: Request,
     x_session_id: Optional[str] = Header(None)
 ):
-    session_id = _resolve_session_id(x_session_id)
+    session_id = resolve_session_id(x_session_id)
     store = get_session_store(http_req)
     
     if not has_valid_keys(session_id, store):
@@ -143,7 +147,10 @@ async def chat_stream_endpoint(
                 session_id=session_id,
                 app_state=store,
             )
-            for event in stream:
+            while True:
+                is_done, event = await asyncio.to_thread(_fetch_next_stream_event, stream)
+                if is_done:
+                    break
                 if event.get("type") == "complete":
                     final_text = event.get("content") or event.get("full_response") or ""
                     if final_text:
@@ -157,4 +164,8 @@ async def chat_stream_endpoint(
             error_event = {"type": "error", "content": str(err)}
             yield f"data: {json.dumps(error_event)}\n\n"
 
-    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={"X-Session-ID": session_id}
+    )
