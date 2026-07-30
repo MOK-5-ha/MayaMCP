@@ -107,10 +107,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include v1 REST and SSE routers
+# Include REST and SSE routers (both /api/v1 and /api for game engine compatibility)
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(session_router, prefix="/api/v1")
+
+app.include_router(chat_router, prefix="/api")
+app.include_router(payments_router, prefix="/api")
+app.include_router(session_router, prefix="/api")
+
+# Mount static frontend bundle directory if available
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
 
 
 @app.get("/healthz")

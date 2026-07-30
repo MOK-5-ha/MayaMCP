@@ -265,6 +265,10 @@ def serve_maya():
     web_app.include_router(payments_router, prefix="/api/v1")
     web_app.include_router(session_router, prefix="/api/v1")
 
+    web_app.include_router(chat_router, prefix="/api")
+    web_app.include_router(payments_router, prefix="/api")
+    web_app.include_router(session_router, prefix="/api")
+
     @web_app.get("/healthz")
     def healthz():
         # Check critical dependencies
@@ -294,12 +298,23 @@ def serve_maya():
             )
         return PlainTextResponse("ok", media_type="text/plain")
 
+    # Mount static Phaser 3 frontend if compiled Vite dist exists on Modal container
+    frontend_dist = "/app/frontend/dist"
+    if not os.path.exists(frontend_dist):
+        frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
-    return mount_gradio_app(
-        app=web_app,
-        blocks=interface,
-        path="/ui"
-    )
+    if os.path.exists(frontend_dist):
+        from fastapi.staticfiles import StaticFiles
+        logger.info(f"Mounting static Phaser 3 HTML5 SPA from {frontend_dist}")
+        web_app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+        return web_app
+    else:
+        logger.info("Static frontend dist not found; mounting legacy Gradio interface fallback")
+        return mount_gradio_app(
+            app=web_app,
+            blocks=interface,
+            path="/"
+        )
 
 @app.local_entrypoint()
 def main():
