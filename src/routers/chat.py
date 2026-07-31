@@ -114,16 +114,51 @@ def chat_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/chat/stream")
+def derive_viseme(text_chunk: str) -> str:
+    """Derive mouth flap viseme frame key from text chunk."""
+    if not text_chunk or not text_chunk.strip():
+        return "mouth_closed"
+
+    last_char = text_chunk.strip()[-1].lower()
+    if last_char in ('a', 'h'):
+        return "mouth_talk_a"
+    elif last_char in ('e', 'i', 'y'):
+        return "mouth_talk_e"
+    elif last_char in ('o', 'u', 'w'):
+        return "mouth_talk_o"
+    elif last_char in ('m', 'b', 'p'):
+        return "mouth_closed"
+    else:
+        return "mouth_talk_a"
+
+
+@router.api_route("/chat/stream", methods=["GET", "POST"])
 async def chat_stream_endpoint(
-    message: str,
     http_req: Request,
+    message: Optional[str] = Query(None),
+    user_input: Optional[str] = Query(None),
     session_id: Optional[str] = Query(None),
     x_session_id: Optional[str] = Header(None)
 ):
     effective_session_id = resolve_session_id(x_session_id, session_id)
     store = get_session_store(http_req)
-    
+
+    # Extract user input text from query, body, or ChatRequest
+    input_message = message or user_input
+    if http_req.method == "POST":
+        try:
+            body_json = await http_req.json()
+            if isinstance(body_json, dict):
+                input_message = body_json.get("message") or body_json.get("user_input") or input_message
+        except Exception:
+            pass
+
+    if not input_message or not input_message.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Message parameter or body payload is required for streaming."
+        )
+
     if not has_valid_keys(effective_session_id, store):
         raise HTTPException(
             status_code=400,
@@ -134,17 +169,17 @@ async def chat_stream_endpoint(
     gemini_key = api_key_state["gemini_key"]
 
     current_history = get_session_chat_history(effective_session_id, store)
-    
+
     async def sse_generator() -> AsyncGenerator[str, None]:
         try:
-            # Emit session initialization event for EventSource clients
+            # Emit session initialization event for EventSource / Phaser 3 clients
             init_event = {"type": "session", "session_id": effective_session_id}
             yield f"data: {json.dumps(init_event)}\n\n"
 
             llm = get_session_llm(effective_session_id, gemini_key)
 
             stream = process_order_stream(
-                user_input_text=message,
+                user_input_text=input_message,
                 current_session_history=current_history,
                 llm=llm,
                 rag_retriever=None,
@@ -156,11 +191,20 @@ async def chat_stream_endpoint(
                 is_done, event = await asyncio.to_thread(_fetch_next_stream_event, stream)
                 if is_done:
                     break
-                if event.get("type") == "complete":
-                    final_text = event.get("content") or event.get("full_response") or ""
-                    if final_text:
-                        updated_hist = append_to_history(current_history, message, final_text)
-                        set_session_chat_history(effective_session_id, updated_hist, store)
+
+                if isinstance(event, dict):
+                    # Attach session_id and viseme tag for Phaser 3 animation rendering
+                    event["session_id"] = effective_session_id
+                    content_text = event.get("content") or event.get("text_chunk") or ""
+                    if content_text:
+                        event["viseme"] = derive_viseme(content_text)
+
+                    if event.get("type") == "complete":
+                        final_text = event.get("content") or event.get("full_response") or ""
+                        if final_text:
+                            updated_hist = append_to_history(current_history, input_message, final_text)
+                            set_session_chat_history(effective_session_id, updated_hist, store)
+
                 yield f"data: {json.dumps(event)}\n\n"
         except SessionLimitExceededError as limit_err:
             error_event = {"type": "error", "content": f"Bar capacity reached: {limit_err}"}
@@ -174,3 +218,4 @@ async def chat_stream_endpoint(
         media_type="text/event-stream",
         headers={"X-Session-ID": effective_session_id}
     )
+

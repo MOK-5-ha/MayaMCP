@@ -20,10 +20,11 @@ app_state = modal.Dict.from_name("maya-app-state", create_if_missing=True)
 # Define the container image with all dependencies and install the package
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .apt_install("libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender-dev", "libgomp1")
+    .apt_install("libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender-dev", "libgomp1", "nodejs", "npm")
     .pip_install_from_requirements("requirements.txt")
     # Add the project and install it so absolute imports work without sys.path hacks
     .add_local_dir(".", "/app")
+    .run_commands("cd /app/frontend && npm install && npm run build")
     .pip_install("/app")
 )
 
@@ -265,6 +266,10 @@ def serve_maya():
     web_app.include_router(payments_router, prefix="/api/v1")
     web_app.include_router(session_router, prefix="/api/v1")
 
+    web_app.include_router(chat_router, prefix="/api")
+    web_app.include_router(payments_router, prefix="/api")
+    web_app.include_router(session_router, prefix="/api")
+
     @web_app.get("/healthz")
     def healthz():
         # Check critical dependencies
@@ -294,12 +299,23 @@ def serve_maya():
             )
         return PlainTextResponse("ok", media_type="text/plain")
 
+    # Mount static Phaser 3 frontend if compiled Vite dist exists on Modal container
+    frontend_dist = "/app/frontend/dist"
+    if not os.path.exists(frontend_dist):
+        frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
-    return mount_gradio_app(
-        app=web_app,
-        blocks=interface,
-        path="/ui"
-    )
+    if os.path.exists(frontend_dist):
+        from fastapi.staticfiles import StaticFiles
+        logger.info(f"Mounting static Phaser 3 HTML5 SPA from {frontend_dist}")
+        web_app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+        return web_app
+    else:
+        logger.info("Static frontend dist not found; mounting legacy Gradio interface fallback")
+        return mount_gradio_app(
+            app=web_app,
+            blocks=interface,
+            path="/"
+        )
 
 @app.local_entrypoint()
 def main():
