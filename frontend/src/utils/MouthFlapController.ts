@@ -92,4 +92,11 @@ export class MouthFlapController {
   public getViseme(): VisemeKey {
     return this.currentViseme;
   }
+
+  public destroy(): void {
+    this.stopTalkingAnimation();
+    if (this.mouthGraphic) {
+      this.mouthGraphic.destroy();
+    }
+  }
 }

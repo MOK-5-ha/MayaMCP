@@ -15,7 +15,9 @@ export class SoundManager {
       this.currentBGM.stop();
     }
 
-    if (this.scene.sound.get(key)) {
+    const hasAudio = this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null;
+
+    if (hasAudio) {
       this.currentBGM = this.scene.sound.add(key, {
         loop,
         volume: this.bgmVolume
@@ -28,7 +30,9 @@ export class SoundManager {
   }
 
   public playSFX(key: string): void {
-    if (this.scene.sound.get(key)) {
+    const hasAudio = this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null;
+
+    if (hasAudio) {
       this.scene.sound.play(key, { volume: this.sfxVolume });
       console.log(`[SoundManager] SFX played: ${key}`);
     } else {

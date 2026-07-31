@@ -127,6 +127,9 @@ export class MayaCharacter extends Phaser.GameObjects.Container {
       this.blinkTimer.destroy();
       this.blinkTimer = null;
     }
+    if (this.mouthController) {
+      this.mouthController.destroy();
+    }
     super.destroy(fromScene);
   }
 }
