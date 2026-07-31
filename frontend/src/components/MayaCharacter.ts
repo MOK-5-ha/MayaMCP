@@ -8,6 +8,7 @@ export class MayaCharacter extends Phaser.GameObjects.Container {
   private eyeGraphics: Phaser.GameObjects.Graphics;
   private currentExpression: CharacterExpression = 'maya_idle';
   private blinkTimer: Phaser.Time.TimerEvent | null = null;
+  private blinkDelayedCall: Phaser.Time.TimerEvent | null = null;
   private isBlinking: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -106,9 +107,10 @@ export class MayaCharacter extends Phaser.GameObjects.Container {
       callback: () => {
         this.isBlinking = true;
         this.renderEyes(this.currentExpression);
-        scene.time.delayedCall(150, () => {
+        this.blinkDelayedCall = scene.time.delayedCall(150, () => {
           this.isBlinking = false;
           this.renderEyes(this.currentExpression);
+          this.blinkDelayedCall = null;
         });
       }
     });
@@ -126,6 +128,10 @@ export class MayaCharacter extends Phaser.GameObjects.Container {
     if (this.blinkTimer) {
       this.blinkTimer.destroy();
       this.blinkTimer = null;
+    }
+    if (this.blinkDelayedCall) {
+      this.blinkDelayedCall.destroy();
+      this.blinkDelayedCall = null;
     }
     if (this.mouthController) {
       this.mouthController.destroy();

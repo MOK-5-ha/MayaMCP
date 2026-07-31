@@ -20,10 +20,11 @@ app_state = modal.Dict.from_name("maya-app-state", create_if_missing=True)
 # Define the container image with all dependencies and install the package
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .apt_install("libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender-dev", "libgomp1")
+    .apt_install("libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender-dev", "libgomp1", "nodejs", "npm")
     .pip_install_from_requirements("requirements.txt")
     # Add the project and install it so absolute imports work without sys.path hacks
     .add_local_dir(".", "/app")
+    .run_commands("cd /app/frontend && npm install && npm run build")
     .pip_install("/app")
 )
 
