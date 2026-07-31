@@ -252,11 +252,22 @@ class MayaWeaveModel(ModelClass):
 def viseme_scorer(turns: list[str], expected_logic: str, output: dict) -> dict:
     valid_visemes = {"mouth_talk_a", "mouth_talk_e", "mouth_talk_o", "mouth_closed"}
     visemes = output.get("visemes", [])
-    all_valid = all(v in valid_visemes for v in visemes) if visemes else True
+    has_visemes = bool(visemes) and len(visemes) == len(turns)
+    all_valid = has_visemes and all(v in valid_visemes for v in visemes)
+    
+    if all_valid:
+        reasoning = f"Derived visemes: {visemes}. All {len(visemes)} turns produced valid Phaser 3 mouth flap tags."
+    elif not visemes:
+        reasoning = "Failed: No visemes were derived or present in model output."
+    elif len(visemes) != len(turns):
+        reasoning = f"Failed: Visemes count ({len(visemes)}) does not match turns count ({len(turns)})."
+    else:
+        reasoning = f"Failed: Invalid visemes found in list: {visemes}."
+
     return {
         "passed": all_valid,
         "score": 1.0 if all_valid else 0.0,
-        "reasoning": f"Derived visemes: {visemes}. All valid Phaser 3 mouth flap tags." if all_valid else f"Invalid visemes found: {visemes}"
+        "reasoning": reasoning
     }
 
 @op_decorator()
