@@ -116,13 +116,6 @@ app.include_router(chat_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(session_router, prefix="/api")
 
-# Mount static frontend bundle directory if available
-frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
-if os.path.exists(frontend_dist):
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
-
-
 @app.get("/healthz")
 def healthz():
     return PlainTextResponse("ok", media_type="text/plain")
@@ -140,6 +133,13 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """
     logger.log_struct(feedback.model_dump(), severity="INFO")
     return {"status": "success"}
+
+
+# Mount static frontend bundle directory if available (must be mounted after all API routes)
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
 
 
 # Mount Gradio sub-app under /ui for backward compatibility / legacy interface access
