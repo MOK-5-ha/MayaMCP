@@ -104,3 +104,8 @@ assets/maya_memory_index.json
 # Runtime files
 .gradio_cache/
 gradio_flagged/
+
+# Frontend Node dependencies & builds
+node_modules/
+frontend/node_modules/
+frontend/dist/
