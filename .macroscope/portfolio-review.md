@@ -3,6 +3,8 @@ include:
   - "src/**/*"
   - "tests/**/*"
   - "scripts/**/*"
+  - "frontend/**/*"
+  - ".kiro/specs/**/*"
   - "burst_test.py"
   - "verify_environment.py"
 ---
@@ -14,8 +16,8 @@ You are Macroscope, analyzing code for **MayaMCP** (an AI bartending agent).
 
 When reviewing code, pull requests, and commits:
 1. **Be Pragmatic:** Do not enforce overly bureaucratic enterprise standards, over-engineering, or complex architectural patterns that are unnecessary for a solo portfolio project.
-2. **Focus on Quality & Security over Dogma:** Prioritize clean, readable Python, robust error handling, and secure integrations over pedantic style nitpicks (unless they violate the project's specific rules below).
-3. **Encourage Experimentation:** Recognize that this project serves as a testbed for integrating LLMs (Gemini), Voice (Cartesia), RAG (Memvid/FAISS), and Web3 payments (Coinbase CDP).
+2. **Focus on Quality & Security over Dogma:** Prioritize clean, readable Python and TypeScript, robust error handling, and secure integrations over pedantic style nitpicks (unless they violate the project's specific rules below).
+3. **Encourage Experimentation:** Recognize that this project serves as a testbed for integrating LLMs (Gemini), Voice (Cartesia), RAG (Memvid/FAISS), Web3 payments (Coinbase CDP), and a **Phaser 3 2D pixel art game engine UI**.
 
 ## MayaMCP Architectural Rules (Enforce These)
 While being lenient on enterprise dogma, you **must** strictly enforce these specific project rules derived from the steering docs (AGENTS.md):
@@ -33,8 +35,9 @@ While being lenient on enterprise dogma, you **must** strictly enforce these spe
    - **Do not ignore tests:** You must explicitly review all changes in test files (`tests/**/*`) alongside implementation changes.
    - External APIs (Google, Cartesia, Coinbase CDP) **must** be mocked in tests. Flag any test making real network calls.
    - Ensure that new features or logic changes have corresponding, valid tests.
-7. **FastAPI & Decoupled Architecture:**
-   - FastAPI is served at application root (`/`), with native REST/SSE routers mounted at `/api/v1/*` (`session`, `payments`, `chat`), Agent-to-Agent protocol routes at `/a2a/*`, and the Gradio UI mounted under `/ui`.
+7. **FastAPI & Phaser 3 2D Pixel Art Engine Architecture:**
+   - FastAPI serves static assets at root (`/`), with native REST/SSE routers mounted at `/api/*` and `/api/v1/*` (`session`, `payments`, `chat`), Agent-to-Agent protocol routes at `/a2a/*`, and the **Phaser 3 HTML5 SPA** frontend mounted at root `/` (with legacy Gradio as a fallback if `frontend/dist` is not compiled).
+   - Ensure SSE chat streaming endpoints yield viseme animation tags (`derive_viseme`) for character mouth-flap lip syncing.
    - Ensure API endpoints use Pydantic v2 data models (`src/schemas/`) and routers (`src/routers/`).
    - Ensure distributed session state uses `get_session_store(request)` to read `request.app.state.session_store` dynamically for multi-container Modal deployments.
 
