@@ -1,7 +1,11 @@
 import Phaser from 'phaser';
+import { MayaCharacter } from '../components/MayaCharacter';
+import { SoundManager } from '../utils/SoundManager';
 
 export class BarScene extends Phaser.Scene {
   private neonGlow: Phaser.GameObjects.Graphics | null = null;
+  private mayaCharacter: MayaCharacter | null = null;
+  private soundManager: SoundManager | null = null;
 
   constructor() {
     super('BarScene');
@@ -47,23 +51,21 @@ export class BarScene extends Phaser.Scene {
       ease: 'Sine.easeInOut'
     });
 
-    // Maya Avatar Center Stage Placeholder Graphic Container
-    const mayaContainer = this.add.container(width * 0.5, height * 0.38);
+    // Instantiate Multi-Layer Maya Character Component at Center Stage
+    this.mayaCharacter = new MayaCharacter(this, width * 0.5, height * 0.34);
 
-    // Character Silhouette / Portrait Placeholder Box
-    const portraitBg = this.add.graphics();
-    portraitBg.fillStyle(0x221f3b, 1);
-    portraitBg.fillRoundedRect(-64, -64, 128, 128, 8);
-    portraitBg.lineStyle(2, 0x00f0ff, 1);
-    portraitBg.strokeRoundedRect(-64, -64, 128, 128, 8);
+    // Initialize Cyberpunk Sound & Jukebox Manager
+    this.soundManager = new SoundManager(this);
+    this.soundManager.playBGM('bgm_lounge');
 
-    const nameText = this.add.text(0, 48, 'MAYA // BARTENDER', {
-      font: '11px Courier, monospace',
-      color: '#ff007f'
-    }).setOrigin(0.5, 0.5);
+    console.log('[BarScene] Cyberpunk pixel-art bar environment & Maya character initialized');
+  }
 
-    mayaContainer.add([portraitBg, nameText]);
+  public getMayaCharacter(): MayaCharacter | null {
+    return this.mayaCharacter;
+  }
 
-    console.log('[BarScene] Cyberpunk pixel-art bar environment rendered');
+  public getSoundManager(): SoundManager | null {
+    return this.soundManager;
   }
 }
