@@ -9,24 +9,47 @@ export interface StreamEvent {
 
 export class SSEClient {
   private eventSource: EventSource | null = null;
+  private currentSessionId: string | null = null;
+
+  public setSessionId(sessionId: string): void {
+    this.currentSessionId = sessionId;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('maya_session_id', sessionId);
+    }
+  }
+
+  public getSessionId(): string | null {
+    if (!this.currentSessionId && typeof localStorage !== 'undefined') {
+      this.currentSessionId = localStorage.getItem('maya_session_id');
+    }
+    return this.currentSessionId;
+  }
 
   public connectAndStream(
     message: string,
     onEvent: (event: StreamEvent) => void,
-    onError: (error: any) => void
+    onError: (error: any) => void,
+    sessionId?: string
   ): void {
     if (this.eventSource) {
       this.eventSource.close();
     }
 
+    const activeSessionId = sessionId || this.getSessionId() || '';
     const encodedMessage = encodeURIComponent(message);
-    const streamUrl = `/api/chat/stream?message=${encodedMessage}`;
+    let streamUrl = `/api/chat/stream?message=${encodedMessage}`;
+    if (activeSessionId) {
+      streamUrl += `&session_id=${encodeURIComponent(activeSessionId)}`;
+    }
 
     this.eventSource = new EventSource(streamUrl);
 
     this.eventSource.onmessage = (event: MessageEvent) => {
       try {
         const data: StreamEvent = JSON.parse(event.data);
+        if (data.type === 'session' && data.session_id) {
+          this.setSessionId(data.session_id);
+        }
         onEvent(data);
 
         if (data.type === 'complete' || data.type === 'error') {
