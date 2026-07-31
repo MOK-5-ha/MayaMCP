@@ -59,14 +59,50 @@ export class PreloadScene extends Phaser.Scene {
 
   create(): void {
     this.manifestData = this.cache.json.get('asset_manifest') as AssetManifest;
+    let hasAssetsToLoad = false;
+
     if (this.manifestData) {
-      console.log('[PreloadScene] Asset manifest loaded successfully:', this.manifestData.version);
+      console.log('[PreloadScene] Asset manifest parsed:', this.manifestData.version);
+
+      if (this.manifestData.spritesheets && this.manifestData.spritesheets.length > 0) {
+        for (const sprite of this.manifestData.spritesheets) {
+          if (sprite.key && sprite.path) {
+            console.log(`[PreloadScene] Queuing spritesheet: ${sprite.key} (${sprite.path})`);
+            this.load.spritesheet(sprite.key, sprite.path, {
+              frameWidth: sprite.frameWidth,
+              frameHeight: sprite.frameHeight
+            });
+            hasAssetsToLoad = true;
+          }
+        }
+      }
+
+      if (this.manifestData.audio && this.manifestData.audio.length > 0) {
+        for (const track of this.manifestData.audio) {
+          if (track.key && track.path) {
+            console.log(`[PreloadScene] Queuing audio [${track.type}]: ${track.key} (${track.path})`);
+            this.load.audio(track.key, track.path);
+            hasAssetsToLoad = true;
+          }
+        }
+      }
     } else {
-      console.warn('[PreloadScene] Asset manifest missing; proceeding with default dynamic canvas assets.');
+      console.warn('[PreloadScene] Asset manifest missing; proceeding with dynamic canvas assets.');
     }
 
-    // Launch main BarScene and HUD overlay scene in parallel
-    this.scene.start('BarScene');
-    this.scene.launch('HUDOverlayScene');
+    const transitionToGame = () => {
+      this.scene.start('BarScene');
+      this.scene.launch('HUDOverlayScene');
+    };
+
+    if (hasAssetsToLoad) {
+      this.load.once('complete', () => {
+        console.log('[PreloadScene] Manifest assets loader pass complete.');
+        transitionToGame();
+      });
+      this.load.start();
+    } else {
+      transitionToGame();
+    }
   }
 }
