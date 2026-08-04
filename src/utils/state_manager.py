@@ -1,5 +1,6 @@
 """State management for conversation and order tracking."""
 
+import copy
 import os
 import re
 import threading

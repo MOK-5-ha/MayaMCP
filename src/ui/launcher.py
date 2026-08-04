@@ -15,7 +15,6 @@ from .components import (
 from .handlers import (
     clear_chat_state,
     handle_gradio_input,
-    handle_gradio_streaming_input,
 )
 from .tab_overlay import create_tab_overlay_html
 
