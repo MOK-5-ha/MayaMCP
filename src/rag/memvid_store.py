@@ -3,7 +3,6 @@ Memvid-based vector store replacement for Maya's RAG system
 """
 
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from ..config.logging_config import get_logger
 from ..memvid import MemvidEncoder, MemvidRetriever
@@ -24,14 +23,14 @@ DEFAULT_DOCUMENTS = (
     "If you're looking for something refreshing, our Long Island is always a winner."
 )
 
-def initialize_memvid_store(documents: Optional[List[str]] = None, force_rebuild: bool = False) -> Tuple[MemvidRetriever, List[str]]:
+def initialize_memvid_store(documents: list[str] | None = None, force_rebuild: bool = False) -> tuple[MemvidRetriever, list[str]]:
     """
     Initialize Memvid-based vector store for Maya's personality
-    
+
     Args:
         documents: List of documents to store. Uses DEFAULT_DOCUMENTS if None.
         force_rebuild: Whether to rebuild the video memory even if it exists
-        
+
     Returns:
         Tuple of (MemvidRetriever instance, list of documents)
     """
@@ -76,7 +75,7 @@ def initialize_memvid_store(documents: Optional[List[str]] = None, force_rebuild
         # Return a fallback
         return _create_fallback_retriever(documents), documents
 
-def _create_text_fallback(documents: List[str], assets_dir: Path):
+def _create_text_fallback(documents: list[str], assets_dir: Path):
     """Create a simple text-based fallback when video creation fails"""
     import json
 
@@ -100,11 +99,11 @@ def _create_text_fallback(documents: List[str], assets_dir: Path):
 class FallbackRetriever:
     """Fallback retriever when Memvid is not available"""
 
-    def __init__(self, documents: List[str]):
+    def __init__(self, documents: list[str]):
         self.documents = documents
         logger.info(f"Using fallback retriever with {len(documents)} documents")
 
-    def search(self, query: str, top_k: int = 5) -> List[str]:
+    def search(self, query: str, top_k: int = 5) -> list[str]:
         """Simple keyword-based search"""
         query_lower = query.lower()
         query_words = query_lower.split()  # Pre-compute split operation
@@ -134,7 +133,7 @@ class FallbackRetriever:
             "fallback_mode": True
         }
 
-def _create_fallback_retriever(documents: List[str]) -> FallbackRetriever:
+def _create_fallback_retriever(documents: list[str]) -> FallbackRetriever:
     """Create fallback retriever when Memvid fails"""
     return FallbackRetriever(documents)
 
@@ -142,15 +141,15 @@ def search_memvid_documents(
     retriever,
     query_text: str,
     n_results: int = 1
-) -> List[str]:
+) -> list[str]:
     """
     Search for similar documents using Memvid retriever
-    
+
     Args:
         retriever: MemvidRetriever or FallbackRetriever instance
         query_text: Query text to search with
         n_results: Number of results to return
-        
+
     Returns:
         List of retrieved documents
     """

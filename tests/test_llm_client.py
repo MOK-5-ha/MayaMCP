@@ -20,39 +20,56 @@ class TestLLMClient:
     """Test cases for LLM client functions."""
 
     def test_get_genai_client(self, monkeypatch):
-        """Test get_genai_client creates a Client with the API key."""
-        # Reset global state before test
+        """Test get_genai_client creates a Client in Vertex AI Mode."""
         monkeypatch.setattr('src.llm.client._genai_client', None)
-        monkeypatch.setattr('src.llm.client._genai_client_key', None)
+        monkeypatch.setattr('src.llm.client._genai_client_project', None)
+        monkeypatch.setattr('src.llm.client._genai_client_location', None)
+        monkeypatch.setenv("GCP_PROJECT", "my-test-project")
+        monkeypatch.setenv("GCP_LOCATION", "global")
 
         mock_client = MagicMock()
         with patch('src.llm.client.genai.Client', return_value=mock_client) as mock_ctor:
-            result = get_genai_client("test_api_key")
-            mock_ctor.assert_called_once_with(api_key="test_api_key")
+            result = get_genai_client()
+            mock_ctor.assert_called_once_with(vertexai=True, project="my-test-project", location="global")
             assert result is mock_client
+
+    def test_get_genai_client_missing_project_raises(self, monkeypatch):
+        """Test get_genai_client raises ValueError when GCP_PROJECT is missing."""
+        monkeypatch.setattr('src.llm.client._genai_client', None)
+        monkeypatch.setattr('src.llm.client._genai_client_project', None)
+        monkeypatch.setattr('src.llm.client._genai_client_location', None)
+        monkeypatch.delenv("GCP_PROJECT", raising=False)
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+
+        with pytest.raises(ValueError) as exc:
+            get_genai_client()
+        assert "GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured" in str(exc.value)
 
     def test_get_genai_client_singleton(self, monkeypatch):
         """Test get_genai_client returns the same client on repeated calls."""
         monkeypatch.setattr('src.llm.client._genai_client', None)
-        monkeypatch.setattr('src.llm.client._genai_client_key', None)
+        monkeypatch.setattr('src.llm.client._genai_client_project', None)
+        monkeypatch.setattr('src.llm.client._genai_client_location', None)
+        monkeypatch.setenv("GCP_PROJECT", "my-test-project")
 
         mock_client = MagicMock()
         with patch('src.llm.client.genai.Client', return_value=mock_client) as mock_ctor:
-            c1 = get_genai_client("key1")
-            c2 = get_genai_client("key1")
+            c1 = get_genai_client()
+            c2 = get_genai_client()
             assert c1 is c2
             mock_ctor.assert_called_once()
 
-    def test_get_genai_client_key_rotation(self, monkeypatch):
-        """Test get_genai_client recreates client when key changes."""
+    def test_get_genai_client_project_rotation(self, monkeypatch):
+        """Test get_genai_client recreates client when project changes."""
         monkeypatch.setattr('src.llm.client._genai_client', None)
-        monkeypatch.setattr('src.llm.client._genai_client_key', None)
+        monkeypatch.setattr('src.llm.client._genai_client_project', None)
+        monkeypatch.setattr('src.llm.client._genai_client_location', None)
 
         mock_client1 = MagicMock()
         mock_client2 = MagicMock()
         with patch('src.llm.client.genai.Client', side_effect=[mock_client1, mock_client2]) as mock_ctor:
-            c1 = get_genai_client("key1")
-            c2 = get_genai_client("key2")
+            c1 = get_genai_client(gcp_project="project-1")
+            c2 = get_genai_client(gcp_project="project-2")
             assert c1 is mock_client1
             assert c2 is mock_client2
             assert mock_ctor.call_count == 2
@@ -152,7 +169,7 @@ class TestLLMClient:
         result = call_gemini_api(prompt_content, config, api_key)
 
         # Verify calls
-        mock_get_client.assert_called_once_with(api_key)
+        mock_get_client.assert_called_once_with(gcp_project=None, gcp_location=None)
         mock_get_model_name.assert_called_once()
         mock_build_config.assert_called_once_with(config)
         mock_client.models.generate_content.assert_called_once_with(
@@ -324,5 +341,5 @@ class TestLLMClient:
             call_gemini_api([], {}, "test_key")
 
             # Check debug logging calls
-            mock_logger.debug.assert_any_call("Calling Gemini API...")
+            mock_logger.debug.assert_any_call("Calling Gemini API in GCP Vertex AI mode...")
             mock_logger.debug.assert_any_call("Gemini API call successful.")

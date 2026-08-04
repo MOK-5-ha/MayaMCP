@@ -1,11 +1,8 @@
 """Embedding generation for RAG system."""
 
-from typing import List, Optional
-
 from google.genai import types
 from tenacity import RetryCallState, retry, stop_after_attempt, wait_exponential
 
-from ..config.api_keys import get_google_api_key
 from ..config.logging_config import get_logger
 from ..llm.client import get_genai_client
 from ..utils.errors import classify_and_log_genai_error
@@ -37,15 +34,15 @@ logger = get_logger(__name__)
 
 
 def _get_embed_client():
-    """Return a genai Client for embedding calls, or None if no API key."""
-    api_key = get_google_api_key()
-    if not api_key:
-        logger.error("GEMINI_API_KEY not set; cannot generate embeddings.")
+    """Return a genai Client for embedding calls in Vertex AI mode, or None if unconfigured."""
+    try:
+        return get_genai_client()
+    except Exception as e:
+        logger.error(f"GCP Vertex AI client unconfigured; cannot generate embeddings: {e}")
         return None
-    return get_genai_client(api_key)
 
 
-def _parse_embedding_values(emb) -> Optional[List[float]]:
+def _parse_embedding_values(emb) -> list[float] | None:
     """Extract a float list from a single embedding object."""
     if hasattr(emb, "values"):
         values_attr = emb.values
@@ -60,7 +57,7 @@ def _parse_embedding_values(emb) -> Optional[List[float]]:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10), retry_error_callback=_retry_return_none)
-def get_embedding(text: str, task_type: str = DEFAULT_TASK_TYPE) -> Optional[List[float]]:
+def get_embedding(text: str, task_type: str = DEFAULT_TASK_TYPE) -> list[float] | None:
     """
         Embedding vector as list of floats, or None if failed.
     """
@@ -92,7 +89,7 @@ def get_embedding(text: str, task_type: str = DEFAULT_TASK_TYPE) -> Optional[Lis
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
-def _call_batch_embed(client, batch: List[str], task_type: str):
+def _call_batch_embed(client, batch: list[str], task_type: str):
     """Call batch embedding API with retry logic."""
     try:
         config = types.EmbedContentConfig(task_type=task_type)
@@ -107,7 +104,7 @@ def _call_batch_embed(client, batch: List[str], task_type: str):
         raise
 
 
-def get_embeddings_batch(texts: List[str], task_type: str = DEFAULT_TASK_TYPE) -> List[Optional[List[float]]]:
+def get_embeddings_batch(texts: list[str], task_type: str = DEFAULT_TASK_TYPE) -> list[list[float] | None]:
     """
     Get embeddings for multiple texts via a single batch API call with chunking and retry.
 
@@ -125,10 +122,10 @@ def get_embeddings_batch(texts: List[str], task_type: str = DEFAULT_TASK_TYPE) -
     if client is None:
         return [None] * len(texts)
 
-    results: List[Optional[List[float]]] = []
+    results: list[list[float] | None] = []
 
-    def _parse_resp(resp, expected_len: int) -> List[Optional[List[float]]]:
-        out: List[Optional[List[float]]] = []
+    def _parse_resp(resp, expected_len: int) -> list[list[float] | None]:
+        out: list[list[float] | None] = []
         if hasattr(resp, "embeddings") and isinstance(resp.embeddings, list):
             for item in resp.embeddings:
                 out.append(_parse_embedding_values(item))

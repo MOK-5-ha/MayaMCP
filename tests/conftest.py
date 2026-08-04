@@ -152,8 +152,12 @@ if _importlib_util.find_spec('google.genai') is None:
 @pytest.fixture(autouse=True)
 def mock_google_genai_client(monkeypatch):
     from types import SimpleNamespace as NS
-    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
+    monkeypatch.setenv("GCP_PROJECT", "dummy-gcp-project")
+    monkeypatch.setenv("GCP_LOCATION", "global")
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GEMINI_TIER", "paid")
     monkeypatch.setenv("CARTESIA_API_KEY", "dummy-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     try:
         import google.genai

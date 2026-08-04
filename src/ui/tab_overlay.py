@@ -5,7 +5,6 @@ and remaining balance, with animated count-up effects when values change.
 It also includes tip button functionality for adding gratuity.
 """
 
-from typing import Optional
 
 from ..config.logging_config import get_logger
 from ..utils.helpers import format_currency
@@ -25,16 +24,16 @@ COLOR_DEPLETED = "#FF4444"    # Red for balance <= $0
 
 def get_balance_color(balance: float) -> str:
     """Return the appropriate color based on balance level.
-    
+
     Args:
         balance: Current user balance in dollars
-        
+
     Returns:
         Hex color string:
         - '#FFFFFF' for balance >= $50 (normal)
         - '#FFA500' for 0 < balance < $50 (low funds warning)
         - '#FF4444' for balance <= $0 (depleted/negative)
-        
+
     Requirements: 6.3, 6.4
     """
     if balance >= 50.0:
@@ -47,26 +46,26 @@ def get_balance_color(balance: float) -> str:
 
 def create_tip_buttons_html(
     tab_amount: float,
-    selected_percentage: Optional[int] = None,
+    selected_percentage: int | None = None,
     on_tip_click_callback: str = "handleTipClick"
 ) -> str:
     """Generate HTML for tip selection buttons.
-    
+
     Creates three tip buttons (10%, 15%, 20%) that allow users to add
     gratuity to their tab. Buttons are disabled when tab is $0.
-    
+
     Args:
         tab_amount: Current tab total (to determine if buttons should be enabled)
         selected_percentage: Currently selected tip percentage (10, 15, 20) or None
         on_tip_click_callback: JavaScript callback name for tip button clicks
-        
+
     Returns:
         HTML string with three tip buttons:
         - Buttons disabled/hidden if tab_amount == 0
         - Selected button highlighted with #4CAF50 background color
         - Unselected buttons use default styling (#333333)
         - Visual state updates immediately on select/replace/toggle
-        
+
     Requirements: 7.1, 7.7, 7.8
     """
     is_disabled = tab_amount <= 0
@@ -83,8 +82,8 @@ def create_tip_buttons_html(
         opacity = "0.5" if is_disabled else "1"
 
         button_html = f'''
-        <button 
-            class="tip-button" 
+        <button
+            class="tip-button"
             data-percentage="{percentage}"
             onclick="{on_tip_click_callback}({percentage})"
             {disabled_attr}
@@ -119,32 +118,32 @@ def create_tip_buttons_html(
 
 def generate_tip_notification(percentage: int, tip_amount: float, _tab_total: float) -> str:
     """Generate notification message sent to Maya when user selects a tip.
-    
+
     Creates a conversational message that conveys the user's tip selection
     intent, including both the percentage and calculated amount.
-    
+
     Args:
         percentage: Selected tip percentage (10, 15, or 20)
         tip_amount: Calculated tip amount in dollars
         _tab_total: Current tab total in dollars
-        
+
     Returns:
         Message conveying tip selection intent containing both percentage
         and amount values.
-        
+
     Requirements: 7.11
     """
     return f"I'd like to add a {percentage}% tip ({format_currency(tip_amount)}) for your great service!"
 
 def generate_tip_removal_notification() -> str:
     """Generate notification message sent to Maya when user removes tip.
-    
+
     Creates a conversational message that conveys the user's intent
     to remove the previously selected tip.
-    
+
     Returns:
         Message conveying tip removal intent.
-        
+
     Requirements: 7.12
     """
     return "I've decided to remove the tip."
@@ -155,17 +154,17 @@ def create_tab_overlay_html(
     balance: float,
     prev_tab: float = 0.0,
     prev_balance: float = 1000.0,
-    avatar_path: Optional[str] = None,
-    tip_percentage: Optional[int] = None,
+    avatar_path: str | None = None,
+    tip_percentage: int | None = None,
     tip_amount: float = 0.0,
     on_tip_click_callback: str = "handleTipClick"
 ) -> str:
     """Generate HTML/CSS/JS for tab overlay with animation and tip buttons.
-    
+
     Creates an overlay positioned at the bottom-left of Maya's avatar
     showing the current tab and balance with count-up animations,
     plus tip selection buttons and tip/total display.
-    
+
     Args:
         tab_amount: Current tab total (drinks only)
         balance: Current user balance
@@ -175,10 +174,10 @@ def create_tab_overlay_html(
         tip_percentage: Currently selected tip (10, 15, 20) or None
         tip_amount: Calculated tip amount
         on_tip_click_callback: JavaScript callback name for tip button clicks
-        
+
     Returns:
         HTML string with embedded CSS and JavaScript for animations and tip buttons
-        
+
     Requirements: 2.1, 2.3, 2.4, 5.1, 5.2, 5.3, 5.4, 6.1, 7.1, 7.3, 7.4
     """
     balance_color = get_balance_color(balance)
@@ -213,9 +212,9 @@ def create_tab_overlay_html(
   to {{ opacity: 1; }}
 }}
 .avatar-overlay-container {{
-    position: relative; 
-    display: inline-block; 
-    width: 100%; 
+    position: relative;
+    display: inline-block;
+    width: 100%;
     max-width: 600px;
     background-image: url("file/{DEFAULT_AVATAR}");
     background-size: cover;
@@ -225,7 +224,7 @@ def create_tab_overlay_html(
 </style>
 <div class="avatar-overlay-container">
     {media_html}
-    
+
     <div class="tab-overlay" style="
         position: absolute;
         bottom: 16px;
@@ -250,17 +249,17 @@ def create_tab_overlay_html(
                 font-size: 16px;
                 font-weight: 600;
             " data-value="{tab_amount}" data-prev="{prev_tab}">Tab: ${tab_amount:.2f}</span>
-            
+
             <span class="balance-display" id="balance-display" style="
                 color: {balance_color};
                 font-size: 16px;
                 font-weight: 600;
             " data-value="{balance}" data-prev="{prev_balance}">Balance: ${balance:.2f}</span>
         </div>
-        
+
         <!-- Row 2: Tip Buttons (hidden when tab is $0) -->
         {tip_buttons_html}
-        
+
         <!-- Row 3: Tip and Total (hidden when no tip selected) -->
         <div class="tip-total-row" style="
             display: {tip_display_style};
@@ -274,7 +273,7 @@ def create_tab_overlay_html(
                 font-size: 14px;
                 font-weight: 500;
             " data-value="{tip_amount}">Tip: ${tip_amount:.2f}</span>
-            
+
             <span class="total-display" id="total-display" style="
                 color: #FFD700;
                 font-size: 16px;
@@ -298,10 +297,10 @@ def create_tab_overlay_html(
             onAnimationComplete: null,
             onAnimationCancel: null
         }},
-        
+
         enqueue: function(update) {{
             const now = Date.now();
-            
+
             // Collapse strategy: if within 100ms of last update, merge
             if (this.queue.length > 0 && (now - this.lastEnqueueTime) < this.collapseWindowMs) {{
                 // Update the last queued item's end values
@@ -316,100 +315,100 @@ def create_tab_overlay_html(
                 }}
                 this.queue.push(update);
             }}
-            
+
             this.lastEnqueueTime = now;
-            
+
             if (!this.isRunning) {{
                 this.processNext();
             }}
         }},
-        
+
         processNext: function() {{
             if (this.queue.length === 0) {{
                 this.isRunning = false;
                 return;
             }}
-            
+
             this.isRunning = true;
             const update = this.queue.shift();
             this.animate(update);
         }},
-        
+
         animate: function(update) {{
             const duration = 500;
             const startTime = performance.now();
-            
+
             const tabEl = document.getElementById('tab-display');
             const balanceEl = document.getElementById('balance-display');
-            
+
             if (!tabEl || !balanceEl) {{
                 this.processNext();
                 return;
             }}
-            
+
             // Trigger start callback
             if (this.callbacks.onAnimationStart) {{
                 this.callbacks.onAnimationStart(update);
             }}
-            
+
             // Apply pulse effect
             tabEl.style.transition = 'transform 250ms ease-out';
             balanceEl.style.transition = 'transform 250ms ease-out';
             tabEl.style.transform = 'scale(1.1)';
             balanceEl.style.transform = 'scale(1.1)';
-            
+
             const self = this;
-            
+
             function step(currentTime) {{
                 const elapsed = currentTime - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                
+
                 // Linear interpolation
                 const currentTab = update.startTab + (update.endTab - update.startTab) * progress;
                 const currentBalance = update.startBalance + (update.endBalance - update.startBalance) * progress;
-                
+
                 tabEl.textContent = 'Tab: $' + currentTab.toFixed(2);
                 balanceEl.textContent = 'Balance: $' + currentBalance.toFixed(2);
-                
+
                 // Update balance color based on current animated value
                 balanceEl.style.color = getBalanceColor(currentBalance);
-                
+
                 // Scale back down at halfway point
                 if (progress >= 0.5) {{
                     tabEl.style.transform = 'scale(1.0)';
                     balanceEl.style.transform = 'scale(1.0)';
                 }}
-                
+
                 if (progress < 1) {{
                     requestAnimationFrame(step);
                 }} else {{
                     // Animation complete
                     tabEl.dataset.value = update.endTab;
                     balanceEl.dataset.value = update.endBalance;
-                    
+
                     if (self.callbacks.onAnimationComplete) {{
                         self.callbacks.onAnimationComplete(update);
                     }}
-                    
+
                     self.processNext();
                 }}
             }}
-            
+
             requestAnimationFrame(step);
         }},
-        
+
         cancelAll: function(finalTab, finalBalance) {{
             // Cancel running animation and render final values
             if (this.callbacks.onAnimationCancel) {{
                 this.callbacks.onAnimationCancel();
             }}
-            
+
             this.queue = [];
             this.isRunning = false;
-            
+
             const tabEl = document.getElementById('tab-display');
             const balanceEl = document.getElementById('balance-display');
-            
+
             if (tabEl && balanceEl) {{
                 tabEl.textContent = 'Tab: $' + finalTab.toFixed(2);
                 balanceEl.textContent = 'Balance: $' + finalBalance.toFixed(2);
@@ -420,12 +419,12 @@ def create_tab_overlay_html(
                 balanceEl.dataset.value = finalBalance;
             }}
         }},
-        
+
         getQueueLength: function() {{
             return this.queue.length;
         }}
     }};
-    
+
     function getBalanceColor(balance) {{
         if (balance >= 50.0) {{
             return '{COLOR_NORMAL}';
@@ -435,17 +434,17 @@ def create_tab_overlay_html(
             return '{COLOR_DEPLETED}';
         }}
     }}
-    
+
     // Initialize animation if values changed
     const tabEl = document.getElementById('tab-display');
     const balanceEl = document.getElementById('balance-display');
-    
+
     if (tabEl && balanceEl) {{
         const prevTab = parseFloat(tabEl.dataset.prev) || 0;
         const currentTab = parseFloat(tabEl.dataset.value) || 0;
         const prevBalance = parseFloat(balanceEl.dataset.prev) || 1000;
         const currentBalance = parseFloat(balanceEl.dataset.value) || 1000;
-        
+
         // Only animate if values actually changed
         if (prevTab !== currentTab || prevBalance !== currentBalance) {{
             AnimationQueue.enqueue({{
@@ -456,7 +455,7 @@ def create_tab_overlay_html(
             }});
         }}
     }}
-    
+
     // Expose for external access
     window.TabOverlayAnimationQueue = AnimationQueue;
 }})();
@@ -470,9 +469,9 @@ def create_tab_overlay_html(
 # =============================================================================
 # This mirrors the JavaScript AnimationQueue behavior for property-based testing
 
-import time
-from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+import time  # noqa: E402 - test helpers intentionally placed after production code
+from collections.abc import Callable  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
 
 
 @dataclass
@@ -487,10 +486,10 @@ class TabUpdate:
 
 class AnimationQueue:
     """Python implementation of the animation queue for testing.
-    
+
     This class mirrors the JavaScript AnimationQueue behavior to enable
     property-based testing of the queue logic.
-    
+
     Requirements: 5.3
     """
 
@@ -498,18 +497,18 @@ class AnimationQueue:
     COLLAPSE_WINDOW_MS = 100
 
     def __init__(self):
-        self._queue: List[TabUpdate] = []
+        self._queue: list[TabUpdate] = []
         self._is_running: bool = False
         self._last_enqueue_time: float = 0
 
         # Callbacks
-        self.on_animation_start: Optional[Callable[[TabUpdate], None]] = None
-        self.on_animation_complete: Optional[Callable[[TabUpdate], None]] = None
-        self.on_animation_cancel: Optional[Callable[[], None]] = None
+        self.on_animation_start: Callable[[TabUpdate], None] | None = None
+        self.on_animation_complete: Callable[[TabUpdate], None] | None = None
+        self.on_animation_cancel: Callable[[], None] | None = None
 
     def enqueue(self, update: TabUpdate) -> None:
         """Add an update to the animation queue.
-        
+
         Implements collapse strategy: updates within 100ms are merged.
         Queue max depth is 5 (oldest dropped if exceeded).
         """
@@ -538,9 +537,9 @@ class AnimationQueue:
 
         self._last_enqueue_time = now
 
-    def process_next(self) -> Optional[TabUpdate]:
+    def process_next(self) -> TabUpdate | None:
         """Process and return the next update from the queue.
-        
+
         Returns None if queue is empty.
         """
         if not self._queue:

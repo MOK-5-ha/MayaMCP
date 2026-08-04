@@ -470,3 +470,52 @@ class TestHandleGradioStreamingInput:
         assert event['history'][0]['role'] == 'user'
         assert event['history'][1]['role'] == 'assistant'
         assert 'quota_error_html' not in event
+
+
+class TestHandleKeySubmission:
+    """Test cases for handle_key_submission in Vertex AI Mode."""
+
+    @patch('src.ui.api_key_modal.validate_gemini_key')
+    def test_handle_key_submission_empty_key_validates_server_vertex_config(
+        self, mock_validate_key
+    ):
+        """Test handle_key_submission accepts empty key and validates server GCP_PROJECT/ADC."""
+        from src.ui.api_key_modal import handle_key_submission
+        mock_validate_key.return_value = (True, "")
+
+        req = _make_request()
+        test_state = {}
+
+        err, col_keys, col_chat, validated = handle_key_submission(
+            gemini_key="",
+            cartesia_key="",
+            request=req,
+            app_state=test_state,
+        )
+
+        mock_validate_key.assert_called_once_with(gcp_project=None)
+        assert err == ""
+        assert validated is True
+
+    @patch('src.ui.api_key_modal.validate_gemini_key')
+    def test_handle_key_submission_custom_project_override(
+        self, mock_validate_key
+    ):
+        """Test handle_key_submission passes custom GCP project ID override to validate_gemini_key."""
+        from src.ui.api_key_modal import handle_key_submission
+        mock_validate_key.return_value = (True, "")
+
+        req = _make_request()
+        test_state = {}
+
+        err, col_keys, col_chat, validated = handle_key_submission(
+            gemini_key="my-custom-project",
+            cartesia_key="cartesia_123",
+            request=req,
+            app_state=test_state,
+        )
+
+        mock_validate_key.assert_called_once_with(gcp_project="my-custom-project")
+        assert err == ""
+        assert validated is True
+

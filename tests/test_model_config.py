@@ -138,9 +138,9 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-3-flash-preview",
+            "model_version": "gemini-3.1-flash-lite",
             "temperature": 1.0,
-            "max_output_tokens": 2048,
+            "max_output_tokens": 8192,
             "top_p": 0.95,
             "top_k": 1
         }
@@ -174,9 +174,9 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-3-flash-preview",
+            "model_version": "gemini-3.1-flash-lite",
             "temperature": 1.0,
-            "max_output_tokens": 2048,
+            "max_output_tokens": 8192,
             "top_p": 0.95,
             "top_k": 1
         }

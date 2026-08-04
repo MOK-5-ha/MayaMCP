@@ -1,8 +1,10 @@
 """LLM client initialization and API calls."""
 
 import logging
+import os
 import threading
-from typing import Any, Dict, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any, Dict, List, Optional
 
 from google import genai
 from google.genai import types
@@ -18,7 +20,7 @@ logger = get_logger(__name__)
 def _handle_genai_fallback_error(e: Exception, logger: logging.Logger, context: str):
     """
     Handle fallback error classification for GenAI exceptions.
-    
+
     Args:
         e: The exception to classify and handle
         logger: Logger instance for error reporting
@@ -29,7 +31,6 @@ def _handle_genai_fallback_error(e: Exception, logger: logging.Logger, context: 
     error_code = getattr(e, "error_code", None)
 
     # Detect timeouts via common exception types
-    # Check for built-in timeout
     is_timeout = isinstance(e, TimeoutError)
     if not is_timeout and httpx is not None:
         httpx_timeout_types = tuple(
@@ -52,6 +53,7 @@ def _handle_genai_fallback_error(e: Exception, logger: logging.Logger, context: 
     else:
         # Fall back to shared string-based classifier to keep consistency
         classify_and_log_genai_error(e, logger, context=context)
+
 # Optional: SDK-specific errors and HTTP client timeout classes
 try:
     from google.genai import errors as genai_errors  # type: ignore
@@ -82,24 +84,59 @@ GenaiTimeoutError = getattr(genai_errors, "TimeoutError", _NoSDKError) if genai_
 # ---- Unified Google GenAI client/wrapper utilities ----
 
 _genai_client: Optional[genai.Client] = None
-_genai_client_key: Optional[str] = None
+_genai_client_project: Optional[str] = None
+_genai_client_location: Optional[str] = None
 _CLIENT_LOCK = threading.Lock()
 
 
-def get_genai_client(api_key: str) -> genai.Client:
-    """Return a singleton genai.Client, creating it if needed.
+def get_genai_client(
+    gcp_project: Optional[str] = None,
+    gcp_location: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> genai.Client:
+    """Return a singleton genai.Client initialized strictly in Vertex AI Mode.
 
-    Thread-safe. If *api_key* differs from the key used to create the
-    current client the client is recreated (supports key rotation).
+    Thread-safe. Requires GCP_PROJECT or GOOGLE_CLOUD_PROJECT.
+
+    Raises:
+        ValueError: If GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured.
     """
-    global _genai_client, _genai_client_key
-    if _genai_client is not None and _genai_client_key == api_key:
+    global _genai_client, _genai_client_project, _genai_client_location
+
+    project = (
+        gcp_project or os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or ""
+    ).strip()
+    if not project:
+        raise ValueError(
+            "GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured. "
+            "Google AI Studio Key Mode has been permanently removed; this project "
+            "exclusively uses GCP Vertex AI Mode (Paid Tier). Please set GCP_PROJECT in your .env file."
+        )
+
+    location = (
+        gcp_location or os.getenv("GCP_LOCATION") or "global"
+    ).strip() or "global"
+
+    if (
+        _genai_client is not None
+        and _genai_client_project == project
+        and _genai_client_location == location
+    ):
         return _genai_client
 
     with _CLIENT_LOCK:
-        if _genai_client is None or _genai_client_key != api_key:
-            _genai_client = genai.Client(api_key=api_key)
-            _genai_client_key = api_key
+        if (
+            _genai_client is None
+            or _genai_client_project != project
+            or _genai_client_location != location
+        ):
+            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+            os.environ["GEMINI_TIER"] = "paid"
+            _genai_client = genai.Client(
+                vertexai=True, project=project, location=location
+            )
+            _genai_client_project = project
+            _genai_client_location = location
         local_client = _genai_client
     return local_client
 
@@ -141,6 +178,7 @@ def get_gemini_params() -> Dict[str, Any]:
         "max_output_tokens": cfg["max_output_tokens"],
     }
 
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -150,23 +188,27 @@ def get_gemini_params() -> Dict[str, Any]:
 def call_gemini_api(
     prompt_content: List[Dict],
     config: Dict,
-    api_key: str
+    api_key: Optional[str] = None,
+    gcp_project: Optional[str] = None,
+    gcp_location: Optional[str] = None,
 ) -> types.GenerateContentResponse:
     """
-    Internal function to call the Gemini API with retry logic.
+    Internal function to call the Gemini API in Vertex AI mode with retry logic.
 
     Args:
         prompt_content: List of message dictionaries
         config: Generation configuration
-        api_key: Google API key
+        api_key: Deprecated / unused API key parameter
+        gcp_project: Optional GCP Project ID
+        gcp_location: Optional GCP Location
 
     Returns:
         Gemini API response
     """
-    logger.debug("Calling Gemini API...")
+    logger.debug("Calling Gemini API in GCP Vertex AI mode...")
 
-    # Get singleton client
-    client = get_genai_client(api_key)
+    # Get singleton client in Vertex AI mode
+    client = get_genai_client(gcp_project=gcp_project, gcp_location=gcp_location)
 
     # Get model name from shared config
     model_name = get_model_name()
@@ -201,20 +243,24 @@ def call_gemini_api(
 def stream_gemini_api(
     prompt_content: List[Dict],
     config: Dict,
-    api_key: str
+    api_key: Optional[str] = None,
+    gcp_project: Optional[str] = None,
+    gcp_location: Optional[str] = None,
 ) -> Generator[types.GenerateContentResponse, None, None]:
     """
-    Stream Gemini API responses with resilient retry logic.
+    Stream Gemini API responses with resilient retry logic in GCP Vertex AI mode.
 
     Args:
         prompt_content: List of message dictionaries
         config: Generation configuration
-        api_key: Google API key
+        api_key: Deprecated / unused API key parameter
+        gcp_project: Optional GCP Project ID
+        gcp_location: Optional GCP Location
 
     Yields:
         Streaming response chunks
     """
-    logger.debug("Starting Gemini API stream...")
+    logger.debug("Starting Gemini API stream in GCP Vertex AI mode...")
 
     # Internal helper with retry logic for opening streams
     @retry(
@@ -225,8 +271,8 @@ def stream_gemini_api(
     )
     def _open_gemini_stream():
         """Open a fresh Gemini stream with retry logic."""
-        # Get singleton client
-        client = get_genai_client(api_key)
+        # Get singleton client in Vertex AI mode
+        client = get_genai_client(gcp_project=gcp_project, gcp_location=gcp_location)
 
         # Get model name from shared config
         model_name = get_model_name()
@@ -251,8 +297,7 @@ def stream_gemini_api(
             response_stream = _open_gemini_stream()
 
             # Iterate through stream with error handling
-            for chunk in response_stream:
-                yield chunk
+            yield from response_stream
 
             # Stream completed successfully
             break
@@ -264,8 +309,6 @@ def stream_gemini_api(
                 raise
 
             logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}): {e}. Retrying...")
-            # Note: We don't resume from offset as Gemini doesn't support it,
-            # but we track attempts for logging/debugging
 
         except (GenaiAuthError, GenaiPermissionDeniedError,
                 GenaiUnauthenticatedError) as e:
@@ -296,18 +339,15 @@ def stream_gemini_api(
                     is_timeout = True
 
             if is_timeout or code == 429 or error_code == 429:
-                # Retry timeouts and rate limits
                 attempt += 1
                 if attempt >= max_attempts:
                     logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
                     raise
                 logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}): {e}. Retrying...")
             elif code in (401, 403) or error_code in (401, 403):
-                # Don't retry auth errors
                 logger.error(f"Authentication error in Gemini stream: {e}")
                 raise
             else:
-                # Log and retry other errors
                 attempt += 1
                 if attempt >= max_attempts:
                     logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")

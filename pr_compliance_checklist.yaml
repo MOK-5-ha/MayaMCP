@@ -1,0 +1,15 @@
+# PR Compliance Checklist for MayaMCP
+
+checklists:
+  - id: vertex-ai-mode-mandatory-paid-tier
+    name: Mandatory 100% GCP Vertex AI Mode (Paid Tier)
+    rules:
+      - "No GEMINI_API_KEY, LLM_API_KEY, or BACKUP_LLM_API_KEY environment variables or code paths."
+      - "Strict requirement of GCP_PROJECT or GOOGLE_CLOUD_PROJECT."
+      - "genai.Client initialized strictly with vertexai=True, project, location."
+      - "GEMINI_TIER locked to paid (300+ RPM quota via GCP billing credits)."
+  - id: strict-async-non-blocking-io
+    name: Strict Non-Blocking Async I/O
+    rules:
+      - "No synchronous blocking network calls inside backend event loops."
+      - "Use async clients or offload blocking sync I/O via asyncio.to_thread."

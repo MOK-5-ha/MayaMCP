@@ -1,7 +1,7 @@
 """Utilities for streaming text processing and TTS pipelining."""
 
 import re
-from typing import Generator, List, Optional
+from collections.abc import Generator
 
 from ..config.logging_config import get_logger
 
@@ -30,11 +30,11 @@ class SentenceBuffer:
     def _is_false_boundary(self, text_before: str, text_after: str) -> bool:
         """
         Check if a sentence boundary match is a false positive.
-        
+
         Args:
             text_before: Text before the match
             text_after: Text after the match
-            
+
         Returns:
             True if this should be rejected as a false boundary
         """
@@ -56,7 +56,7 @@ class SentenceBuffer:
 
         return False
 
-    def add_text(self, text_chunk: str) -> List[str]:
+    def add_text(self, text_chunk: str) -> list[str]:
         """
         Add a text chunk and return any complete sentences found.
 
@@ -98,7 +98,7 @@ class SentenceBuffer:
 
         return sentences
 
-    def flush(self) -> List[str]:
+    def flush(self) -> list[str]:
         """
         Flush remaining buffer content as final sentence(s).
 
@@ -116,7 +116,7 @@ class SentenceBuffer:
 
 def create_streaming_response_generator(
     text_stream: Generator[str, None, None],
-    sentence_buffer: Optional[SentenceBuffer] = None
+    sentence_buffer: SentenceBuffer | None = None
 ) -> Generator[dict, None, None]:
     """
     Create a generator that yields structured streaming responses.

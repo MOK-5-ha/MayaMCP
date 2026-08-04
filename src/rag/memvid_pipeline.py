@@ -3,7 +3,6 @@ Memvid-enhanced RAG pipeline for Maya
 """
 
 import hashlib
-from typing import List
 
 from ..config.logging_config import get_logger
 from ..llm.client import get_genai_client
@@ -21,7 +20,7 @@ MEMVID_FALLBACK_MESSAGE = (
 
 def generate_memvid_response(
     query_text: str,
-    retrieved_documents: List[str],
+    retrieved_documents: list[str],
     api_key: str,
     model_version: str = "gemini-3-flash-preview"
 ) -> str:
@@ -56,8 +55,8 @@ Question: {query_oneline}
 Answer:"""
 
     try:
-        # Call Google GenAI via singleton client
-        client = get_genai_client(api_key)
+        # Call Google GenAI via singleton client in Vertex AI mode
+        client = get_genai_client()
         resp = client.models.generate_content(model=model_version, contents=prompt)
 
         return getattr(resp, "text", "") or ""

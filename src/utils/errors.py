@@ -33,7 +33,7 @@ def classify_and_log_genai_error(e: Exception, logger: _LoggerLike, context: str
         # Fallback to generic log in case of unexpected logging issues
         try:
             logger.error(f"Error {context}: {e}")
-        except Exception:
+        except Exception:  # nosec B110 # noqa: S110 - intentional last-resort: logging must not raise during error handling
             # Last resort: ignore logging failure
             pass
 

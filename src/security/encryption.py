@@ -6,7 +6,6 @@ Uses Fernet (symmetric encryption) from the cryptography library.
 import base64
 import os
 import threading
-from typing import Optional
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -19,12 +18,12 @@ logger = get_logger(__name__)
 class EncryptionManager:
     """
     Manages encryption and decryption of sensitive data.
-    
+
     Uses a master key from environment or generates a temporary one.
     """
 
     _instance = None
-    _cipher_suite: Optional[Fernet] = None
+    _cipher_suite: Fernet | None = None
     _init_lock = threading.Lock()
 
     def __new__(cls):
@@ -104,10 +103,10 @@ class EncryptionManager:
     def encrypt(self, data: str) -> str:
         """
         Encrypt a string.
-        
+
         Args:
             data: The plaintext string to encrypt.
-            
+
         Returns:
             The encrypted string (base64 encoded).
         """
@@ -126,10 +125,10 @@ class EncryptionManager:
     def decrypt(self, token: str) -> str:
         """
         Decrypt a string.
-        
+
         Args:
             token: The encrypted string (base64 encoded).
-            
+
         Returns:
             The decrypted plaintext string.
         """

@@ -18,8 +18,12 @@ from dotenv import load_dotenv
 
 # Load env vars
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GCP_PROJECT = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or "dummy-gcp-project"
+GCP_LOCATION = os.getenv("GCP_LOCATION", "global")
 WANDB_API_KEY = os.getenv("WANDB_API_KEY")
+
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+os.environ["GEMINI_TIER"] = "paid"
 
 # Disable rate limits during evals
 os.environ["MAYA_SESSION_RATE_LIMIT"] = "9999"

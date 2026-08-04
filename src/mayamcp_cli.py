@@ -9,10 +9,10 @@ import os
 import sys
 from functools import partial
 
-from config import (
-    get_api_keys,
-    setup_logging,
+from config.api_keys import (
+    configure_provider_env,
 )
+from config.logging_config import setup_logging
 from config.model_config import get_model_config, is_valid_gemini_model
 from llm import get_all_tools
 from rag import initialize_memvid_store
@@ -32,17 +32,18 @@ def main():
     """Main application entry point."""
     # Setup logging
     logger = setup_logging()
-    logger.info("Starting MayaMCP - AI Bartending Agent (BYOK mode)")
+    logger.info("Starting MayaMCP - AI Bartending Agent (GCP Vertex AI Mode - Paid Tier)")
 
     try:
-        # Load API keys (optional now -- used only for RAG initialisation)
-        api_keys = get_api_keys()
-        google_api_key = api_keys.get("google_api_key")
+        # Configure and validate GCP Vertex AI Mode environment
+        provider_cfg = configure_provider_env()
+        logger.info(
+            "Initialized GCP Vertex AI Mode: project=%s, location=%s, tier=paid",
+            provider_cfg["gcp_project"],
+            provider_cfg["gcp_location"],
+        )
 
-        if google_api_key:
-            logger.info("Found GEMINI_API_KEY in environment (will use for RAG)")
-        else:
-            logger.info("No GEMINI_API_KEY in environment; RAG will use session keys or be skipped")
+
 
         # Proactive model validation (warning-only)
         model_cfg = get_model_config()
@@ -70,18 +71,14 @@ def main():
         # Initialize RAG system - Memvid only
         rag_retriever = None
 
-        if google_api_key:
-            try:
-                logger.info("Attempting to initialize Memvid-based RAG...")
-                rag_retriever, rag_documents = initialize_memvid_store()
-                logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
-            except Exception as e:
-                logger.warning(f"Memvid initialization failed: {e}. Continuing without RAG.")
-        else:
-            logger.info("Skipping RAG initialization (no server-side Gemini key)")
+        try:
+            logger.info("Attempting to initialize Memvid-based RAG...")
+            rag_retriever, rag_documents = initialize_memvid_store()
+            logger.info(f"Memvid RAG system initialized with {len(rag_documents)} documents")
+        except Exception as e:
+            logger.warning(f"Memvid initialization failed: {e}. Continuing without RAG.")
 
         # NOTE: LLM and TTS are NOT initialised here.
-        # Each user session provides their own keys (BYOK).
         # Per-session clients are lazily created via src/llm/session_registry.
 
         # Initialize app state for local run (ephemeral, in-memory)
@@ -92,7 +89,7 @@ def main():
             handle_gradio_input,
             tools=tools,
             rag_retriever=rag_retriever,
-            rag_api_key=google_api_key,
+            rag_api_key=None,
             app_state=app_state
         )
 
@@ -100,7 +97,7 @@ def main():
             handle_gradio_streaming_input,
             tools=tools,
             rag_retriever=rag_retriever,
-            rag_api_key=google_api_key,
+            rag_api_key=None,
             app_state=app_state
         )
 
@@ -126,7 +123,7 @@ def main():
             # Local/dev launch only; Modal serves via ASGI in deploy.py
             if os.getenv("PYTHON_ENV", "development").lower() != "production":
                 interface.queue().launch(
-                    server_name=os.getenv("HOST", "0.0.0.0"),
+                    server_name=os.getenv("HOST", "0.0.0.0"),  # nosec B104 - overridable via HOST env var; intentional for containerised deployment
                     server_port=int(os.getenv("PORT", "8000")),
                     debug=os.getenv("DEBUG", "False").lower() == "true",
                 )

@@ -4,7 +4,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 from ..config.logging_config import get_logger
 from .memory_monitor import get_memory_monitor
@@ -47,7 +47,7 @@ class MayaSessionManager:
         )
 
         # Session storage
-        self._sessions: Dict[str, SessionData] = {}
+        self._sessions: dict[str, SessionData] = {}
         self._lock = threading.RLock()
 
         # Memory monitor for admission control
@@ -64,14 +64,14 @@ class MayaSessionManager:
             f"default_memory={self.default_session_memory_mb}MB"
         )
 
-    def _can_admit_session(self, memory_metrics: Dict[str, Any], stats: Dict[str, Any]) -> bool:
+    def _can_admit_session(self, memory_metrics: dict[str, Any], stats: dict[str, Any]) -> bool:
         """
         Helper function to determine if a new session can be admitted.
-        
+
         Args:
             memory_metrics: Memory monitoring metrics
             stats: Session statistics
-            
+
         Returns:
             True if session can be admitted, False otherwise
         """
@@ -90,11 +90,11 @@ class MayaSessionManager:
     def create_session(self, session_id: str, api_key_hash: str = "") -> bool:
         """
         Create a new session with memory-aware admission control.
-        
+
         Args:
             session_id: Unique session identifier
             api_key_hash: Hash of the API key for tracking
-            
+
         Returns:
             True if session created successfully, False if rejected
         """
@@ -132,10 +132,10 @@ class MayaSessionManager:
     def access_session(self, session_id: str) -> bool:
         """
         Record session access and validate session exists.
-        
+
         Args:
             session_id: Session identifier
-            
+
         Returns:
             True if session exists and was accessed, False otherwise
         """
@@ -149,10 +149,10 @@ class MayaSessionManager:
     def remove_session(self, session_id: str) -> bool:
         """
         Remove a session from management.
-        
+
         Args:
             session_id: Session identifier
-            
+
         Returns:
             True if session was removed, False if not found
         """
@@ -169,7 +169,7 @@ class MayaSessionManager:
     def cleanup_expired_sessions(self) -> int:
         """
         Remove expired sessions and return count of cleaned sessions.
-        
+
         Returns:
             Number of sessions cleaned up
         """
@@ -200,7 +200,7 @@ class MayaSessionManager:
         with self._lock:
             return len(self._sessions)
 
-    def get_session_info(self, session_id: str) -> Optional[SessionData]:
+    def get_session_info(self, session_id: str) -> SessionData | None:
         """Get session information without updating access time."""
         with self._lock:
             session_data = self._sessions.get(session_id)
@@ -216,15 +216,15 @@ class MayaSessionManager:
                 api_key_hash=session_data.api_key_hash
             )
 
-    def get_all_session_ids(self) -> Set[str]:
+    def get_all_session_ids(self) -> set[str]:
         """Get all active session IDs."""
         with self._lock:
             return set(self._sessions.keys())
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get session manager statistics for monitoring.
-        
+
         Returns:
             Dictionary with session statistics
         """
@@ -254,10 +254,10 @@ class MayaSessionManager:
                 "default_session_memory_mb": default_session_memory_mb
             }
 
-    def get_memory_status(self) -> Dict[str, Any]:
+    def get_memory_status(self) -> dict[str, Any]:
         """
         Get memory status for admission decisions.
-        
+
         Returns:
             Dictionary with memory status information
         """
@@ -276,11 +276,11 @@ class MayaSessionManager:
 
 
 # Global session manager instance
-_session_manager: Optional[MayaSessionManager] = None
+_session_manager: MayaSessionManager | None = None
 _session_manager_lock = threading.Lock()
 
 # Cleanup thread management
-_cleanup_thread: Optional[threading.Thread] = None
+_cleanup_thread: threading.Thread | None = None
 _cleanup_thread_lock = threading.Lock()
 
 def get_session_manager() -> MayaSessionManager:
@@ -294,16 +294,16 @@ def get_session_manager() -> MayaSessionManager:
 
 
 def cleanup_expired_sessions_background(
-        stop_event: threading.Event, interval_seconds: int = 300, session_manager: Optional[MayaSessionManager] = None
+        stop_event: threading.Event, interval_seconds: int = 300, session_manager: MayaSessionManager | None = None
     ) -> threading.Thread:
     """
     Start background thread for cleaning up expired sessions.
-    
+
     Args:
         interval_seconds: Cleanup interval in seconds (default: 5 minutes)
         stop_event: Threading event to signal graceful shutdown
         session_manager: Session manager instance for cleanup operations
-        
+
     Returns:
         The cleanup thread
     """

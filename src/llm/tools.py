@@ -3,7 +3,7 @@
 import random
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Literal
 
 
 def tool(fn):
@@ -27,7 +27,8 @@ def tool(fn):
         return wrapper(args, **kwargs)
     wrapper.invoke = invoke
     return wrapper
-from typing_extensions import Literal, TypedDict
+
+from typing_extensions import TypedDict
 
 from ..config.logging_config import get_logger
 from ..payments.crypto_client import CryptoPaymentClient
@@ -72,7 +73,7 @@ class ToolError(TypedDict):
     message: str
 
 
-ToolResponse = Union[ToolSuccess, ToolError]
+ToolResponse = ToolSuccess | ToolError
 
 
 class PaymentError(Enum):
@@ -112,9 +113,15 @@ class PaymentError(Enum):
     # INVALID_TIP_PERCENTAGE: tip percentage not in {10, 15, 20}
     INVALID_TIP_PERCENTAGE = "INVALID_TIP_PERCENTAGE"
 
+    # INVALID_QUANTITY: item quantity less than 1
+    INVALID_QUANTITY = "INVALID_QUANTITY"
+
 
 # Human-readable message templates for each error code
-PAYMENT_ERROR_MESSAGES: Dict[PaymentError, str] = {
+PAYMENT_ERROR_MESSAGES: dict[PaymentError, str] = {
+    PaymentError.INVALID_QUANTITY: (
+        "Quantity must be at least 1."
+    ),
     PaymentError.INSUFFICIENT_FUNDS: (
         "Insufficient funds: your balance is ${balance:.2f} "
         "but the item costs ${price:.2f}."
@@ -164,7 +171,7 @@ def create_tool_success(result: dict) -> ToolSuccess:
 
 def create_tool_error(
     error: PaymentError,
-    message: Optional[str] = None,
+    message: str | None = None,
     **format_kwargs
 ) -> ToolError:
     """
@@ -194,14 +201,14 @@ def create_tool_error(
 # ContextVar storage for session context
 # This allows tools to access the current session_id without explicit parameter passing
 # Initialize with default None (no active session) for backwards compatibility
-import contextvars
+import contextvars  # ContextVar storage for session context defined here intentionally
 
 _session_context = contextvars.ContextVar('session_id', default=None)
 
 
-def get_current_session() -> Optional[str]:
+def get_current_session() -> str | None:
     """Get the current session ID.
-    
+
     Returns:
         The current session_id if set, None otherwise.
         None indicates no active session - tools should fall back to legacy behavior.
@@ -209,9 +216,9 @@ def get_current_session() -> Optional[str]:
     return _session_context.get()
 
 
-def set_current_session(session_id: Optional[str]) -> None:
+def set_current_session(session_id: str | None) -> None:
     """Set the current session ID.
-    
+
     Args:
         session_id: The session ID to set, or None to clear.
     """
@@ -229,16 +236,16 @@ def clear_current_session() -> None:
 
 # Global store reference for payment tools (set during app initialization)
 # This allows tools to access the session store without explicit parameter passing
-_global_store: Optional[Dict] = None
+_global_store: dict | None = None
 
 
-def set_global_store(store: Dict) -> None:
+def set_global_store(store: dict) -> None:
     """Set the global store reference for payment tools."""
     global _global_store
     _global_store = store
 
 
-def get_global_store() -> Dict:
+def get_global_store() -> dict:
     """Get the global store, creating a default if not set."""
     global _global_store
     if _global_store is None:
@@ -250,7 +257,7 @@ def get_global_store() -> Dict:
 @tool
 def add_to_order_with_balance(
     item_name: str,
-    modifiers: Optional[List[str]] = None,
+    modifiers: list[str] | None = None,
     quantity: int = 1
 ) -> ToolResponse:
     """Add item to order if user has sufficient balance.
@@ -271,6 +278,10 @@ def add_to_order_with_balance(
     """
     if modifiers is None:
         modifiers = []
+
+    if quantity < 1:
+        logger.warning(f"add_to_order_with_balance called with invalid quantity {quantity}")
+        return create_tool_error(PaymentError.INVALID_QUANTITY)
 
     # Get session context
     session_id = get_current_session()
@@ -373,7 +384,7 @@ def get_balance() -> ToolResponse:
 
 
 # Global CDP payment client instance (lazy initialization)
-_crypto_client: Optional[CryptoPaymentClient] = None
+_crypto_client: CryptoPaymentClient | None = None
 
 
 def get_crypto_client() -> CryptoPaymentClient:
@@ -479,7 +490,7 @@ def process_crypto_payment() -> ToolResponse:
 
 
 @tool
-def set_tip(percentage: Optional[int] = None) -> ToolResponse:
+def set_tip(percentage: int | None = None) -> ToolResponse:
     """Set tip percentage for current tab.
 
     Implements toggle behavior: if the same percentage is already selected,
@@ -491,7 +502,7 @@ def set_tip(percentage: Optional[int] = None) -> ToolResponse:
         percentage: 10, 15, 20 to set tip, or None to remove tip
 
     Returns:
-        Success: {"status": "ok", "result": {"tip_percentage": int|None, 
+        Success: {"status": "ok", "result": {"tip_percentage": int|None,
                   "tip_amount": float, "total": float}}
         Error: {"status": "error", "error": "INVALID_TIP_PERCENTAGE", "message": ...}
                {"status": "error", "error": "INVALID_SESSION", "message": ...}
@@ -546,7 +557,7 @@ def get_tip() -> ToolResponse:
     Session context read implicitly from _current_session thread-local.
 
     Returns:
-        Success: {"status": "ok", "result": {"tip_percentage": int|None, 
+        Success: {"status": "ok", "result": {"tip_percentage": int|None,
                   "tip_amount": float, "tab": float, "total": float}}
         Error: {"status": "error", "error": "INVALID_SESSION", "message": ...}
 
@@ -581,7 +592,7 @@ def get_menu() -> str:
     Daiquiri - $10.00
     Martini - $13.00
     Long Island - $12.00
-    Old Fashioned - $12.00 
+    Old Fashioned - $12.00
     Negroni - $11.00
     Cosmopolitan - $12.00
     Manhattan - $12.00
@@ -608,7 +619,7 @@ def get_menu() -> str:
     Modifiers:
     Liquor Options: Vodka, Tequila, Gin, Whiskey, Rum, Brandy; Default option: Vodka
     Special requests: 'shaken', 'stirred', 'neat', 'dry', 'dirty', 'perfect', 'on the rocks', 'with a chaser'
-    
+
     Drink Term Explanations:
     'neat' - No ice, straight from the bottle
     'on the rocks' - Served with ice
@@ -616,7 +627,7 @@ def get_menu() -> str:
     'dirty' - With olive juice (for martinis)
     'perfect' - Equal parts dry and sweet vermouth
     'chaser' - Separate non-alcoholic drink to follow
-    
+
     Preference Guide:
     'sobering' - Non-alcoholic options when you want to stay clear-headed
     'classy' - Sophisticated, elegant drinks for refined tastes
@@ -628,10 +639,10 @@ def get_menu() -> str:
 @tool
 def get_recommendation(preference: str) -> str:
     """Recommends drinks based on customer preference.
-    
+
     Args:
         preference: Customer's drink preference (e.g., 'classy', 'strong', 'fruity', 'sobering', 'burning')
-        
+
     Returns:
         Recommended drinks matching the preference
     """
@@ -670,7 +681,7 @@ def get_recommendation(preference: str) -> str:
         popular_drinks = "Martini, Daiquiri, Old Fashioned, and IPA"
         return f"I'm not familiar with that specific preference, but some of our most popular drinks are: {popular_drinks}"
 
-def _parse_menu_items(menu_str: str) -> Dict[str, float]:
+def _parse_menu_items(menu_str: str) -> dict[str, float]:
     """Parse menu string to extract items and prices."""
     items = {}
     # Regex to find lines like "Item Name - $Price.xx"
@@ -685,7 +696,7 @@ def _parse_menu_items(menu_str: str) -> Dict[str, float]:
 @tool
 def add_to_order(
     item_name: str,
-    modifiers: Optional[List[str]] = None,
+    modifiers: list[str] | None = None,
     quantity: int = 1
 ) -> str:
     """Adds the specified drink to the customer's order, including any modifiers.
@@ -841,12 +852,8 @@ def place_order() -> str:
 
     # Enhanced order details including modifiers
     order_details = []
-    current_order_cost = 0.0
 
     for item in order_list:
-        # Add to running total
-        current_order_cost += item['price']
-
         # Format for display
         if "modifiers" in item and item["modifiers"] != "no modifiers":
             order_details.append(f"{item['name']} with {item['modifiers']}")
@@ -857,7 +864,7 @@ def place_order() -> str:
     total = sum(item['price'] for item in order_list)
 
     # Simulate random preparation time between 2-8 minutes
-    prep_time = random.randint(2, 8)
+    prep_time = random.randint(2, 8)  # nosec B311 # noqa: S311 - non-cryptographic: simulated UI display value only
 
     logger.info(f"Tool: Placing order: [{order_text}], Total: ${total:.2f}, ETA: {prep_time} minutes")
 
@@ -952,11 +959,11 @@ def pay_bill() -> str:
 @tool
 def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
     """Add a tip to the bill. Can specify either a percentage or a fixed amount.
-    
+
     Args:
         percentage: Tip percentage (e.g., 15 for 15%, 20 for 20%) - this takes precedence if both specified
         amount: Fixed tip amount in dollars (e.g., 5.0 for $5) - only used if percentage is 0
-    
+
     Returns:
         Confirmation message with the updated bill total including tip
     """
@@ -1006,7 +1013,7 @@ def add_tip(percentage: float = 0.0, amount: float = 0.0) -> str:
     else:
         return f"Added a ${amount:.2f} tip to your bill. New total: ${total_with_tip:.2f}"
 
-def get_all_tools() -> List:
+def get_all_tools() -> list:
     """Get list of all available tools."""
     return [
         get_menu,
