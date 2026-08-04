@@ -1,9 +1,8 @@
 """Unit tests for tests/eval/metrics.py evaluation function."""
 
 from unittest.mock import MagicMock, patch
-import pytest
 
-from tests.eval.metrics import evaluate, _Verdict
+from tests.eval.metrics import _Verdict, evaluate
 
 
 def test_evaluate_success():
