@@ -284,8 +284,9 @@ def judge_scorer(turns: list[str], expected_logic: str, output: dict) -> dict:
             "reasoning": "Offline validation passed successfully."
         }
 
-    from google import genai
-    client = genai.Client(vertexai=True, project=GCP_PROJECT, location=GCP_LOCATION)
+    from src.llm.client import get_genai_client
+
+    client = get_genai_client()
     model_version = os.getenv("GEMINI_MODEL_VERSION", "gemini-2.5-flash")
     
     judge_prompt = f"""

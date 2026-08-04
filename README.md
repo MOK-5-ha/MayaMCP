@@ -38,6 +38,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
   - `src/schemas/`: Pydantic v2 data transfer schemas
   - `src/utils/`: Errors, helpers (centralized DRY logic cataloged in `docs/helper_functions.md`), and thread-safe state management
 - `tests/`: pytest suite (unit, integration, property-based, API)
+- `qodo.yaml` & `pr_compliance_checklist.yaml`: Qodo code review agent instructions and automated PR compliance checklists
 
 ## Architecture Updates
 
