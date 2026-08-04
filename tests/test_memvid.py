@@ -9,17 +9,15 @@ Command-line options:
 - pytest --force-rebuild: Force expensive Memvid store rebuilds
 """
 
-import os
 import logging
+import os
+
 import pytest
-from src.config import setup_logging, get_api_keys
-from src.rag.memvid_store import initialize_memvid_store, search_memvid_documents
+
+from src.config import get_api_keys, setup_logging
 from src.rag.memvid_pipeline import memvid_rag_pipeline
-from tests.test_config import (
-    ROUGH_DAY_QUERY,
-    PATIENCE_QUERY,
-    memvid_queries
-)
+from src.rag.memvid_store import initialize_memvid_store, search_memvid_documents
+from tests.test_config import PATIENCE_QUERY, ROUGH_DAY_QUERY, memvid_queries
 
 # Get module-level logger
 logger = logging.getLogger(__name__)
@@ -32,25 +30,25 @@ def test_memvid_integration(force_rebuild_flag):
     - CI/default: force_rebuild=False (faster, uses cached data)  
     - Development: TEST_FORCE_REBUILD=1 or --force-rebuild (ensures fresh data)
     """
-    
+
     # Setup
     logger = setup_logging()
     api_keys = get_api_keys()
-    
+
     # Check for required API keys before proceeding
     if not api_keys.get("google_api_key"):
         pytest.skip("Google API key not available - skipping Memvid integration test")
-    
+
     # Initialize Memvid store with configurable rebuild flag
     # This will be False by default (for CI efficiency) unless overridden
     memvid_retriever, documents = initialize_memvid_store(force_rebuild=force_rebuild_flag)
     assert len(documents) > 0, "Should have documents in store"
-    
+
     # Test search - use query that matches DEFAULT_DOCUMENTS content
     query = "rough day"
     results = search_memvid_documents(memvid_retriever, query, n_results=2)
     assert len(results) > 0, f"Should retrieve documents for query: {query}"
-    
+
     # Test full pipeline
     query = "I'm having a rough day"
     response = memvid_rag_pipeline(
@@ -70,19 +68,19 @@ def test_memvid_queries(force_rebuild_flag):
     logger = setup_logging()
     api_keys = get_api_keys()
     failures = []
-    
+
     # Check for required API keys before proceeding
     if not api_keys.get("google_api_key"):
         pytest.skip("Google API key not available - skipping Memvid queries test")
-    
+
     try:
         # Initialize Memvid store with configurable rebuild flag
         memvid_retriever, documents = initialize_memvid_store(force_rebuild=force_rebuild_flag)
-        
+
         if memvid_retriever and documents:
             # Test with predefined queries
             test_queries = [ROUGH_DAY_QUERY, PATIENCE_QUERY] + memvid_queries.queries
-            
+
             for query in test_queries:
                 try:
                     response = memvid_rag_pipeline(
@@ -100,12 +98,12 @@ def test_memvid_queries(force_rebuild_flag):
             error_msg = "RAG pipeline skipped: memvid_retriever not initialized"
             logger.warning(f"⚠️ {error_msg}")
             failures.append(error_msg)
-            
+
     except Exception as e:
         error_msg = f"RAG pipeline failed: {e}"
         logger.error(f"❌ {error_msg}", exc_info=True)
         failures.append(error_msg)
-    
+
     # Check for failures and report them
     if failures:
         failure_summary = "\n".join(f"  - {failure}" for failure in failures)

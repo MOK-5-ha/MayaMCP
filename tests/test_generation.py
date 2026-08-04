@@ -13,6 +13,7 @@ import pytest
 import src.llm.client as llm_client
 import src.rag.memvid_pipeline as memvid_pipeline
 
+
 class _FakeModels:
     """Fake models attribute for a mock genai.Client."""
     def __init__(self):

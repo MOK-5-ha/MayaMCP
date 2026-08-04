@@ -12,7 +12,7 @@ import asyncio
 import os
 import re
 import threading
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,8 +21,7 @@ os.environ["MAYA_SESSION_RATE_LIMIT"] = "9999"
 os.environ["MAYA_APP_RATE_LIMIT"] = "9999"
 os.environ["MAYA_BURST_LIMIT"] = "9999"
 
-from src.payments.crypto_client import CryptoPaymentClient, DEFAULT_RECEIVER_ADDRESS
-
+from src.payments.crypto_client import DEFAULT_RECEIVER_ADDRESS, CryptoPaymentClient
 
 pytestmark = pytest.mark.unit
 

@@ -6,6 +6,7 @@ import gradio as gr
 
 from ..config.logging_config import get_logger
 from ..llm.key_validator import validate_gemini_key
+from ..utils.helpers import extract_session_id
 from ..utils.state_manager import set_api_keys
 
 logger = get_logger(__name__)
@@ -96,9 +97,7 @@ def handle_key_submission(
     if app_state is None:
         app_state = {}
 
-    session_id = "default"
-    if request and request.session_hash:
-        session_id = request.session_hash
+    session_id = extract_session_id(request)
 
     # --- Validate Gemini key (required) ---
     if not gemini_key or not gemini_key.strip():

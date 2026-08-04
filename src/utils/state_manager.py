@@ -573,7 +573,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         # 3. Ensure fields exist within existing payment state
         payment = session_data['payment']
         payment_needs_update = False
-        
+
         # Migrate stripe_payment_id -> crypto_tx_hash if it exists
         if 'stripe_payment_id' in payment:
             payment.pop('stripe_payment_id')
@@ -582,7 +582,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> Dict[str, Any]:
         elif 'crypto_tx_hash' not in payment:
             payment['crypto_tx_hash'] = None
             payment_needs_update = True
-            
+
         if 'tip_percentage' not in payment:
             payment['tip_percentage'] = None
             payment_needs_update = True

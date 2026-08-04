@@ -10,10 +10,9 @@ Supports offline execution without WANDB_API_KEY.
 Run: python tests/eval/eval_crypto_payment.py
 """
 
+import asyncio
 import os
 import sys
-import asyncio
-import json
 
 from dotenv import load_dotenv
 
@@ -33,14 +32,13 @@ from src.llm.tools import (
     process_crypto_payment,
     set_current_session,
     set_global_store,
-    add_to_order,
 )
 from src.utils.state_manager import (
+    get_payment_state,
     initialize_state,
     reset_session_state,
-    update_payment_state,
     update_order_state,
-    get_payment_state,
+    update_payment_state,
 )
 
 # ─── 1. Initialize Weave (or Fallback) ──────────────────────────────
@@ -248,9 +246,6 @@ class CryptoPaymentModel(ModelClass):
 
     def predict(self, turns, test_name=None):
         """Run a multi-turn conversation through the mocked Maya agent."""
-        from google.genai import types
-        from src.conversation.processor import process_order
-        from src.llm.tools import set_global_store
         from unittest.mock import MagicMock
 
         session_id = f"eval_crypto_{test_name or 'default'}"

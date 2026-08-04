@@ -3,9 +3,6 @@
 Unit tests for src.utils.errors.classify_and_log_genai_error regex-based classification.
 """
 
-import sys
-import re
-import pytest
 
 from src.utils.errors import classify_and_log_genai_error
 

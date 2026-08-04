@@ -4,22 +4,22 @@ Tests the optimistic payment flow using CryptoPaymentClient,
 verifying instant tab clearing, state transitions, and failure handling.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-from pytest_bdd import scenarios, given, when, then, parsers
+from unittest.mock import MagicMock
 
-from src.utils.state_manager import (
-    get_payment_state,
-    reset_session_state,
-    initialize_state,
-    update_payment_state,
-    update_order_state,
-    get_payment_total,
-)
+import pytest
+from pytest_bdd import given, parsers, scenarios, then, when
+
 from src.llm.tools import (
     process_crypto_payment,
     set_current_session,
     set_global_store,
+)
+from src.utils.state_manager import (
+    get_payment_state,
+    initialize_state,
+    reset_session_state,
+    update_order_state,
+    update_payment_state,
 )
 
 # Load scenarios from feature file

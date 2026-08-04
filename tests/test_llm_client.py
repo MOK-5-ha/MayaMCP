@@ -10,8 +10,8 @@ import pytest
 from src.llm.client import (
     build_generate_config,
     call_gemini_api,
-    get_genai_client,
     get_gemini_params,
+    get_genai_client,
     get_model_name,
 )
 

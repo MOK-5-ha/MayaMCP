@@ -1,6 +1,5 @@
 """LLM tools for bartending operations."""
 
-import asyncio
 import random
 import re
 from enum import Enum

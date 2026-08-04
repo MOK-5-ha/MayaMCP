@@ -3,10 +3,10 @@
 Unit tests for src.memvid.retriever module.
 """
 
-import pytest
 import json
-from unittest.mock import patch, MagicMock, Mock, mock_open
-from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
 
 from src.memvid.retriever import MemvidRetriever
 

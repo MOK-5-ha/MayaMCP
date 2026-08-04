@@ -96,7 +96,7 @@ class CryptoPaymentClient:
                     daemon=True
                 ).start()
         else:
-            logger.info(f"CDP credentials not configured. Simulating transaction on thread.")
+            logger.info("CDP credentials not configured. Simulating transaction on thread.")
             # For simulated mode, we can spawn a thread that sleep-succeeds,
             # or optionally fails if the user explicitly tests a failure scenario
             threading.Thread(
@@ -159,7 +159,7 @@ class CryptoPaymentClient:
                 # Poll transaction confirmation
                 # Wait 5 seconds to simulate block confirmation
                 await asyncio.sleep(5)
-                
+
                 # Check status
                 logger.info(f"Background payment transaction completed successfully for session {session_id} (tx_hash={actual_tx_hash}).")
                 self._update_payment_status(session_id, 'completed', tx_hash=actual_tx_hash)

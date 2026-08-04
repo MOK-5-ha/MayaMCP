@@ -3,16 +3,10 @@
 Unit tests for src.config.api_keys module.
 """
 
-import pytest
-from unittest.mock import patch
 import importlib
+from unittest.mock import patch
 
-
-
-from src.config.api_keys import (
-    get_api_keys,
-    get_google_api_key
-)
+from src.config.api_keys import get_api_keys, get_google_api_key
 
 
 class TestApiKeys:
@@ -25,14 +19,14 @@ class TestApiKeys:
             'GEMINI_API_KEY': 'test_google_key',
             'CARTESIA_API_KEY': 'test_cartesia_key'
         }.get(key)
-        
+
         result = get_api_keys()
-        
+
         assert result == {
             'google_api_key': 'test_google_key',
             'cartesia_api_key': 'test_cartesia_key'
         }
-        
+
         # Verify correct environment variable names were checked
         mock_getenv.assert_any_call('GEMINI_API_KEY')
         mock_getenv.assert_any_call('CARTESIA_API_KEY')
@@ -41,9 +35,9 @@ class TestApiKeys:
     def test_get_api_keys_missing_keys(self, mock_getenv):
         """Test get_api_keys when keys are missing."""
         mock_getenv.return_value = None
-        
+
         result = get_api_keys()
-        
+
         assert result == {
             'google_api_key': None,
             'cartesia_api_key': None
@@ -56,9 +50,9 @@ class TestApiKeys:
             'GEMINI_API_KEY': 'test_google_key',
             'CARTESIA_API_KEY': None
         }.get(key)
-        
+
         result = get_api_keys()
-        
+
         assert result == {
             'google_api_key': 'test_google_key',
             'cartesia_api_key': None
@@ -71,9 +65,9 @@ class TestApiKeys:
             'GEMINI_API_KEY': '',
             'CARTESIA_API_KEY': ''
         }.get(key)
-        
+
         result = get_api_keys()
-        
+
         assert result == {
             'google_api_key': '',
             'cartesia_api_key': ''
@@ -87,9 +81,9 @@ class TestApiKeys:
             'google_api_key': 'test_google_key',
             'cartesia_api_key': 'test_cartesia_key'
         }
-        
+
         result = get_google_api_key()
-        
+
         assert result == 'test_google_key'
         mock_get_api_keys.assert_called_once()
 
@@ -100,9 +94,9 @@ class TestApiKeys:
             'google_api_key': None,
             'cartesia_api_key': 'test_cartesia_key'
         }
-        
+
         result = get_google_api_key()
-        
+
         assert result is None
 
 
@@ -110,10 +104,10 @@ class TestApiKeys:
     def test_load_dotenv_called(self, mock_load_dotenv):
         """Test that load_dotenv is called during module import."""
         import src.config.api_keys
-        
+
         # Reload the module to trigger the import-time load_dotenv call
         importlib.reload(src.config.api_keys)
-        
+
         # Assert that load_dotenv was called once during the reload
         mock_load_dotenv.assert_called_once()
 
@@ -124,11 +118,11 @@ class TestApiKeys:
             'GEMINI_API_KEY': 'integration_google_key',
             'CARTESIA_API_KEY': 'integration_cartesia_key'
         }.get(key)
-        
+
         # Test all functions work together
         api_keys = get_api_keys()
         google_key = get_google_api_key()
-        
+
         assert api_keys['google_api_key'] == 'integration_google_key'
         assert api_keys['cartesia_api_key'] == 'integration_cartesia_key'
         assert google_key == 'integration_google_key'
@@ -140,9 +134,9 @@ class TestApiKeys:
             'GEMINI_API_KEY': '  whitespace_key  ',
             'CARTESIA_API_KEY': '\t\nkey_with_newlines\t\n'
         }.get(key)
-        
+
         result = get_api_keys()
-        
+
         # Keys should be stripped
         assert result['google_api_key'] == 'whitespace_key'
         assert result['cartesia_api_key'] == 'key_with_newlines'

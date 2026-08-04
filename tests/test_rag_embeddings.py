@@ -3,7 +3,12 @@
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
-from src.rag.embeddings import DEFAULT_TASK_TYPE, EMBEDDING_MODEL, get_embedding, get_embeddings_batch
+from src.rag.embeddings import (
+    DEFAULT_TASK_TYPE,
+    EMBEDDING_MODEL,
+    get_embedding,
+    get_embeddings_batch,
+)
 
 
 def _make_mock_client(embed_return=None, embed_side_effect=None):

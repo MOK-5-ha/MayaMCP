@@ -10,8 +10,7 @@ The configuration follows Python best practices with proper type hints,
 comprehensive documentation, and extensibility for future test scenarios.
 """
 
-from typing import ClassVar, Dict, List, Tuple, Literal, NewType
-
+from typing import ClassVar, Dict, List, Literal, NewType, Tuple
 
 # Type aliases for better readability
 QueryText = NewType("QueryText", str)

@@ -1,11 +1,129 @@
 """Helper functions for conversation management."""
 
 import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def extract_session_id(request: Any = None, default: str = "default") -> str:
+    """Extract session_id from Gradio Request object, dictionary, or string with fallback.
+
+    Args:
+        request: Gradio request object, dictionary containing session details, or session string.
+        default: Fallback session ID string.
+
+    Returns:
+        Extracted session ID or fallback string.
+    """
+    if request is None:
+        return default
+    if isinstance(request, str):
+        stripped = request.strip()
+        return stripped if stripped else default
+    if hasattr(request, "session_hash") and getattr(request, "session_hash", None):
+        return request.session_hash
+    if isinstance(request, dict):
+        return request.get("session_hash") or request.get("session_id") or default
+    return default
+
+
+def format_currency(amount: Optional[float], default: float = 0.0) -> str:
+    """Format numeric value as USD currency string (e.g. '$12.50').
+
+    Args:
+        amount: Floating-point or numeric monetary value.
+        default: Fallback numeric value if amount is None.
+
+    Returns:
+        Formatted currency string.
+    """
+    val = default if amount is None else safe_float(amount, default=default)
+    return f"${val:.2f}"
+
+
+def safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely convert value to float without raising exceptions.
+
+    Args:
+        val: Value to convert to float.
+        default: Fallback float if conversion fails.
+
+    Returns:
+        Converted float or default value.
+    """
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def mask_api_key(key: Optional[str], visible_chars: int = 4, suffix_chars: int = 4) -> str:
+    """Obfuscate API key strings for sensitive logging or UI output.
+
+    Args:
+        key: API key string.
+        visible_chars: Number of visible prefix characters to display.
+        suffix_chars: Number of visible suffix characters to display.
+
+    Returns:
+        Masked API key string (e.g., 'AIza...key').
+    """
+    if not key or not isinstance(key, str) or len(key.strip()) < (visible_chars + suffix_chars):
+        return "****"
+    cleaned = key.strip()
+    return f"{cleaned[:visible_chars]}...{cleaned[-suffix_chars:]}"
+
+
+
+def build_response_dict(
+    success: bool,
+    message: str = "",
+    data: Optional[Dict[str, Any]] = None,
+    error_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a standardized status/response dictionary.
+
+    Args:
+        success: Whether the operation succeeded.
+        message: Descriptive response message.
+        data: Optional payload dictionary.
+        error_code: Optional error code string.
+
+    Returns:
+        Dictionary with status, success, message, data, error_code, and timestamp.
+    """
+    res: Dict[str, Any] = {
+        "status": "success" if success else "error",
+        "success": success,
+        "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if data is not None:
+        res["data"] = data
+    if error_code is not None:
+        res["error_code"] = error_code
+    return res
+
+
+def normalize_text(text: Optional[str]) -> str:
+    """Lowercase, strip whitespace, and normalize spaces in string input.
+
+    Args:
+        text: Input string.
+
+    Returns:
+        Cleaned, lowercased string.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    return " ".join(text.lower().strip().split())
+
 
 def detect_order_inquiry(user_input: str) -> Dict[str, Any]:
     """

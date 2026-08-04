@@ -1,11 +1,22 @@
 """Unit tests for LLM tools."""
 
-from unittest.mock import Mock, patch, MagicMock
 from typing import Optional
+from unittest.mock import patch
+
 import pytest
+
 from src.llm.tools import (
-    get_menu, get_recommendation, add_to_order, get_order, confirm_order,
-    place_order, clear_order, get_bill, pay_bill, add_tip, get_all_tools
+    add_tip,
+    add_to_order,
+    clear_order,
+    confirm_order,
+    get_all_tools,
+    get_bill,
+    get_menu,
+    get_order,
+    get_recommendation,
+    pay_bill,
+    place_order,
 )
 
 
@@ -408,7 +419,7 @@ class TestClearOrder:
         """Test successful order clearing."""
         # Setup mock
         mock_get_current_session.return_value = "test_session_123"
-        
+
         # Execute function using invoke
         result = clear_order.invoke({})
 

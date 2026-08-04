@@ -4,8 +4,8 @@ This ensures tests run even if google-genai is not installed locally.
 """
 
 import importlib.util as _importlib_util
-import sys
 import os
+import sys
 from types import ModuleType
 from types import SimpleNamespace as NS
 
@@ -151,7 +151,6 @@ if _importlib_util.find_spec('google.genai') is None:
 # Autouse fixture: no-op (kept for compatibility).
 @pytest.fixture(autouse=True)
 def mock_google_genai_client(monkeypatch):
-    import os
     from types import SimpleNamespace as NS
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
     monkeypatch.setenv("CARTESIA_API_KEY", "dummy-key")
@@ -159,7 +158,7 @@ def mock_google_genai_client(monkeypatch):
     try:
         import google.genai
         from google.genai import types
-        
+
         class MockCandidate:
             def __init__(self, text):
                 self.finish_reason = types.FinishReason.STOP
@@ -191,14 +190,14 @@ def mock_google_genai_client(monkeypatch):
                 async def _stream():
                     yield MockResponse("This is a mock streaming response from Gemini.")
                 return _stream()
-            
+
             async def generate_content(self, model, contents, config=None):
                 return MockResponse("This is a mock response from Gemini.")
 
         class MockModelsSync:
             def generate_content(self, model, contents, config=None):
                 return MockResponse("This is a mock response from Gemini.")
-            
+
             def generate_content_stream(self, model, contents, config=None):
                 yield MockResponse("This is a mock response from Gemini.")
 
@@ -215,7 +214,7 @@ def mock_google_genai_client(monkeypatch):
         monkeypatch.setattr(google.genai.Client, 'aio', property(lambda self: MockAio()))
     except Exception:
         pass
-    
+
     yield
 
 

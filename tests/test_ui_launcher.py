@@ -1,9 +1,10 @@
 """Unit tests for UI launcher."""
 
-from unittest.mock import Mock, patch, MagicMock, call
-import gradio as gr
-from src.ui.launcher import launch_bartender_interface
+from unittest.mock import Mock, patch
+
 import pytest
+
+from src.ui.launcher import launch_bartender_interface
 
 
 @pytest.fixture
@@ -264,7 +265,7 @@ class TestLaunchBartenderInterface:
         ui_mocks['textbox_instance'].submit.assert_called()
         submit_call = ui_mocks['textbox_instance'].submit.call_args
         assert callable(submit_call[0][0])
-        
+
         # Send button click handler configured
         ui_mocks['submit_button_instance'].click.assert_called_once()
         assert callable(ui_mocks['submit_button_instance'].click.call_args[0][0])

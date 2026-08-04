@@ -8,6 +8,7 @@ It also includes tip button functionality for adding gratuity.
 from typing import Optional
 
 from ..config.logging_config import get_logger
+from ..utils.helpers import format_currency
 
 logger = get_logger(__name__)
 
@@ -133,7 +134,7 @@ def generate_tip_notification(percentage: int, tip_amount: float, _tab_total: fl
         
     Requirements: 7.11
     """
-    return f"I'd like to add a {percentage}% tip (${tip_amount:.2f}) for your great service!"
+    return f"I'd like to add a {percentage}% tip ({format_currency(tip_amount)}) for your great service!"
 
 def generate_tip_removal_notification() -> str:
     """Generate notification message sent to Maya when user removes tip.
