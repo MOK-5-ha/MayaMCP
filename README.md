@@ -30,11 +30,11 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 - `assets/`: Static files (avatar, media)
 - `config/`: Configuration files separate from code
-- `docs/`: Additional documentation (ADRs)
+- `docs/`: Additional documentation (ADRs, helper function reference `docs/helper_functions.md`)
 - `notebooks/`: Experimentation and analysis
 - `scripts/`: Utility scripts, including Weave evaluations
 - `src/`: Core source code with modular organization
-  - `src/utils/`: Errors, helpers (centralized DRY logic), and state management
+  - `src/utils/`: Errors, helpers (centralized DRY logic cataloged in `docs/helper_functions.md`), and state management
 - `tests/`: pytest suite (unit, integration, property-based)
 
 ## Architecture Updates
