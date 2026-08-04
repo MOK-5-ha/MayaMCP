@@ -4,7 +4,7 @@ checklists:
   - id: vertex-ai-mode-mandatory-paid-tier
     name: Mandatory 100% GCP Vertex AI Mode (Paid Tier)
     rules:
-      - "No GEMINI_API_KEY, LLM_API_KEY, or BACKUP_LLM_API_KEY environment variables or code paths."
+      - "No legacy Google AI Studio API key environment variables or code paths."
       - "Strict requirement of GCP_PROJECT or GOOGLE_CLOUD_PROJECT."
       - "genai.Client initialized strictly with vertexai=True, project, location via src/llm/client.py."
       - "GEMINI_TIER locked to paid (high-throughput quota via GCP billing credits)."

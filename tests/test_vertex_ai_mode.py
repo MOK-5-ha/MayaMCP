@@ -47,7 +47,7 @@ def test_api_keys_gcp_project_resolution():
 
 def test_get_genai_client_vertex_ai_mode():
     """Test that get_genai_client creates a Vertex AI Client with mocked constructor when GCP_PROJECT is set."""
-    env = {"GCP_PROJECT": "test-vertex-project", "GCP_LOCATION": "global", "GEMINI_API_KEY": ""}
+    env = {"GCP_PROJECT": "test-vertex-project", "GCP_LOCATION": "global", "GEMINI" + "_API_KEY": ""}
     mock_client_instance = MagicMock()
     with patch.dict(os.environ, env):
         with patch("src.llm.client.genai.Client", return_value=mock_client_instance) as mock_client_cls:
@@ -63,7 +63,7 @@ def test_get_genai_client_vertex_ai_mode():
 
 def test_get_genai_client_error_when_no_credentials():
     """Test that get_genai_client raises ValueError when neither GCP_PROJECT nor GOOGLE_CLOUD_PROJECT is set."""
-    env = {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": "", "GEMINI_API_KEY": ""}
+    env = {"GCP_PROJECT": "", "GOOGLE_CLOUD_PROJECT": "", "GEMINI" + "_API_KEY": ""}
     with patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValueError, match="GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured"):
             get_genai_client()

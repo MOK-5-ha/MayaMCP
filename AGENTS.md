@@ -94,7 +94,7 @@ Optional:
 - `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional, has default)
 
 ## Key Architecture Rules
-- **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode (`GEMINI_API_KEY`, `LLM_API_KEY`) and free-tier throttles are permanently removed.
+- **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode and free-tier throttles are permanently removed.
 - **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client()` instead of instantiating `genai.Client` directly.
 - **UI Contract Synchronization**: When modifying backend configuration semantics (such as shifting from API keys to Vertex AI ADC), all UI form labels, placeholders, Pydantic schemas, and modal instruction markdown must be updated in lockstep.
 - **Dynamic Model Verification**: Diagnostic scripts (`verify_environment.py`) must import and inspect `get_model_config()["model_version"]` to guarantee exact parity with runtime LLM configuration.
@@ -129,7 +129,7 @@ Optional:
 
 ## Don't
 - Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client`)
-- Use Google AI Studio API key mode (`GEMINI_API_KEY`) or free-tier rate limits
+- Use Google AI Studio API key mode or free-tier rate limits
 - Hardcode API keys or secrets
 - Skip error handling for external API calls
 - Break the graceful fallback chain

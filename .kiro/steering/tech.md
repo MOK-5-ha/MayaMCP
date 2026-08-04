@@ -63,7 +63,7 @@ Test markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`
 ## Required Environment Variables
 
 ```bash
-GEMINI_API_KEY=your_google_api_key
+GCP_PROJECT=your_gcp_project_id
 CARTESIA_API_KEY=your_cartesia_api_key
 
 # Optional (for BYOK Mode and features)

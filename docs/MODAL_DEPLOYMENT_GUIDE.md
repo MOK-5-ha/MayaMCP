@@ -29,7 +29,7 @@ GCP_LOCATION=global
 GEMINI_TIER=paid
 
 # Option B: Google AI Studio API Key (server-side fallback)
-GEMINI_API_KEY=your_gemini_api_key_here
+GCP_PROJECT=your_gcp_project_id_here
 CARTESIA_API_KEY=your_cartesia_api_key_here
 
 # Modal Memory Management (NEW)
@@ -138,7 +138,7 @@ def some_function():
 1. **Create secrets via Modal CLI:**
 ```bash
 modal secret create maya-secrets \
-  GEMINI_API_KEY=your_production_gemini_key \
+  GCP_PROJECT=your_production_gcp_project \
   CARTESIA_API_KEY=your_production_cartesia_key \
   MAYA_MASTER_KEY=your_encryption_key
 ```
@@ -154,7 +154,7 @@ app = modal.App(name="mayamcp-production")
 def secure_function():
     # Access secrets as environment variables
     import os
-    gemini_key = os.environ["GEMINI_API_KEY"]
+    gcp_project = os.environ["GCP_PROJECT"]
     cartesia_key = os.environ["CARTESIA_API_KEY"]
 ```
 

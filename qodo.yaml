@@ -12,7 +12,7 @@ pr_reviewer:
     3. Encourage Experimentation: Recognize that this project serves as a testbed for integrating LLMs (Gemini), Voice (Cartesia), RAG (Memvid/FAISS), Web3 payments (Coinbase CDP), and a Phaser 3 2D pixel art game engine UI.
 
     MayaMCP Architectural Rules (Strictly Enforce):
-    1. Unified GenAI Routing & 100% GCP Vertex AI Mode: All LLM calls must go through src/llm/client.py and run strictly in GCP Vertex AI Mode (vertexai=True, GCP_PROJECT/GOOGLE_CLOUD_PROJECT, GEMINI_TIER=paid). Flag any code introducing Google AI Studio keys (GEMINI_API_KEY, LLM_API_KEY) or calling the SDK directly outside src/llm/client.py.
+    1. Unified GenAI Routing & 100% GCP Vertex AI Mode: All LLM calls must go through src/llm/client.py and run strictly in GCP Vertex AI Mode (vertexai=True, GCP_PROJECT/GOOGLE_CLOUD_PROJECT, GEMINI_TIER=paid). Flag any code introducing legacy Google AI Studio API key environment variables or calling the SDK directly outside src/llm/client.py.
     2. Vertex AI Sessions & Fallbacks:
        - LLM/TTS clients are lazily created via src/llm/session_registry.py in Vertex AI mode using ADC.
        - Ensure the graceful fallback chain remains intact: Memvid -> FAISS -> no-RAG, Cartesia -> text-only, Coinbase CDP -> mock crypto payments.

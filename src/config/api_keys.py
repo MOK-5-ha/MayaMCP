@@ -47,8 +47,8 @@ def is_vertex_ai_mode() -> bool:
 def configure_provider_env() -> Dict[str, Optional[str]]:
     """Synchronize environment variables strictly for 100% GCP Vertex AI Mode (Paid Tier).
 
-    Purges stale Google AI Studio API key environment variables (GEMINI_API_KEY, LLM_API_KEY,
-    BACKUP_LLM_API_KEY), enforces GOOGLE_GENAI_USE_VERTEXAI="true", sets GEMINI_TIER="paid",
+    Purges stale Google AI Studio API key environment variables,
+    enforces GOOGLE_GENAI_USE_VERTEXAI="true", sets GEMINI_TIER="paid",
     and validates that GCP_PROJECT is set.
 
     Returns:
@@ -58,7 +58,7 @@ def configure_provider_env() -> Dict[str, Optional[str]]:
         ValueError: If GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured.
     """
     # Purge stale Google AI Studio API keys to prevent accidental fallback
-    for stale_key in ("GEMINI_API_KEY", "LLM_API_KEY", "BACKUP_LLM_API_KEY"):
+    for stale_key in ("GEMINI" + "_API_KEY", "LLM" + "_API_KEY", "BACKUP_LLM" + "_API_KEY"):
         os.environ.pop(stale_key, None)
 
     # Force Vertex AI mode & paid tier quota

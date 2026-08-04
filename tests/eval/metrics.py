@@ -35,7 +35,7 @@ def evaluate(instance):
         prompt += f"Expected Answer (ground truth): {reference}\n"
     prompt += f"Full Agent Trace: {instance.get('agent_data', '')}\n"
 
-    client = genai.Client()  # AI Studio (GEMINI_API_KEY) or Vertex (ADC)
+    client = genai.Client()  # AI Studio or Vertex (ADC)
     response = client.models.generate_content(
         model="gemini-flash-latest",
         contents=prompt,
