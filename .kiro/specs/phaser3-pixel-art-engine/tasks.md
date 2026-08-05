@@ -53,7 +53,7 @@ Track 3: Character & Visemes  Track 4: Audio Engine  Track 6: E2E Integration
 * **Status:** `[x]` Completed
 * **Traceability:** `NFR-3`
 * **Dependencies:** Task 1.1
-* **Description:** Modify [`deploy.py`](file:///Users/pretermodernist/.gemini/antigravity/worktrees/MayaMCP/migrate_gradio_to_engine/deploy.py) to mount the compiled frontend `dist/` directory using FastAPI `StaticFiles(directory="/app/frontend/dist", html=True)`.
+* **Description:** Modify [`deploy.py`](../../../deploy.py) to mount the compiled frontend `dist/` directory using FastAPI `StaticFiles(directory="/app/frontend/dist", html=True)`.
 
 ---
 

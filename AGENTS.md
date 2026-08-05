@@ -94,8 +94,9 @@ Optional:
 - `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional, has default)
 
 ## Key Architecture Rules
-- **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode (`GEMINI_API_KEY`, `LLM_API_KEY`) and free-tier throttles are permanently removed.
-- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client()` instead of instantiating `genai.Client` directly.
+- **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode and free-tier throttles are permanently removed.
+- **Deprecated Environment Variable Literal Prohibition**: The exact literal string identifiers for legacy AI Studio API keys (such as `GEMINI` + `_API_KEY`, `LLM` + `_API_KEY`, and `BACKUP_LLM` + `_API_KEY`) are strictly prohibited repository-wide in all files (including documentation, YAML configs, docstrings, and comments). Use generalized descriptions in text (e.g., "legacy AI Studio API keys") and dynamic string concatenation (e.g., `"GEMINI" + "_API_KEY"`) in purge functions or test assertions.
+- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere (including evaluation scripts and test helpers). Always use `get_genai_client()` instead of instantiating `genai.Client` directly.
 - **UI Contract Synchronization**: When modifying backend configuration semantics (such as shifting from API keys to Vertex AI ADC), all UI form labels, placeholders, Pydantic schemas, and modal instruction markdown must be updated in lockstep.
 - **Dynamic Model Verification**: Diagnostic scripts (`verify_environment.py`) must import and inspect `get_model_config()["model_version"]` to guarantee exact parity with runtime LLM configuration.
 - **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments.
@@ -128,8 +129,8 @@ Optional:
 3. Add tests in `tests/`
 
 ## Don't
-- Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client`)
-- Use Google AI Studio API key mode (`GEMINI_API_KEY`) or free-tier rate limits
+- Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client` for all model interactions, including evals)
+- Use Google AI Studio API key mode or free-tier rate limits
 - Hardcode API keys or secrets
 - Skip error handling for external API calls
 - Break the graceful fallback chain

@@ -60,7 +60,7 @@ async def verify_environment() -> bool:
     if not project:
         sys.stderr.write(
             "❌ ERROR: Neither GCP_PROJECT nor GOOGLE_CLOUD_PROJECT is configured!\n"
-            "Google AI Studio API Key Mode (GEMINI_API_KEY) has been permanently removed.\n"
+            "Google AI Studio API Key Mode has been permanently removed.\n"
             "Please set GCP_PROJECT in your .env file.\n"
         )
         return False

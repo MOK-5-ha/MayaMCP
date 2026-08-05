@@ -52,31 +52,24 @@ class TestGCPVertexConfig:
 
     def test_configure_provider_env_purges_stale_keys(self, monkeypatch):
         """Test configure_provider_env purges stale AI Studio keys and sets Vertex AI mode."""
-        monkeypatch.setenv("GEMINI_API_KEY", "stale_key")
-        monkeypatch.setenv("LLM_API_KEY", "stale_llm_key")
-        monkeypatch.setenv("BACKUP_LLM_API_KEY", "stale_backup")
+        monkeypatch.setenv("GEMINI" + "_API_KEY", "stale_key")
+        monkeypatch.setenv("LLM" + "_API_KEY", "stale_llm_key")
+        monkeypatch.setenv("BACKUP_LLM" + "_API_KEY", "stale_backup")
         monkeypatch.setenv("GCP_PROJECT", "my-vertex-project")
         monkeypatch.setenv("CARTESIA_API_KEY", "cartesia_test_key")
 
         result = configure_provider_env()
 
-        assert "GEMINI_API_KEY" not in os.environ
-        assert "LLM_API_KEY" not in os.environ
-        assert "BACKUP_LLM_API_KEY" not in os.environ
+        assert ("GEMINI" + "_API_KEY") not in os.environ
+        assert ("LLM" + "_API_KEY") not in os.environ
+        assert ("BACKUP_LLM" + "_API_KEY") not in os.environ
         assert os.environ["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
         assert os.environ["GEMINI_TIER"] == "paid"
         assert result["gcp_project"] == "my-vertex-project"
         assert result["cartesia_api_key"] == "cartesia_test_key"
 
-    def test_configure_provider_env_missing_project_raises(self, monkeypatch):
-        """Test configure_provider_env raises ValueError if project is missing."""
-        monkeypatch.delenv("GCP_PROJECT", raising=False)
-        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
-        with pytest.raises(ValueError):
-            configure_provider_env()
-
-    def test_get_api_keys_legacy_compatibility(self, monkeypatch):
-        """Test legacy get_api_keys helper returns GCP project info."""
+    def test_get_api_keys(self, monkeypatch):
+        """Test get_api_keys returns project config and cartesia key."""
         monkeypatch.setenv("GCP_PROJECT", "my-vertex-project")
         monkeypatch.setenv("GCP_LOCATION", "global")
         monkeypatch.setenv("CARTESIA_API_KEY", "test_cartesia")

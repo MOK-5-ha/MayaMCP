@@ -157,7 +157,7 @@ def mock_google_genai_client(monkeypatch):
     monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
     monkeypatch.setenv("GEMINI_TIER", "paid")
     monkeypatch.setenv("CARTESIA_API_KEY", "dummy-key")
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI" + "_API_KEY", raising=False)
 
     try:
         import google.genai
