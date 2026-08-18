@@ -1,0 +1,23 @@
+{
+  "rulesFile": ".greptile/rules.md",
+  "include": [
+    "src/**",
+    "tests/**",
+    "scripts/**",
+    ".kiro/specs/**",
+    "docs/**",
+    "pyproject.toml",
+    "requirements.txt",
+    ".env.example",
+    "AGENTS.md",
+    "README.md"
+  ],
+  "exclude": [
+    "htmlcov/**",
+    ".venv/**",
+    "__pycache__/**",
+    "assets/maya_memory.mp4",
+    "assets/maya_memory_index.json",
+    "*.log"
+  ]
+}

@@ -7,7 +7,15 @@ python-dotenv>=1.0.0
 requests>=2.32.2,<3.0.0
 websockets>=15.0
 tenacity>=9.0.0
-weave>=0.53.0
+# Google Cloud Trace, OpenTelemetry & Vertex AI Gen AI Evaluation
+google-cloud-aiplatform>=1.70.0
+google-cloud-trace>=1.11.0
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-gcp-trace>=1.7.0
+pandas>=2.0.0
+scikit-learn>=1.0.0
+rouge-score>=0.1.2
 
 # UI (Gradio 6.x - upgraded from 5.x to patch CVEs PYSEC-2026-63/64/65/66/2178/2179)
 gradio>=6.16.0,<7.0.0

@@ -51,7 +51,7 @@ pytest -m "not slow"      # Skip slow tests
 pytest -m unit            # Unit tests only
 pytest -m integration     # Integration tests only
 
-# Weave Evaluations (LLM-as-judge)
+# Vertex AI Gen AI Evaluation Service & Cloud Trace
 python scripts/run_weave_evals.py
 ```
 - Tests live in `tests/` with `test_*.py` naming.
@@ -65,7 +65,7 @@ python scripts/run_weave_evals.py
 - **Refactoring & Mocks**: When extracting logic into helper functions, do not move the calls to state managers or mocked dependencies into the helper if it bypasses existing `@patch` targets in the test suite. Instead, fetch the data in the original module and pass the data structures into the helper.
 - **Mocking Tools**: Never use "mock-sniffing" wrappers in production code to detect `unittest.mock` objects. Instead, fix the test doubles. When patching tools that used to be invoked via LangChain's `.invoke()`, set both `mock.return_value` and `mock.invoke.return_value` to the expected string to ensure compatibility with both direct calls and legacy test harnesses.
 - **Rate Limiter Initialization timing**: If overriding rate limit constraints via environment variables (e.g. setting `MAYA_SESSION_RATE_LIMIT` to `9999` for tests or evaluations), ensure those environment variables are set *before* importing any package from the application to prevent the `RateLimiter` singleton from initializing with default values.
-- **Offline Evaluations**: Headless evaluation suites (such as Weights & Biases Weave integrations) must support running completely offline without demanding remote authentication if `WANDB_API_KEY` is missing. Create dummy mock fallbacks for classes like `weave.Model` and `weave.Evaluation` to execute evaluations locally.
+- **Offline Evaluations & Telemetry**: Headless evaluation suites and OpenTelemetry exporters must support running completely offline without demanding remote authentication if GCP Application Default Credentials (ADC) are absent. Provide local test doubles and fallback to standard Python logging to execute evaluations locally.
 
 ## Linting & Type Checking
 ```bash
@@ -112,7 +112,7 @@ Optional:
 - **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
 - **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and `a2a-sdk`. The `JSONRPCApplication` within the `a2a` server specifically requires `sse-starlette` to function. If test collection errors occur related to ADK routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
 - **Optimistic Payment Status Transitions**: In zero-latency optimistic payment flows, `completed → failed` transitions MUST be allowed in `VALID_STATUS_TRANSITIONS` so async background processing tasks can record failures without raising validation exceptions.
-- **Deterministic Payment Failure Testing**: Order amounts of `$99.99` trigger simulated background transaction failures in `CryptoPaymentClient._simulate_payment_lifecycle` for testing "register malfunction" apology flows in BDD and Weave evaluations.
+- **Deterministic Payment Failure Testing**: Order amounts of `$99.99` trigger simulated background transaction failures in `CryptoPaymentClient._simulate_payment_lifecycle` for testing "register malfunction" apology flows in BDD and Vertex AI evaluations.
 - **Async Background Task Dispatch**: When dispatching background tasks from synchronous tool functions, attempt `asyncio.get_running_loop().create_task()` first. If no event loop is active, spawn a daemon thread (`threading.Thread(daemon=True)`) running `asyncio.run()`.
 - **FastAPI Distributed Session Store**: In FastAPI routers, always use `get_session_store(request)` to read `request.app.state.session_store` dynamically (falling back to local `_SESSION_STORE`), ensuring session and payment state are shared across multi-container Modal deployments (`max_containers > 1`).
 - **Async Event Loop Unblocking for SSE**: In `async def` SSE streaming endpoints, never iterate synchronous blocking generators directly with a `for` loop. Offload iteration using `await asyncio.to_thread(_fetch_next_stream_event, stream)` to prevent blocking FastAPI's asyncio event loop thread.

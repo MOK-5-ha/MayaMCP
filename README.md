@@ -32,7 +32,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - `config/`: Configuration files separate from code
 - `docs/`: Additional documentation (ADRs, helper function reference `docs/helper_functions.md`)
 - `notebooks/`: Experimentation and analysis
-- `scripts/`: Utility scripts, including Weave evaluations
+- `scripts/`: Utility scripts, including Google Cloud evaluation pipelines
 - `src/`: Core source code with modular organization
   - `src/routers/`: FastAPI v1 REST and SSE API endpoints (`session`, `payments`, `chat`)
   - `src/schemas/`: Pydantic v2 data transfer schemas
@@ -101,14 +101,14 @@ cd MayaMCP
 2. Create `.env` file with your GCP Vertex AI configuration:
 
 ```bash
-# GCP Vertex AI Configuration (Exclusively uses GCP billing credits)
+# GCP Vertex AI Configuration (Exclusively uses GCP billing credits via Vertex AI)
+# Required for Google Cloud Trace and Vertex AI Gen AI Evaluation Service (ADC)
 GCP_PROJECT=your_gcp_project_id_here
 GCP_LOCATION=global
 GEMINI_TIER=paid
 
-# Third-Party Service Keys
+# Third-Party Service Keys (BYOK Fallback)
 CARTESIA_API_KEY=your_cartesia_api_key_here
-WANDB_API_KEY=your_wandb_api_key_here  # Optional: For Weights & Biases Weave evaluations
 
 # Model Configuration (optional)
 GEMINI_MODEL_VERSION=gemini-3.1-flash-lite
@@ -325,7 +325,7 @@ Prerequisites: Python 3.12+ and pip installed; activate your virtual environment
 - **Unit Tests**: Test individual functions and classes in isolation (using `DummyLLM` and ADK test doubles instead of legacy `MagicMock`).
 - **Integration Tests**: Test component interactions and end-to-end workflows.
 - **Behavior-Driven Development (BDD)**: Test complex agentic interactions using Gherkin syntax via `pytest-bdd` (in `tests/behavior/`).
-- **Headless Evaluations**: Offline and tracked dataset evaluations using Weights & Biases Weave (`scripts/run_weave_evals.py`).
+- **Headless Evaluations**: Automated dataset evaluations using Google Cloud Vertex AI Gen AI Evaluation Service (`EvalTask`) and Cloud Trace (`scripts/run_evals.py` / `tests/eval/`).
 - **Memvid Tests**: Test RAG functionality and document retrieval.
 - **LLM Tests**: Test ADK Agent integration and tool execution.
 - **UI Tests**: Test user interface components and handlers.
@@ -351,18 +351,63 @@ pip install -r requirements.txt
 pip install pytest pytest-mock pytest-cov
 ```
 
-### Evaluations (Weave)
+### CI/CD Integration
 
-The project includes an LLM-as-judge evaluation pipeline using [Weave by Weights & Biases](https://wandb.ai/site/weave).
+Tests are designed to run in CI environments with:
 
-1. Set your `WANDB_API_KEY` in the `.env` file.
-2. Run evaluations using the provided script:
+- No external API dependencies for unit tests
+- Mocked third-party services for integration tests
+- Configurable test execution based on available resources
+- Proper exit codes for build pipeline integration
+
+### Evaluations (Vertex AI Gen AI Evaluation Service & Cloud Trace)
+
+The project includes an evaluation pipeline using **Google Cloud Vertex AI Gen AI Evaluation Service** (`vertexai.preview.evaluation` / `EvalTask`) and **Google Cloud Trace**:
+
+1. Authenticate with Google Cloud Application Default Credentials (ADC):
+   ```bash
+   gcloud auth application-default login
+   ```
+2. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
+3. Run evaluations using the provided script or `agents-cli`:
    ```bash
    python scripts/run_weave_evals.py
    ```
 
 **Tier-Based Concurrency**: 
-- GCP Vertex AI Mode runs concurrently on Paid Tier (`GEMINI_TIER=paid`).
+- GCP Vertex AI Mode runs concurrently on Paid Tier (`GEMINI_TIER=paid`, 10+ QPS).
+- If on Gemini Free Tier, evaluations run sequentially to respect the 15 RPM limit (`GEMINI_TIER=free`).
+
+**Cloud Trace & Telemetry**:
+- All evaluation runs generate OpenTelemetry spans conforming to **GenAI Semantic Conventions** (`gen_ai.system`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`) exported directly to Google Cloud Trace.
+
+**Note on Mocking**: When running standard pytest suites, always ensure the Native SDK and global `RateLimiter` are mocked properly (see `tests/conftest.py` for examples) to avoid accumulating state and hitting burst limits.
+
+### Troubleshooting
+
+**Import Errors**: If you encounter import errors, ensure you're using one of the recommended test methods above. The `tests/conftest.py` file automatically handles path setup for pytest runs.
+
+**Missing Dependencies**: Install requirements and test tooling:
+
+```bash
+pip install -r requirements.txt
+pip install pytest pytest-mock pytest-cov
+```
+
+Example:
+```bash
+# optional: create and activate a clean virtual environment
+python -m venv .venv && source .venv/bin/activate
+
+# install project and test dependencies
+pip install -r requirements.txt
+pip install pytest pytest-mock pytest-cov
+
+# run tests
+pytest -q
+```
+
+**API Key Issues**: Most tests use mocked services, but some integration tests may require API keys. Check individual test files for specific requirements.
 
 ## Error Handling and Graceful Fallbacks
 
