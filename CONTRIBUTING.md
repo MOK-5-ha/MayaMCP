@@ -26,7 +26,6 @@ Our test suite aims to be fast, reliable, and decoupled from external services.
 
 ## Running Tests and Evaluations
 
-- Run the main test suite with `pytest`.
-- For LLM-as-judge evaluation, use the Weave pipeline: `python scripts/run_weave_evals.py`. Ensure `WANDB_API_KEY` is set in your `.env`.
+- For LLM-as-judge evaluation, use the Google Cloud Vertex AI evaluation pipeline: `python scripts/run_weave_evals.py` (or `agents-cli eval grade`). Authenticate via `gcloud auth application-default login`.
 
 Thank you for helping improve MayaMCP!

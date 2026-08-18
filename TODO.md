@@ -102,7 +102,7 @@ The implementation includes:
 
 ## Other TODOs
 
-- [ ] Expand Weave evaluation dataset in `scripts/run_weave_evals.py`
+- [ ] Expand Vertex AI evaluation dataset in `tests/eval/` and `scripts/run_weave_evals.py`
   - Add more conversation flow test cases (e.g., testing memory retrieval and complex payment edge cases).
 
 - [ ] Add session lock cleanup background task
