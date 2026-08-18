@@ -375,15 +375,25 @@ def run_evaluation():
                 for col in metrics_df.columns:
                     if col not in ("prompt", "response", "reference"):
                         val = row[col]
-                        passed = (float(val) >= 3.0) if (val is not None and isinstance(val, (int, float))) else True
-                        results[idx]["scores"][f"vertexai_{col}"] = {
-                            "passed": passed,
-                            "score": float(val) if isinstance(val, (int, float)) else 1.0,
-                            "reasoning": f"Vertex AI managed metric {col}: {val}",
-                        }
-                        total_checks += 1
-                        if passed:
-                            total_passed += 1
+                        if val is not None and isinstance(val, (int, float)):
+                            numeric_val = float(val)
+                            # ROUGE and text overlap metrics are bounded in [0.0, 1.0]
+                            if "rouge" in col.lower() or "similarity" in col.lower():
+                                passed = numeric_val >= 0.3
+                            elif numeric_val <= 1.0:
+                                passed = numeric_val >= 0.5
+                            else:
+                                # Standard 1-5 rating rubric for LLM PointwiseMetric
+                                passed = numeric_val >= 3.0
+                            
+                            results[idx]["scores"][f"vertexai_{col}"] = {
+                                "passed": passed,
+                                "score": numeric_val,
+                                "reasoning": f"Vertex AI managed metric {col}: {numeric_val:.3f}",
+                            }
+                            total_checks += 1
+                            if passed:
+                                total_passed += 1
 
     pass_rate = (total_passed / total_checks * 100) if total_checks > 0 else 0
     print("\n" + "=" * 60)
