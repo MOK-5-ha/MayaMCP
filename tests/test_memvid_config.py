@@ -3,21 +3,20 @@
 Unit tests for src.memvid.config module.
 """
 
-import pytest
 
 from src.memvid.config import (
-    get_memvid_config,
-    QR_VERSION,
-    QR_ERROR_CORRECTION,
-    QR_BOX_SIZE,
-    QR_BORDER,
-    QR_FILL_COLOR,
-    QR_BACK_COLOR,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_OVERLAP,
-    VIDEO_FPS,
     FRAME_HEIGHT,
-    FRAME_WIDTH
+    FRAME_WIDTH,
+    QR_BACK_COLOR,
+    QR_BORDER,
+    QR_BOX_SIZE,
+    QR_ERROR_CORRECTION,
+    QR_FILL_COLOR,
+    QR_VERSION,
+    VIDEO_FPS,
+    get_memvid_config,
 )
 
 

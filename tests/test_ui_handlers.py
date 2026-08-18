@@ -1,8 +1,14 @@
 """Unit tests for UI handlers."""
 
-from unittest.mock import Mock, patch, MagicMock
-from src.ui.handlers import handle_gradio_input, clear_chat_state, handle_gradio_input_stream, handle_gradio_streaming_input
+from unittest.mock import Mock, patch
+
 from src.llm.session_registry import SessionLimitExceededError
+from src.ui.handlers import (
+    clear_chat_state,
+    handle_gradio_input,
+    handle_gradio_input_stream,
+    handle_gradio_streaming_input,
+)
 
 
 def _make_request(session_id="test_session"):
@@ -412,7 +418,7 @@ class TestHandleGradioStreamingInput:
         """Test handle_gradio_streaming_input correctly routes to streaming handler."""
         mock_handle_stream.return_value = ["event"]
         req = _make_request()
-        
+
         result = handle_gradio_streaming_input(
             user_input="Hi",
             session_history_state=[],
@@ -424,7 +430,7 @@ class TestHandleGradioStreamingInput:
             request=req,
             app_state={}
         )
-        
+
         mock_handle_stream.assert_called_once_with(
             "Hi", [], 0.0, 1000.0, None, 0.0, req, None, None, None, {}, 'assets/bartender_avatar.jpg'
         )
@@ -438,10 +444,10 @@ class TestHandleGradioStreamingInput:
     ):
         """Test streaming handler when session limit is exceeded."""
         mock_process_order_stream.side_effect = SessionLimitExceededError("Limit reached")
-        
+
         test_state = {}
         _seed_session_keys(test_state)
-        
+
         generator = handle_gradio_input_stream(
             user_input="Hi",
             session_history_state=[],
@@ -452,11 +458,11 @@ class TestHandleGradioStreamingInput:
             request=_make_request(),
             app_state=test_state
         )
-        
+
         events = list(generator)
         assert len(events) == 1
         event = events[0]
-        
+
         assert event['type'] == 'error'
         assert "at capacity" in event['content']
         # handler should append the echoed user turn and the error turn
@@ -464,3 +470,52 @@ class TestHandleGradioStreamingInput:
         assert event['history'][0]['role'] == 'user'
         assert event['history'][1]['role'] == 'assistant'
         assert 'quota_error_html' not in event
+
+
+class TestHandleKeySubmission:
+    """Test cases for handle_key_submission in Vertex AI Mode."""
+
+    @patch('src.ui.api_key_modal.validate_gemini_key')
+    def test_handle_key_submission_empty_key_validates_server_vertex_config(
+        self, mock_validate_key
+    ):
+        """Test handle_key_submission accepts empty key and validates server GCP_PROJECT/ADC."""
+        from src.ui.api_key_modal import handle_key_submission
+        mock_validate_key.return_value = (True, "")
+
+        req = _make_request()
+        test_state = {}
+
+        err, col_keys, col_chat, validated = handle_key_submission(
+            gemini_key="",
+            cartesia_key="",
+            request=req,
+            app_state=test_state,
+        )
+
+        mock_validate_key.assert_called_once_with(gcp_project=None)
+        assert err == ""
+        assert validated is True
+
+    @patch('src.ui.api_key_modal.validate_gemini_key')
+    def test_handle_key_submission_custom_project_override(
+        self, mock_validate_key
+    ):
+        """Test handle_key_submission passes custom GCP project ID override to validate_gemini_key."""
+        from src.ui.api_key_modal import handle_key_submission
+        mock_validate_key.return_value = (True, "")
+
+        req = _make_request()
+        test_state = {}
+
+        err, col_keys, col_chat, validated = handle_key_submission(
+            gemini_key="my-custom-project",
+            cartesia_key="cartesia_123",
+            request=req,
+            app_state=test_state,
+        )
+
+        mock_validate_key.assert_called_once_with(gcp_project="my-custom-project")
+        assert err == ""
+        assert validated is True
+

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class KeySubmissionRequest(BaseModel):
-    gemini_key: str = Field(..., description="Google Gemini AI Studio API key")
+    gemini_key: Optional[str] = Field(None, description="Optional GCP Project ID or session key override")
     cartesia_key: Optional[str] = Field(None, description="Optional Cartesia TTS API key")
 
 

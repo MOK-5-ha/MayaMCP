@@ -12,6 +12,10 @@ from .components import (
     create_streaming_toggle,
     setup_avatar,
 )
+from .handlers import (
+    clear_chat_state,
+    handle_gradio_input,
+)
 from .tab_overlay import create_tab_overlay_html
 
 logger = get_logger(__name__)
@@ -54,8 +58,8 @@ def create_avatar_with_overlay(
     )
 
 def launch_bartender_interface(
-    handle_input_fn: Callable,
-    clear_state_fn: Callable,
+    handle_input_fn: Callable | None = None,
+    clear_state_fn: Callable | None = None,
     handle_key_submission_fn: Callable | None = None,
     handle_streaming_input_fn: Callable | None = None,
     avatar_path: str | None = None
@@ -64,15 +68,21 @@ def launch_bartender_interface(
     Create the Gradio interface for Maya the bartender and return it.
 
     Args:
-        handle_input_fn: Function to handle user input
-        clear_state_fn: Function to clear chat state
-        handle_key_submission_fn: Function to validate and store API keys (BYOK).
-                                  If None, the default handle_key_submission is used.
+        handle_input_fn: Function to handle user input (defaults to handle_gradio_input)
+        clear_state_fn: Function to clear chat state (defaults to clear_chat_state)
+        handle_key_submission_fn: Function to validate and store API keys (defaults to handle_key_submission)
+        handle_streaming_input_fn: Function to handle streaming input (defaults to handle_gradio_streaming_input)
         avatar_path: Path to avatar image (will setup default if None)
 
     Returns:
         gr.Blocks: The interface object (not launched), suitable for external serving
     """
+    if handle_input_fn is None:
+        handle_input_fn = handle_gradio_input
+    if clear_state_fn is None:
+        clear_state_fn = clear_chat_state
+    if handle_key_submission_fn is None:
+        handle_key_submission_fn = handle_key_submission
     # Setup avatar if not provided
     if avatar_path is None:
         try:
@@ -85,39 +95,43 @@ def launch_bartender_interface(
     if not avatar_path:
         avatar_path = "assets/bartender_avatar.jpg"
 
+    # Normalize path to ensure consistency across tests
     effective_avatar_path = avatar_path
 
     # Create the interface
     ui_theme = gr.themes.Ocean()
 
+    # Create Blocks with theme
     with gr.Blocks(theme=ui_theme) as demo:
-        gr.Markdown("# MOK 5-ha - Meet Maya the Bartender")
 
-        # --- Define Session State Variables ---
-        history_state = gr.State([])
-        order_state = gr.State([])
+        # Hidden state to track key validation across renders
         keys_validated_state = gr.State(False)
 
-        # --- Payment State Variables (Requirements: 2.2, 6.2, 7.2, 7.3) ---
+        # Session history state (list of message dicts)
+        history_state = gr.State([])
+
+        # Payment & order tracking state
         tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])
         balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])
         prev_tab_state = gr.State(DEFAULT_PAYMENT_STATE['tab_total'])
         prev_balance_state = gr.State(DEFAULT_PAYMENT_STATE['balance'])
         tip_percentage_state = gr.State(DEFAULT_PAYMENT_STATE['tip_percentage'])
         tip_amount_state = gr.State(DEFAULT_PAYMENT_STATE['tip_amount'])
+        order_state = gr.State([])
 
         # =================================================================
-        # BYOK API Key Form (visible by default, hidden after validation)
+        # Configuration Form Column (GCP Vertex AI / Optional Overrides)
         # =================================================================
         with gr.Column(visible=True) as api_key_column:
             gr.Markdown(
                 "## Welcome to MOK 5-ha!\n"
-                "To get started, please provide your API keys below."
+                "Maya runs in GCP Vertex AI Mode (Paid Tier). Click **Start Chatting** to begin, "
+                "or optionally provide a custom GCP Project ID below."
             )
 
             gemini_key_input = gr.Textbox(
-                label="Gemini API Key (required)",
-                placeholder="Enter your Google Gemini API key...",
+                label="GCP Project ID (optional override)",
+                placeholder="Enter GCP Project ID (leave blank to use server default)...",
                 type="password",
             )
             cartesia_key_input = gr.Textbox(

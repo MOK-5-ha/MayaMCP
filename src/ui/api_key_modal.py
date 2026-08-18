@@ -6,6 +6,7 @@ import gradio as gr
 
 from ..config.logging_config import get_logger
 from ..llm.key_validator import validate_gemini_key
+from ..utils.helpers import extract_session_id
 from ..utils.state_manager import set_api_keys
 
 logger = get_logger(__name__)
@@ -56,17 +57,18 @@ def create_quota_error_html() -> str:
 
 
 def create_help_instructions_md() -> str:
-    """Return Markdown text with instructions on obtaining API keys."""
+    """Return Markdown text with instructions on configuring GCP Vertex AI Mode."""
     return """
-### Getting a Free Gemini API Key
+### GCP Vertex AI Mode Setup (Paid Tier)
 
-1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Sign in with your Google account
-3. Click **"Create API Key"**
-4. Select or create a Google Cloud project when prompted
-5. Copy your new API key and paste it above
+MayaMCP runs in **100% GCP Vertex AI Mode** using Google Cloud billing credits and Application Default Credentials (ADC).
 
-> The free tier includes ~15 requests/minute and 1,500 requests/day.
+1. Ensure **`GCP_PROJECT`** is set in your `.env` file or environment.
+2. Authenticate locally with Application Default Credentials:
+   ```bash
+   gcloud auth application-default login
+   ```
+3. Optional: Enter a custom **GCP Project ID** above to override the server default.
 
 ---
 
@@ -87,7 +89,7 @@ def handle_key_submission(
     request: gr.Request,
     app_state: MutableMapping | None = None,
 ) -> tuple[str, gr.Column, gr.Column, bool]:
-    """Validate keys, store them in session state, and toggle UI visibility.
+    """Validate GCP Vertex AI configuration, store session state, and toggle UI visibility.
 
     Returns:
         Tuple of (error_markdown, api_key_column_update, chat_column_update,
@@ -96,25 +98,17 @@ def handle_key_submission(
     if app_state is None:
         app_state = {}
 
-    session_id = "default"
-    if request and request.session_hash:
-        session_id = request.session_hash
+    session_id = extract_session_id(request)
 
-    # --- Validate Gemini key (required) ---
-    if not gemini_key or not gemini_key.strip():
-        return (
-            "**Error:** Please enter your Gemini API key.",
-            gr.Column(visible=True),
-            gr.Column(visible=False),
-            False,
-        )
+    # --- Validate GCP Vertex AI configuration (gcp_project or server ADC) ---
+    project_override = gemini_key.strip() if gemini_key and gemini_key.strip() else None
 
     try:
-        is_valid, error_msg = validate_gemini_key(gemini_key.strip())
+        is_valid, error_msg = validate_gemini_key(gcp_project=project_override)
     except Exception:
-        logger.exception("Exception during Gemini key validation")
+        logger.exception("Exception during Vertex AI configuration validation")
         return (
-            "**Error:** Unable to validate API key. Please check your connection and try again.",
+            "**Error:** Unable to validate Vertex AI configuration. Please check your connection and try again.",
             gr.Column(visible=True),
             gr.Column(visible=False),
             False,
@@ -131,7 +125,7 @@ def handle_key_submission(
     set_api_keys(
         session_id,
         app_state,
-        gemini_key=gemini_key.strip(),
+        gemini_key=project_override or "vertexai",
         cartesia_key=cartesia_key.strip() if cartesia_key else None,
     )
 

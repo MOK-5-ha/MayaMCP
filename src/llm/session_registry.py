@@ -3,7 +3,7 @@
 import hashlib
 import os
 import threading
-from typing import Any
+from typing import Any, List, Optional
 
 from ..config.logging_config import get_logger
 
@@ -69,20 +69,38 @@ def _remove_admission_locks(session_ids: list[str]) -> None:
             _admission_locks.pop(session_id, None)
 
 
-def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
-    """Return a cached or newly created LLM instance for session.
-
-    If API key has changed since last call, LLM is recreated.
+def get_session_llm(
+    session_id: str,
+    api_key: Optional[str] = None,
+    tools: Optional[List] = None,
+    gcp_project: Optional[str] = None,
+    gcp_location: Optional[str] = None,
+):
+    """Return a cached or newly created LLM instance for session strictly in Vertex AI Mode.
 
     Args:
         session_id: Gradio session hash.
-        api_key: User-provided Gemini API key.
+        api_key: Optional deprecated parameter.
         tools: Tool definitions to bind to LLM.
+        gcp_project: Optional GCP Project ID.
+        gcp_location: Optional GCP Location.
 
     Returns:
-        Initialized ``ChatGoogleGenerativeAI`` instance with tools bound.
+        Initialized Gemini model instance with Vertex AI client binding.
     """
-    key_hash = _key_hash(api_key)
+    project = (
+        gcp_project or os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT") or ""
+    ).strip()
+    if not project:
+        raise ValueError(
+            "GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured. "
+            "Google AI Studio Key Mode has been permanently removed; this project "
+            "exclusively uses GCP Vertex AI Mode (Paid Tier). Please set GCP_PROJECT in your .env file."
+        )
+    location = (
+        gcp_location or os.getenv("GCP_LOCATION") or "global"
+    ).strip() or "global"
+    key_hash = _key_hash(f"{project}:{location}")
 
     # Check for existing session first (fast path)
     with _registry_lock:
@@ -94,9 +112,7 @@ def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
     if _session_manager_available:
         session_manager = get_session_manager()
 
-        # Acquire per-session lock for admission control. This prevents
-        # multiple threads from triggering session creation for the same ID
-        # while NOT holding the global _registry_lock.
+        # Acquire per-session lock for admission control.
         admission_lock = _get_admission_lock(session_id)
 
         with admission_lock:
@@ -107,7 +123,6 @@ def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
                     return entry["llm"]
 
             # Now attempt admission with session manager WITHOUT holding _registry_lock.
-            # This allows other sessions to access the registry while we probe memory.
             if not session_manager.create_session(session_id, key_hash):
                 logger.warning(
                     "Session %s rejected by memory-aware admission control",
@@ -141,21 +156,24 @@ def get_session_llm(session_id: str, api_key: str, tools: list | None = None):
     from google.adk.models import Gemini
     from google.genai import Client
 
-    from .client import get_model_name
+    from .client import get_genai_client, get_model_name
 
-    class BYOKGemini(Gemini):
-        def __init__(self, api_key: str, **kwargs):
+    class VertexGemini(Gemini):
+        def __init__(self, project_id: str, loc: str, **kwargs):
             super().__init__(**kwargs)
-            self._api_key = api_key
+            self._project_id = project_id
+            self._loc = loc
 
         @property
         def api_client(self) -> Client:
             if not hasattr(self, '_client'):
-                self._client = Client(api_key=self._api_key)
+                self._client = get_genai_client(
+                    gcp_project=self._project_id, gcp_location=self._loc
+                )
             return self._client
 
-    llm = BYOKGemini(api_key=api_key, model=get_model_name())
-    logger.info("Created new BYOKGemini instance for session %s...", session_id[:8])
+    llm = VertexGemini(project_id=project, loc=location, model=get_model_name())
+    logger.info("Created new VertexGemini instance for session %s...", session_id[:8])
 
     with _registry_lock:
         entry = _session_clients[session_id]
@@ -318,4 +336,3 @@ def clear_session_clients(session_id: str) -> None:
 
     # Remove admission lock
     _remove_admission_locks([session_id])
-

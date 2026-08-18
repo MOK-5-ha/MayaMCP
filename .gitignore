@@ -104,3 +104,34 @@ assets/maya_memory_index.json
 # Runtime files
 .gradio_cache/
 gradio_flagged/
+
+# Frontend Node dependencies & builds
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.vite/
+frontend/.vite/
+*.tsbuildinfo
+
+# Weights & Biases / Weave evaluations
+wandb/
+.weave/
+
+# Databases & Local Storage
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Web3 Wallets & Key Credentials
+wallet_data.json
+cdp_secret.json
+*.pem
+*.key
+
+# AI Agent Caches & Temporary Artifacts
+.macroscope/
+.qodo/
+.antigravity/
+scratch/

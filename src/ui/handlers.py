@@ -14,7 +14,11 @@ from ..llm.session_registry import (
 )
 from ..utils.batch_state import batch_state_commits
 from ..utils.errors import is_quota_error
-from ..utils.helpers import append_to_history, get_overlay_payment_data
+from ..utils.helpers import (
+    append_to_history,
+    extract_session_id,
+    get_overlay_payment_data,
+)
 from ..utils.state_manager import (
     get_api_key_state,
     get_current_order_state,
@@ -63,12 +67,11 @@ def handle_gradio_input(
         app_state = {}
 
     # Extract session ID from request
-    session_id = "default"
-    if request:
-        session_id = request.session_hash or "default"
-        logger.debug(f"Handling request for session: {session_id}")
-    else:
+    session_id = extract_session_id(request)
+    if not request:
         logger.warning("No request object provided, using default session ID")
+    else:
+        logger.debug(f"Handling request for session: {session_id}")
 
     logger.info(f"Gradio input from {session_id}: '{user_input}'")
 
@@ -195,9 +198,7 @@ def clear_chat_state(
     Returns:
         Tuple of (empty_chatbot, empty_history, empty_order, no_audio)
     """
-    session_id = "default"
-    if request:
-        session_id = request.session_hash or "default"
+    session_id = extract_session_id(request)
 
     logger.info(f"Clear button clicked for session {session_id} - Resetting session state.")
 
@@ -243,10 +244,8 @@ def handle_gradio_input_stream(
         app_state = {}
 
     # Extract session ID from request
-    session_id = "default"
-    if request:
-        session_id = request.session_hash or "default"
-    else:
+    session_id = extract_session_id(request)
+    if not request:
         logger.warning("No request object provided, using default session ID")
 
     # Get API keys

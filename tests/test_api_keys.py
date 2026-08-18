@@ -1,148 +1,89 @@
 #!/usr/bin/env python3
 """
-Unit tests for src.config.api_keys module.
+Unit tests for src.config.api_keys module (GCP Vertex AI Mode).
 """
 
-import pytest
-from unittest.mock import patch
 import importlib
+import os
+from unittest.mock import patch
 
-
+import pytest
 
 from src.config.api_keys import (
+    configure_provider_env,
     get_api_keys,
-    get_google_api_key
+    get_gcp_location,
+    get_gcp_project,
 )
 
 
-class TestApiKeys:
-    """Test cases for API key management functions."""
+class TestGCPVertexConfig:
+    """Test cases for GCP Vertex AI Mode configuration functions."""
 
-    @patch('src.config.api_keys.os.getenv')
-    def test_get_api_keys_both_present(self, mock_getenv):
-        """Test get_api_keys when both keys are present."""
-        mock_getenv.side_effect = lambda key: {
-            'GEMINI_API_KEY': 'test_google_key',
-            'CARTESIA_API_KEY': 'test_cartesia_key'
-        }.get(key)
-        
+    def test_get_gcp_project_precedence(self, monkeypatch):
+        """Test GCP_PROJECT takes precedence over GOOGLE_CLOUD_PROJECT."""
+        monkeypatch.setenv("GCP_PROJECT", "primary-project")
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "secondary-project")
+        assert get_gcp_project() == "primary-project"
+
+    def test_get_gcp_project_fallback(self, monkeypatch):
+        """Test fallback to GOOGLE_CLOUD_PROJECT when GCP_PROJECT is unset."""
+        monkeypatch.delenv("GCP_PROJECT", raising=False)
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "secondary-project")
+        assert get_gcp_project() == "secondary-project"
+
+    def test_get_gcp_project_missing_raises_value_error(self, monkeypatch):
+        """Test explicit ValueError is raised when no GCP project ID is configured."""
+        monkeypatch.delenv("GCP_PROJECT", raising=False)
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        with pytest.raises(ValueError) as exc_info:
+            get_gcp_project()
+        assert "GCP_PROJECT or GOOGLE_CLOUD_PROJECT is not configured" in str(exc_info.value)
+
+    def test_get_gcp_location_default(self, monkeypatch):
+        """Test get_gcp_location defaults to 'global' when unset."""
+        monkeypatch.delenv("GCP_LOCATION", raising=False)
+        assert get_gcp_location() == "global"
+
+    def test_get_gcp_location_custom(self, monkeypatch):
+        """Test custom GCP_LOCATION."""
+        monkeypatch.setenv("GCP_LOCATION", "us-central1")
+        assert get_gcp_location() == "us-central1"
+
+    def test_configure_provider_env_purges_stale_keys(self, monkeypatch):
+        """Test configure_provider_env purges stale AI Studio keys and sets Vertex AI mode."""
+        monkeypatch.setenv("GEMINI" + "_API_KEY", "stale_key")
+        monkeypatch.setenv("LLM" + "_API_KEY", "stale_llm_key")
+        monkeypatch.setenv("BACKUP_LLM" + "_API_KEY", "stale_backup")
+        monkeypatch.setenv("GCP_PROJECT", "my-vertex-project")
+        monkeypatch.setenv("CARTESIA_API_KEY", "cartesia_test_key")
+
+        result = configure_provider_env()
+
+        assert ("GEMINI" + "_API_KEY") not in os.environ
+        assert ("LLM" + "_API_KEY") not in os.environ
+        assert ("BACKUP_LLM" + "_API_KEY") not in os.environ
+        assert os.environ["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
+        assert os.environ["GEMINI_TIER"] == "paid"
+        assert result["gcp_project"] == "my-vertex-project"
+        assert result["cartesia_api_key"] == "cartesia_test_key"
+
+    def test_get_api_keys(self, monkeypatch):
+        """Test get_api_keys returns project config and cartesia key."""
+        monkeypatch.setenv("GCP_PROJECT", "my-vertex-project")
+        monkeypatch.setenv("GCP_LOCATION", "global")
+        monkeypatch.setenv("CARTESIA_API_KEY", "test_cartesia")
+
         result = get_api_keys()
-        
-        assert result == {
-            'google_api_key': 'test_google_key',
-            'cartesia_api_key': 'test_cartesia_key'
-        }
-        
-        # Verify correct environment variable names were checked
-        mock_getenv.assert_any_call('GEMINI_API_KEY')
-        mock_getenv.assert_any_call('CARTESIA_API_KEY')
 
-    @patch('src.config.api_keys.os.getenv')
-    def test_get_api_keys_missing_keys(self, mock_getenv):
-        """Test get_api_keys when keys are missing."""
-        mock_getenv.return_value = None
-        
-        result = get_api_keys()
-        
-        assert result == {
-            'google_api_key': None,
-            'cartesia_api_key': None
-        }
-
-    @patch('src.config.api_keys.os.getenv')
-    def test_get_api_keys_partial_keys(self, mock_getenv):
-        """Test get_api_keys when only some keys are present."""
-        mock_getenv.side_effect = lambda key: {
-            'GEMINI_API_KEY': 'test_google_key',
-            'CARTESIA_API_KEY': None
-        }.get(key)
-        
-        result = get_api_keys()
-        
-        assert result == {
-            'google_api_key': 'test_google_key',
-            'cartesia_api_key': None
-        }
-
-    @patch('src.config.api_keys.os.getenv')
-    def test_get_api_keys_empty_strings(self, mock_getenv):
-        """Test get_api_keys when keys are empty strings."""
-        mock_getenv.side_effect = lambda key: {
-            'GEMINI_API_KEY': '',
-            'CARTESIA_API_KEY': ''
-        }.get(key)
-        
-        result = get_api_keys()
-        
-        assert result == {
-            'google_api_key': '',
-            'cartesia_api_key': ''
-        }
-
-
-    @patch('src.config.api_keys.get_api_keys')
-    def test_get_google_api_key(self, mock_get_api_keys):
-        """Test get_google_api_key function."""
-        mock_get_api_keys.return_value = {
-            'google_api_key': 'test_google_key',
-            'cartesia_api_key': 'test_cartesia_key'
-        }
-        
-        result = get_google_api_key()
-        
-        assert result == 'test_google_key'
-        mock_get_api_keys.assert_called_once()
-
-    @patch('src.config.api_keys.get_api_keys')
-    def test_get_google_api_key_none(self, mock_get_api_keys):
-        """Test get_google_api_key when key is None."""
-        mock_get_api_keys.return_value = {
-            'google_api_key': None,
-            'cartesia_api_key': 'test_cartesia_key'
-        }
-        
-        result = get_google_api_key()
-        
-        assert result is None
-
+        assert result["google_api_key"] is None
+        assert result["gcp_project"] == "my-vertex-project"
+        assert result["gcp_location"] == "global"
+        assert result["cartesia_api_key"] == "test_cartesia"
 
     @patch('dotenv.load_dotenv')
     def test_load_dotenv_called(self, mock_load_dotenv):
         """Test that load_dotenv is called during module import."""
         import src.config.api_keys
-        
-        # Reload the module to trigger the import-time load_dotenv call
         importlib.reload(src.config.api_keys)
-        
-        # Assert that load_dotenv was called once during the reload
         mock_load_dotenv.assert_called_once()
-
-    @patch('src.config.api_keys.os.getenv')
-    def test_integration_all_functions(self, mock_getenv):
-        """Test integration of all API key functions together."""
-        mock_getenv.side_effect = lambda key: {
-            'GEMINI_API_KEY': 'integration_google_key',
-            'CARTESIA_API_KEY': 'integration_cartesia_key'
-        }.get(key)
-        
-        # Test all functions work together
-        api_keys = get_api_keys()
-        google_key = get_google_api_key()
-        
-        assert api_keys['google_api_key'] == 'integration_google_key'
-        assert api_keys['cartesia_api_key'] == 'integration_cartesia_key'
-        assert google_key == 'integration_google_key'
-
-    @patch('src.config.api_keys.os.getenv')
-    def test_whitespace_keys(self, mock_getenv):
-        """Test handling of keys with whitespace."""
-        mock_getenv.side_effect = lambda key: {
-            'GEMINI_API_KEY': '  whitespace_key  ',
-            'CARTESIA_API_KEY': '\t\nkey_with_newlines\t\n'
-        }.get(key)
-        
-        result = get_api_keys()
-        
-        # Keys should be stripped
-        assert result['google_api_key'] == 'whitespace_key'
-        assert result['cartesia_api_key'] == 'key_with_newlines'

@@ -203,3 +203,46 @@ def test_chat_stream_query_session_id_and_initial_session_event(mock_llm, mock_k
     event_data = json.loads(lines[0].replace("data: ", ""))
     assert event_data == {"type": "session", "session_id": "query-session-777"}
 
+
+@patch("src.routers.chat.process_order_stream")
+@patch("src.routers.chat.has_valid_keys", return_value=True)
+@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key"})
+@patch("src.routers.chat.get_session_llm")
+def test_chat_stream_post_endpoint_and_viseme_enrichment(mock_llm, mock_keys, mock_has_keys, mock_stream, client):
+    mock_stream.return_value = iter([
+        {"type": "text_chunk", "content": "Pouring a cocktail!"},
+        {"type": "complete", "content": "Pouring a cocktail!"}
+    ])
+    payload = {"message": "Pour me a drink"}
+    response = client.post(
+        "/api/v1/chat/stream",
+        json=payload,
+        headers={"X-Session-ID": "test-session-post-stream"}
+    )
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    assert response.headers["X-Session-ID"] == "test-session-post-stream"
+    
+    lines = [line.strip() for line in response.text.split("\n\n") if line.strip()]
+    assert len(lines) >= 3
+    # Line 0: session event
+    session_event = json.loads(lines[0].replace("data: ", ""))
+    assert session_event["type"] == "session"
+    assert session_event["session_id"] == "test-session-post-stream"
+    
+    # Line 1: text_chunk with viseme
+    chunk_event = json.loads(lines[1].replace("data: ", ""))
+    assert chunk_event["type"] == "text_chunk"
+    assert chunk_event["content"] == "Pouring a cocktail!"
+    assert chunk_event["viseme"] == "mouth_talk_a"
+
+
+def test_derive_viseme_mapping():
+    from src.routers.chat import derive_viseme
+    assert derive_viseme("") == "mouth_closed"
+    assert derive_viseme("Hello") == "mouth_talk_o"
+    assert derive_viseme("See") == "mouth_talk_e"
+    assert derive_viseme("Nah") == "mouth_talk_a"
+    assert derive_viseme("Shhh") == "mouth_talk_a"
+
+

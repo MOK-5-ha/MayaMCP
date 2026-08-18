@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "spritesheets": [
+    {
+      "key": "maya_portrait",
+      "path": "assets/sprites/maya_portrait.png",
+      "frameWidth": 128,
+      "frameHeight": 128
+    }
+  ],
+  "audio": [
+    {
+      "key": "bgm_lounge",
+      "path": "assets/audio/bgm_lounge.mp3",
+      "type": "music"
+    },
+    {
+      "key": "sfx_pour",
+      "path": "assets/audio/pour.wav",
+      "type": "sfx"
+    },
+    {
+      "key": "sfx_clink",
+      "path": "assets/audio/clink.wav",
+      "type": "sfx"
+    }
+  ]
+}

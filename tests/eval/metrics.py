@@ -1,13 +1,14 @@
 """Local LLM-as-judge for `agents-cli eval grade`, wired in from
 tests/eval/eval_config.yaml (`custom_function_file: metrics.py`).
 
-Scores the agent's final response 1-5 via google-genai (works on both Vertex and
-AI Studio) and grades against a case's `reference` (ground truth) when present.
+Scores the agent's final response 1-5 via get_genai_client() in Vertex AI mode
+and grades against a case's `reference` (ground truth) when present.
 """
 
-from google import genai
 from google.genai import types
 from pydantic import BaseModel
+
+from src.llm.client import get_genai_client
 
 
 class _Verdict(BaseModel):
@@ -35,7 +36,7 @@ def evaluate(instance):
         prompt += f"Expected Answer (ground truth): {reference}\n"
     prompt += f"Full Agent Trace: {instance.get('agent_data', '')}\n"
 
-    client = genai.Client()  # AI Studio (GEMINI_API_KEY) or Vertex (ADC)
+    client = get_genai_client()
     response = client.models.generate_content(
         model="gemini-flash-latest",
         contents=prompt,

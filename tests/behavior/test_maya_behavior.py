@@ -1,17 +1,13 @@
-import re
-from typing import Dict, Any, List
 import pytest
-from pytest_bdd import scenarios, given, when, then, parsers
-from types import SimpleNamespace as NS
+from pytest_bdd import given, parsers, scenarios, then, when
 
 from src.conversation.processor import process_order
 from src.utils.state_manager import (
     get_payment_state,
-    reset_session_state,
-    get_current_order_state,
     initialize_state,
+    reset_session_state,
+    update_order_state,
     update_payment_state,
-    update_order_state
 )
 
 # Load scenarios from feature file
@@ -37,25 +33,25 @@ class MockEvent:
         self.author = author
         self.partial = partial
         self.content = types.Content(role=author, parts=[types.Part.from_text(text=text)])
-    
+
     def is_final_response(self):
         return not self.partial
 
 @pytest.fixture(autouse=True)
 def mock_external_apis(monkeypatch):
     from google.adk.runners import Runner
-    
+
     async def mock_run_async(self, user_id, session_id, new_message, **kwargs):
         from src.llm.tools import set_current_session
         set_current_session(session_id)
-        
+
         # Extract prompt text
         prompt_text = "".join(p.text for p in new_message.parts if p.text)
-        
+
         # Tools are on self.agent.tools
         tools = self.agent.tools
         tool_map = {getattr(t, "__name__", getattr(t, "name", None)): t for t in tools}
-        
+
         if "stressful" in prompt_text or "stress" in prompt_text:
             text = "Man, that sounds tough. [EMOTION: neutral] I'm here to listen."
             yield MockEvent(author="model", text=text)
@@ -71,13 +67,13 @@ def mock_external_apis(monkeypatch):
                 tool_output = tool_map["add_to_order"](item_name="Martini", quantity=1)
             else:
                 tool_output = "Error: add_to_order not found"
-            
+
             yield MockEvent(author="model", text=str(tool_output))
         else:
             yield MockEvent(author="model", text="Here you go. [EMOTION: happy]")
 
     monkeypatch.setattr(Runner, 'run_async', mock_run_async)
-    
+
     # Mock TTS
     monkeypatch.setattr('src.ui.handlers.get_session_tts', lambda *args, **kwargs: None)
 
@@ -90,7 +86,7 @@ def step_init_session(ctx, balance):
     set_global_store(ctx.app_state)
     reset_session_state(ctx.session_id, ctx.app_state)
     initialize_state(ctx.session_id, ctx.app_state)
-    
+
     # Override balance in payment state
     update_payment_state(ctx.session_id, ctx.app_state, {"balance": balance})
 
