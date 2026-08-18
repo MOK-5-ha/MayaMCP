@@ -16,6 +16,7 @@ When reviewing code, pull requests, and commits:
 1. **Be Pragmatic:** Do not enforce overly bureaucratic enterprise standards, over-engineering, or complex architectural patterns that are unnecessary for a solo portfolio project.
 2. **Focus on Quality & Security over Dogma:** Prioritize clean, readable Python, robust error handling, non-blocking async execution, and secure integrations over pedantic style nitpicks.
 3. **Encourage Experimentation:** Recognize that this project serves as a testbed for integrating LLMs (Gemini), Voice (Cartesia), RAG (Memvid/FAISS), Web3 payments (Coinbase CDP AgentKit), and Google Cloud Gen AI evaluation & observability.
+4. **Respect Spec-First Phasing:** This repository strictly separates technical specification drafting (`.kiro/specs/`) from feature implementation tracks. Never demand immediate full code implementation of newly specified architectures on PRs whose primary scope is specification, deprecation cleanup, or environment modernization.
 
 ---
 
@@ -74,6 +75,11 @@ When reviewing code, pull requests, and commits:
 - FastAPI is served at the application root (`/`), with native REST/SSE routers mounted at `/api/v1/*` (`session`, `payments`, `chat`), Agent-to-Agent protocol routes at `/a2a/*`, and the Gradio UI mounted under `/ui`.
 - All API endpoints must use Pydantic v2 data models (`src/schemas/`) and routers (`src/routers/`).
 - Distributed session state must use `get_session_store(request)` to read `request.app.state.session_store` dynamically for multi-container Modal deployments (`max_containers > 1`).
+
+### Rule 11: Specification vs. Implementation PR Phasing
+- This project adheres to a spec-driven development lifecycle (`.kiro/specs/<feature-name>/`).
+- **Specification PRs**: PRs focused on drafting specs (`design.md`, `requirements.md`, `tasks.md`), configuring tools (like `.greptile/`), or deprecating obsolete dependencies (`requirements.txt`, `.env.example`) MUST NOT be rejected or penalized for deferring full code implementation of the newly specified architecture to subsequent implementation PRs.
+- Do NOT demand immediate implementation of planned feature metrics or future code tracks during a specification PR as long as the specification is coherent, existing tests pass, and legacy dependencies are cleanly decoupled.
 
 ---
 
