@@ -69,7 +69,7 @@ flowchart TD
 - **ID**: `TASK-1.2`
 - **Traceability**: `DS-5`, `NFR-1`, `US-6`
 - **Dependencies**: None
-- **Description**: Update [`.env.example`](file:///Users/pretermodernist/Developer/Personal/MayaMCP/.env.example) to remove `WANDB_API_KEY`. Add `GCP_PROJECT=` and `GCP_LOCATION=us-central1`. Update `GEMINI_TIER` comments to document Vertex AI quota management.
+- **Description**: Update [`.env.example`](file:///Users/pretermodernist/Developer/Personal/MayaMCP/.env.example) to remove `WANDB_API_KEY`. Add `GCP_PROJECT=` and `GCP_LOCATION=global`. Update `GEMINI_TIER` comments to document Vertex AI quota management.
 
 ---
 
