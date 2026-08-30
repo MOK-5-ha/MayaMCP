@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from collections.abc import AsyncGenerator
 
@@ -79,8 +80,10 @@ def chat_endpoint(
         if cartesia_client and response_text and response_text.strip():
             try:
                 audio_data = get_voice_audio(response_text, cartesia_client)
-                if audio_data and isinstance(audio_data, tuple) and len(audio_data) >= 2:
-                    audio_b64 = audio_data[0] if isinstance(audio_data[0], str) else None
+                if isinstance(audio_data, bytes) and audio_data:
+                    audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+                elif isinstance(audio_data, str) and audio_data:
+                    audio_b64 = audio_data
             except Exception:
                 audio_b64 = None
 
