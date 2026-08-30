@@ -14,6 +14,12 @@ os.environ["MAYA_SESSION_RATE_LIMIT"] = "9999"
 os.environ["MAYA_APP_RATE_LIMIT"] = "9999"
 os.environ["MAYA_BURST_LIMIT"] = "9999"
 
+try:
+    import tenacity
+    tenacity.nap.sleep = lambda x: None
+except Exception:
+    pass
+
 import pytest
 
 # Create 'google' package if missing

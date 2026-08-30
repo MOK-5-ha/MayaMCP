@@ -212,8 +212,9 @@ class TestLLMClient:
     @patch('src.llm.client.build_generate_config')
     @patch('src.llm.client.classify_and_log_genai_error')
     def test_call_gemini_api_generic_error(self, mock_classify_error, mock_build_config,
-                                           mock_get_model_name, mock_get_client):
+                                           mock_get_model_name, mock_get_client, monkeypatch):
         """Test call_gemini_api handles generic errors with classification."""
+        monkeypatch.setattr(call_gemini_api.retry, 'sleep', lambda x: None)
         mock_get_model_name.return_value = "gemini-1.5-flash"
         mock_build_config.return_value = MagicMock()
         mock_client = MagicMock()
@@ -236,8 +237,9 @@ class TestLLMClient:
     @patch('src.llm.client.get_model_name')
     @patch('src.llm.client.build_generate_config')
     def test_call_gemini_api_timeout_error(self, mock_build_config, mock_get_model_name,
-                                           mock_get_client):
+                                           mock_get_client, monkeypatch):
         """Test call_gemini_api handles timeout errors."""
+        monkeypatch.setattr(call_gemini_api.retry, 'sleep', lambda x: None)
         mock_get_model_name.return_value = "gemini-1.5-flash"
         mock_build_config.return_value = MagicMock()
         mock_client = MagicMock()
@@ -257,8 +259,9 @@ class TestLLMClient:
     @patch('src.llm.client.get_model_name')
     @patch('src.llm.client.build_generate_config')
     def test_call_gemini_api_http_status_codes(self, mock_build_config, mock_get_model_name,
-                                                mock_get_client):
+                                                mock_get_client, monkeypatch):
         """Test call_gemini_api handles HTTP status code errors."""
+        monkeypatch.setattr(call_gemini_api.retry, 'sleep', lambda x: None)
         mock_get_model_name.return_value = "gemini-1.5-flash"
         mock_build_config.return_value = MagicMock()
         mock_client = MagicMock()
