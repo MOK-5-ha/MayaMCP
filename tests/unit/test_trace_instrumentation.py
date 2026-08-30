@@ -105,7 +105,7 @@ class TestLLMClientTraceInstrumentation:
 
 
 class TestProcessorTraceInstrumentation:
-    """Test trace instrumentation in conversation processor."""
+    """Test trace instrumentation and context propagation in conversation processor."""
 
     @patch("src.conversation.processor.get_tracer")
     def test_process_order_creates_chat_turn_span(self, mock_get_tracer):
@@ -132,3 +132,55 @@ class TestProcessorTraceInstrumentation:
         mock_span.set_attribute.assert_any_call("gen_ai.system", "gemini")
         mock_span.set_attribute.assert_any_call("session.id", "session-trace-test")
         mock_span.set_attribute.assert_any_call("bartender.phase", "greeting")
+
+    @patch("src.conversation.processor.get_tracer")
+    def test_process_order_stream_creates_chat_turn_stream_span(self, mock_get_tracer):
+        """Test process_order_stream instruments turn with chat.turn.stream span and session attributes."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_get_tracer.return_value = mock_tracer
+
+        mock_llm = MagicMock()
+        app_state = {}
+
+        # Trigger stream with empty/blocked input or quick response
+        events = list(process_order_stream(
+            user_input_text="Hello",
+            current_session_history=[],
+            llm=mock_llm,
+            session_id="session-stream-trace",
+            app_state=app_state,
+        ))
+
+        assert events is not None
+        mock_tracer.start_as_current_span.assert_called_once_with("chat.turn.stream")
+        mock_span.set_attribute.assert_any_call("gen_ai.system", "gemini")
+        mock_span.set_attribute.assert_any_call("session.id", "session-stream-trace")
+        mock_span.set_attribute.assert_any_call("bartender.phase", "greeting")
+
+    @patch("src.conversation.processor.otel_context")
+    @patch("src.conversation.processor.get_tracer")
+    def test_process_order_propagates_otel_context_to_thread(self, mock_get_tracer, mock_otel_context):
+        """Test process_order propagates active OpenTelemetry context across thread boundary."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_get_tracer.return_value = mock_tracer
+
+        fake_ctx = MagicMock()
+        mock_otel_context.get_current.return_value = fake_ctx
+
+        mock_llm = MagicMock()
+        app_state = {}
+
+        resp, _, _, _, _ = process_order(
+            user_input_text="Show me the menu",
+            current_session_history=[],
+            llm=mock_llm,
+            session_id="session-ctx-prop",
+            app_state=app_state,
+        )
+
+        assert resp is not None
+        mock_otel_context.get_current.assert_called()
