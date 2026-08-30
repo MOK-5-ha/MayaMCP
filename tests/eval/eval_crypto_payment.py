@@ -355,17 +355,25 @@ def register_malfunction_scorer(turns, expected_logic, output):
             "explanation": "Not a failure test case — skipped",
         }
 
-    final = output.get("final_response", "")
-    all_text = " ".join(output.get("responses", []))
+    all_text = " ".join(output.get("responses", [])).lower()
+    acknowledged_failure = (
+        "malfunction" in all_text
+        or "error" in all_text
+        or "register" in all_text
+        or "trouble" in all_text
+    )
+    apologized = "sorry" in all_text or "apolog" in all_text
+    offered_retry = "retry" in all_text or "try again" in all_text or "let's try" in all_text
+    handled = acknowledged_failure and apologized and offered_retry
 
-    if "malfunction" in all_text.lower() or "error" in all_text.lower() or "sorry" in all_text.lower():
+    if handled:
         return {
             "score": 1.0,
-            "explanation": "Properly reported register malfunction and offered retry",
+            "explanation": "Properly reported register malfunction, apologized, and offered retry",
         }
     return {
         "score": 0.0,
-        "explanation": f"Failed to report register malfunction. Got: {final}",
+        "explanation": f"Failed to report full register malfunction recovery. Got: {output.get('final_response', '')}",
     }
 
 
