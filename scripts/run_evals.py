@@ -304,15 +304,20 @@ def payment_recovery_scorer(turns: list[str], expected_logic: str, output: dict)
     if not is_malfunction_case:
         return {"passed": True, "score": 1.0, "reasoning": "Not a payment failure test case."}
 
-    all_text = " ".join(output.get("responses", [])).lower()
+    responses = output.get("responses", [])
+    recovery_text = responses[-1].lower() if responses else ""
     acknowledged_failure = (
-        "malfunction" in all_text
-        or "error" in all_text
-        or "register" in all_text
-        or "trouble" in all_text
+        "malfunction" in recovery_text
+        or "error" in recovery_text
+        or "register" in recovery_text
+        or "trouble" in recovery_text
     )
-    apologized = "sorry" in all_text or "apolog" in all_text
-    offered_retry = "retry" in all_text or "try again" in all_text or "let's try" in all_text
+    apologized = "sorry" in recovery_text or "apolog" in recovery_text
+    offered_retry = (
+        "retry" in recovery_text
+        or "try again" in recovery_text
+        or "let's try" in recovery_text
+    )
     handled = acknowledged_failure and apologized and offered_retry
     return {
         "passed": handled,
