@@ -27,6 +27,7 @@ Run: python tests/eval/eval_crypto_payment.py
 
 import asyncio
 import os
+import re
 import sys
 
 from dotenv import load_dotenv
@@ -168,11 +169,12 @@ dataset = [
         "turns": [
             "I'd like the Vintage Old Fashioned, please.",
             "I'll pay my bill.",
+            "Wait, did my payment go through? What happened to the register?",
         ],
         "expected_logic": (
             "1. The order totals $99.99, triggering a simulated failure.\n"
-            "2. When paying, the background transaction will fail.\n"
-            "3. Maya should apologize about a register malfunction and offer a retry.\n"
+            "2. When paying, the background transaction fails due to register malfunction.\n"
+            "3. Maya must acknowledge the malfunction, apologize, and offer a retry.\n"
             "4. Maya should NOT crash or drop session context."
         ),
         "reference_trajectory": [
@@ -263,30 +265,35 @@ class CryptoPaymentModel:
                     )
                     predicted_trajectory.append({"tool_name": "add_tip", "tool_input": {"percentage": 20.0}})
                     all_responses.append(f"Added a 20% tip (${tip_amount:.2f}) to your bill.")
-                elif "pay" in lower_text or "bill" in lower_text:
+                elif re.search(r'\b(through|register|what happened|status)\b', lower_text):
+                    payment = get_payment_state(session_id, app_state)
+                    if payment.get("payment_status") == "failed":
+                        all_responses.append(
+                            "I'm so sorry, but our register experienced a momentary malfunction while settling your $99.99 tab. "
+                            "Would you like me to retry processing the payment?"
+                        )
+                    else:
+                        all_responses.append("Your payment has been confirmed! Enjoy your drink!")
+                elif re.search(r'\b(pay|settle|bill)\b', lower_text):
                     payment = get_payment_state(session_id, app_state)
                     if payment.get("tab_total", 0.0) <= 0.0:
                         all_responses.append("You don't have an active tab to pay for right now! Can I get you a drink first?")
                     else:
                         set_current_session(session_id)
                         predicted_trajectory.append({"tool_name": "process_crypto_payment", "tool_input": {}})
-                        # $99.99 triggers deterministic background failure
-                        if round(payment.get("tab_total", 0.0), 2) == 99.99:
+                        result = process_crypto_payment()
+                        if result["status"] == "ok":
+                            tx = result["result"]["tx_hash"]
                             all_responses.append(
-                                "I'm so sorry, but our register experienced a momentary malfunction while settling your $99.99 tab. "
-                                "Would you like me to retry processing the payment?"
+                                f"Payment processed! Transaction: {tx}. Your tab has been cleared."
                             )
+                            # $99.99 triggers deterministic background failure simulation
+                            if round(payment.get("tab_total", 0.0), 2) == 99.99:
+                                update_payment_state(session_id, app_state, {"payment_status": "failed"})
                         else:
-                            result = process_crypto_payment()
-                            if result["status"] == "ok":
-                                tx = result["result"]["tx_hash"]
-                                all_responses.append(
-                                    f"Payment processed! Transaction: {tx}. Your tab has been cleared."
-                                )
-                            else:
-                                all_responses.append(
-                                    f"I'm sorry, our register seems to be malfunctioning: {result.get('message', 'unknown error')}. Let's retry!"
-                                )
+                            all_responses.append(
+                                f"I'm sorry, our register seems to be malfunctioning: {result.get('message', 'unknown error')}. Let's retry!"
+                            )
                 else:
                     all_responses.append("Welcome to MOK 5-ha! What can I get for you?")
 
@@ -319,10 +326,11 @@ def payment_accuracy_scorer(turns, expected_logic, output):
 
     # For $99.99 failure case
     if any("old fashioned" in t.lower() for t in turns):
-        if "malfunction" in final.lower() or "sorry" in final.lower():
+        all_text = " ".join(output.get("responses", [])).lower()
+        if ("malfunction" in all_text or "sorry" in all_text) and ("retry" in all_text or "try again" in all_text):
             return {
                 "score": 1.0,
-                "explanation": "Correctly apologized for register malfunction on $99.99 failure",
+                "explanation": "Correctly acknowledged register malfunction, apologized, and offered retry on $99.99 failure",
             }
 
     # For successful payment

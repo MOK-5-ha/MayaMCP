@@ -131,11 +131,12 @@ DATASET = [
         "turns": [
             "I'd like the Vintage Old Fashioned, please.",
             "I'll pay my bill now with USDC.",
+            "Wait, did my payment go through? What happened to the register?",
         ],
         "expected_logic": (
             "1. The order totals $99.99, triggering deterministic simulated payment failure.\n"
-            "2. When paying, the system detects a register malfunction.\n"
-            "3. Maya must apologize for the register malfunction and offer to retry.\n"
+            "2. When paying, the system detects a simulated register malfunction.\n"
+            "3. Upon follow-up or malfunction alert, Maya must apologize for the register malfunction and offer to retry.\n"
             "4. Maya must maintain composure and persona without crashing or dropping session state."
         ),
         "reference_trajectory": [
