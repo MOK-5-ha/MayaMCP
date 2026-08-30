@@ -178,15 +178,7 @@ class MayaEvaluationModel:
                 session_id,
                 app_state,
             )
-            # If running offline and testing deterministic $99.99 failure recovery
-            if "old fashioned" in turn.lower():
-                final_order = [{"name": "Vintage Old Fashioned", "price": 99.99}]
-            elif ("pay" in turn.lower() or "usdc" in turn.lower()) and any(item.get("price") == 99.99 for item in final_order):
-                if not response or "trouble" in response or "haven't ordered" in response:
-                    response = (
-                        "I'm so sorry, but our register experienced a momentary malfunction while settling your $99.99 tab. "
-                        "Would you like me to retry processing the payment?"
-                    )
+            final_order = order
 
             # Track tool calls from intent detection or order mutations
             if "martini" in turn.lower() and not any(t["tool_name"] == "add_to_order" for t in predicted_trajectory):
