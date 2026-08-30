@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..config.logging_config import get_logger
 
@@ -31,7 +31,7 @@ def extract_session_id(request: Any = None, default: str = "default") -> str:
     return default
 
 
-def format_currency(amount: Optional[float], default: float = 0.0) -> str:
+def format_currency(amount: float | None, default: float = 0.0) -> str:
     """Format numeric value as USD currency string (e.g. '$12.50').
 
     Args:
@@ -63,7 +63,7 @@ def safe_float(val: Any, default: float = 0.0) -> float:
         return default
 
 
-def mask_api_key(key: Optional[str], visible_chars: int = 4, suffix_chars: int = 4) -> str:
+def mask_api_key(key: str | None, visible_chars: int = 4, suffix_chars: int = 4) -> str:
     """Obfuscate API key strings for sensitive logging or UI output.
 
     Args:
@@ -83,9 +83,9 @@ def mask_api_key(key: Optional[str], visible_chars: int = 4, suffix_chars: int =
 def build_response_dict(
     success: bool,
     message: str = "",
-    data: Optional[Dict[str, Any]] = None,
-    error_code: Optional[str] = None,
-) -> Dict[str, Any]:
+    data: dict[str, Any] | None = None,
+    error_code: str | None = None,
+) -> dict[str, Any]:
     """Create a standardized status/response dictionary.
 
     Args:
@@ -97,7 +97,7 @@ def build_response_dict(
     Returns:
         Dictionary with status, success, message, data, error_code, and timestamp.
     """
-    res: Dict[str, Any] = {
+    res: dict[str, Any] = {
         "status": "success" if success else "error",
         "success": success,
         "message": message,
@@ -110,7 +110,7 @@ def build_response_dict(
     return res
 
 
-def normalize_text(text: Optional[str]) -> str:
+def normalize_text(text: str | None) -> str:
     """Lowercase, strip whitespace, and normalize spaces in string input.
 
     Args:
@@ -124,7 +124,7 @@ def normalize_text(text: Optional[str]) -> str:
     return " ".join(text.lower().strip().split())
 
 
-def detect_order_inquiry(user_input: str) -> Dict[str, Any]:
+def detect_order_inquiry(user_input: str) -> dict[str, Any]:
     """
     Detect if the user is asking about their order or bill in conversational ways.
 

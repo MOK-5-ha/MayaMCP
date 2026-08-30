@@ -20,6 +20,7 @@ import google.auth
 from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
@@ -33,6 +34,7 @@ from src.app_utils import services
 from src.app_utils.a2a import attach_a2a_routes
 from src.app_utils.telemetry import setup_telemetry
 from src.app_utils.typing import Feedback
+from src.routers import chat_router, payments_router, session_router
 
 load_dotenv()
 setup_telemetry()
@@ -82,9 +84,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-
-from fastapi.middleware.cors import CORSMiddleware
-from src.routers import chat_router, payments_router, session_router
 
 app: FastAPI = get_fast_api_app(
     agents_dir=AGENT_DIR,
@@ -145,8 +144,9 @@ if os.path.exists(frontend_dist):
 # Mount Gradio sub-app under /ui for backward compatibility / legacy interface access
 try:
     from gradio.routes import mount_gradio_app
+
     from src.ui.launcher import launch_bartender_interface
-    
+
     gradio_blocks = launch_bartender_interface()
     app = mount_gradio_app(app, gradio_blocks, path="/ui")
 except Exception as gradio_err:

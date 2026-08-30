@@ -1,7 +1,6 @@
 """Validation for GCP Vertex AI Mode configuration."""
 
 import os
-from typing import Optional, Tuple
 
 from ..config.logging_config import get_logger
 
@@ -16,10 +15,10 @@ _VALIDATION_TIMEOUT_S = 10
 
 
 def validate_gemini_key(
-    api_key: Optional[str] = None,
-    gcp_project: Optional[str] = None,
-    gcp_location: Optional[str] = None,
-) -> Tuple[bool, str]:
+    api_key: str | None = None,
+    gcp_project: str | None = None,
+    gcp_location: str | None = None,
+) -> tuple[bool, str]:
     """Validate GCP Vertex AI configuration with Application Default Credentials.
 
     Google AI Studio Key Mode has been permanently removed; this function validates

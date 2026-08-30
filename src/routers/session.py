@@ -1,7 +1,8 @@
 """Session management endpoints."""
 
 import secrets
-from typing import MutableMapping, Optional
+from collections.abc import MutableMapping
+
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from ..schemas.session import KeySubmissionRequest, SessionStatusResponse
@@ -25,8 +26,8 @@ def get_session_store(request: Request) -> MutableMapping:
 
 
 def resolve_session_id(
-    x_session_id: Optional[str] = None,
-    query_session_id: Optional[str] = None
+    x_session_id: str | None = None,
+    query_session_id: str | None = None
 ) -> str:
     candidate = x_session_id or query_session_id
     if candidate and candidate.strip():
@@ -38,7 +39,7 @@ def resolve_session_id(
 def get_session_status(
     request: Request,
     response: Response,
-    x_session_id: Optional[str] = Header(None)
+    x_session_id: str | None = Header(None)
 ) -> SessionStatusResponse:
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id
@@ -58,13 +59,13 @@ def submit_session_keys(
     request_data: KeySubmissionRequest,
     request: Request,
     response: Response,
-    x_session_id: Optional[str] = Header(None)
+    x_session_id: str | None = Header(None)
 ) -> dict:
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id
     if not request_data.gemini_key or not request_data.gemini_key.strip():
         raise HTTPException(status_code=400, detail="Gemini API key is required.")
-    
+
     store = get_session_store(request)
     set_api_keys(
         session_id=session_id,
@@ -84,7 +85,7 @@ def submit_session_keys(
 def reset_session(
     request: Request,
     response: Response,
-    x_session_id: Optional[str] = Header(None)
+    x_session_id: str | None = Header(None)
 ) -> dict:
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id

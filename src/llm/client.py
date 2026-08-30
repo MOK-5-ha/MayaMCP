@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 from collections.abc import Generator
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -83,16 +83,16 @@ GenaiTimeoutError = getattr(genai_errors, "TimeoutError", _NoSDKError) if genai_
 
 # ---- Unified Google GenAI client/wrapper utilities ----
 
-_genai_client: Optional[genai.Client] = None
-_genai_client_project: Optional[str] = None
-_genai_client_location: Optional[str] = None
+_genai_client: genai.Client | None = None
+_genai_client_project: str | None = None
+_genai_client_location: str | None = None
 _CLIENT_LOCK = threading.Lock()
 
 
 def get_genai_client(
-    gcp_project: Optional[str] = None,
-    gcp_location: Optional[str] = None,
-    api_key: Optional[str] = None,
+    gcp_project: str | None = None,
+    gcp_location: str | None = None,
+    api_key: str | None = None,
 ) -> genai.Client:
     """Return a singleton genai.Client initialized strictly in Vertex AI Mode.
 
@@ -141,7 +141,7 @@ def get_genai_client(
     return local_client
 
 
-def build_generate_config(config_dict: Dict[str, Any]) -> types.GenerateContentConfig:
+def build_generate_config(config_dict: dict[str, Any]) -> types.GenerateContentConfig:
     """Map our generation config dict to a GenerateContentConfig."""
     raw_tools = config_dict.get("tools")
     processed_tools = None
@@ -167,7 +167,7 @@ def get_model_name() -> str:
     return get_model_config()["model_version"]
 
 
-def get_gemini_params() -> Dict[str, Any]:
+def get_gemini_params() -> dict[str, Any]:
     """Return a dict of params for Gemini construction."""
     cfg = get_model_config()
     return {
@@ -186,11 +186,11 @@ def get_gemini_params() -> Dict[str, Any]:
     reraise=True
 )
 def call_gemini_api(
-    prompt_content: List[Dict],
-    config: Dict,
-    api_key: Optional[str] = None,
-    gcp_project: Optional[str] = None,
-    gcp_location: Optional[str] = None,
+    prompt_content: list[dict],
+    config: dict,
+    api_key: str | None = None,
+    gcp_project: str | None = None,
+    gcp_location: str | None = None,
 ) -> types.GenerateContentResponse:
     """
     Internal function to call the Gemini API in Vertex AI mode with retry logic.
@@ -241,11 +241,11 @@ def call_gemini_api(
 
 
 def stream_gemini_api(
-    prompt_content: List[Dict],
-    config: Dict,
-    api_key: Optional[str] = None,
-    gcp_project: Optional[str] = None,
-    gcp_location: Optional[str] = None,
+    prompt_content: list[dict],
+    config: dict,
+    api_key: str | None = None,
+    gcp_project: str | None = None,
+    gcp_location: str | None = None,
 ) -> Generator[types.GenerateContentResponse, None, None]:
     """
     Stream Gemini API responses with resilient retry logic in GCP Vertex AI mode.

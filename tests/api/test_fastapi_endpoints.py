@@ -1,7 +1,8 @@
 """Tests for FastAPI REST and SSE endpoints."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -81,7 +82,7 @@ def test_chat_successful_response(mock_tts, mock_llm, mock_keys_state, mock_has_
         [{"item": "whiskey neat", "price": 12.0}],
         None
     )
-    
+
     payload = {"user_input": "whiskey neat"}
     response = client.post(
         "/api/v1/chat",
@@ -152,7 +153,7 @@ def test_add_to_order_negative_quantity_rejected():
 def test_chat_session_limit_exceeded_returns_429(mock_keys_state, mock_has_keys, mock_llm, client):
     from src.llm.session_registry import SessionLimitExceededError
     mock_llm.side_effect = SessionLimitExceededError("Bar capacity reached")
-    
+
     payload = {"user_input": "whiskey"}
     response = client.post(
         "/api/v1/chat",
@@ -222,14 +223,14 @@ def test_chat_stream_post_endpoint_and_viseme_enrichment(mock_llm, mock_keys, mo
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
     assert response.headers["X-Session-ID"] == "test-session-post-stream"
-    
+
     lines = [line.strip() for line in response.text.split("\n\n") if line.strip()]
     assert len(lines) >= 3
     # Line 0: session event
     session_event = json.loads(lines[0].replace("data: ", ""))
     assert session_event["type"] == "session"
     assert session_event["session_id"] == "test-session-post-stream"
-    
+
     # Line 1: text_chunk with viseme
     chunk_event = json.loads(lines[1].replace("data: ", ""))
     assert chunk_event["type"] == "text_chunk"

@@ -44,7 +44,6 @@ from src.utils.state_manager import (
     update_payment_state,
 )
 
-
 # ─── 1. Evaluation Harness ──────────────────────────────────────────
 
 class EvaluationRunner:
