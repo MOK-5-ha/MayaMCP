@@ -105,7 +105,7 @@ The implementation includes:
 - [ ] Expand Vertex AI evaluation dataset in `tests/eval/` and `scripts/run_weave_evals.py`
   - Add more conversation flow test cases (e.g., testing memory retrieval and complex payment edge cases).
 
-- [ ] Add session lock cleanup background task
+- [x] Add session lock cleanup background task
   - Implement scheduled cleanup for expired session locks (>1 hour inactive)
   - Register timer on app initialization
   - Add monitoring metrics for cleanup operations

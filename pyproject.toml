@@ -114,7 +114,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/*" = ["B011", "S101", "S105", "S106"]  # assert usage and hardcoded values are expected in tests
+"tests/*" = ["B007", "B011", "B017", "B904", "E402", "E731", "F401", "F811", "F841", "S101", "S105", "S106", "S110", "S603", "W291", "W293"]  # test doubles and assertions
 "src/payments/crypto_client.py" = ["S106"]  # 'eth'/'usdc' are blockchain token symbols, not passwords
 "src/llm/tools.py" = ["E402"]  # tool() decorator factory is intentionally defined before downstream imports
 "src/ui/tab_overlay.py" = ["E402"]

@@ -10,7 +10,7 @@ The configuration follows Python best practices with proper type hints,
 comprehensive documentation, and extensibility for future test scenarios.
 """
 
-from typing import ClassVar, Dict, List, Literal, NewType, Tuple
+from typing import ClassVar, Literal, NewType
 
 # Type aliases for better readability
 QueryText = NewType("QueryText", str)
@@ -39,7 +39,7 @@ class MemvidTestQueries:
     CATEGORY_STRESS_TEST = "stress_test"
 
     # Basic conversational queries - queries that match DEFAULT_DOCUMENTS content
-    BASIC_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
+    BASIC_QUERIES: ClassVar[dict[QueryText, QueryDescription]] = {
         "rough day": (
             "Query expressing emotional difficulty or stress"
         ),
@@ -49,7 +49,7 @@ class MemvidTestQueries:
     }
 
     # Edge case queries for boundary testing
-    EDGE_CASE_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
+    EDGE_CASE_QUERIES: ClassVar[dict[QueryText, QueryDescription]] = {
         "": "Empty query to test input validation",
         "   ": "Whitespace-only query to test trimming and validation",
         "rough day patience bartending " * 10: (
@@ -62,7 +62,7 @@ class MemvidTestQueries:
     }
 
     # Stress test queries for performance testing
-    STRESS_TEST_QUERIES: ClassVar[Dict[QueryText, QueryDescription]] = {
+    STRESS_TEST_QUERIES: ClassVar[dict[QueryText, QueryDescription]] = {
         "I'm having a rough day and could use some patience and understanding from a bartender": (
             "Long, detailed query for stress testing"
         ),
@@ -73,11 +73,11 @@ class MemvidTestQueries:
 
     # ALL_QUERIES is constructed at module level after class definition
     # to avoid comprehension scope issues with class-level names
-    ALL_QUERIES: ClassVar[Dict[QueryText, Tuple[QueryCategory, QueryDescription]]] = {}
+    ALL_QUERIES: ClassVar[dict[QueryText, tuple[QueryCategory, QueryDescription]]] = {}
 
     def get_queries_by_category(
         self, category: QueryCategory
-    ) -> Dict[QueryText, QueryDescription]:
+    ) -> dict[QueryText, QueryDescription]:
         """
         Get all queries for a specific category.
 
@@ -104,7 +104,7 @@ class MemvidTestQueries:
             for query, (cat, description) in self.ALL_QUERIES.items()
             if cat == category
         }
-    def get_all_queries(self) -> List[QueryText]:
+    def get_all_queries(self) -> list[QueryText]:
         """
         Get all query texts as a list.
 
@@ -114,7 +114,7 @@ class MemvidTestQueries:
         return list(self.ALL_QUERIES.keys())
 
     @property
-    def queries(self) -> List[QueryText]:
+    def queries(self) -> list[QueryText]:
         """
         Get all query texts as a list.
 
@@ -140,10 +140,10 @@ ROUGH_DAY_QUERY: QueryText = "rough day"
 PATIENCE_QUERY: QueryText = "patience bartending"
 
 # All basic queries as a list for easy iteration
-BASIC_TEST_QUERIES: List[QueryText] = [
+BASIC_TEST_QUERIES: list[QueryText] = [
     ROUGH_DAY_QUERY,
     PATIENCE_QUERY,
 ]
 
 # All queries as a list for comprehensive testing
-ALL_TEST_QUERIES: List[QueryText] = memvid_queries.get_all_queries()
+ALL_TEST_QUERIES: list[QueryText] = memvid_queries.get_all_queries()

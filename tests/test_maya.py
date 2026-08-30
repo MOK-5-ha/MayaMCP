@@ -5,9 +5,9 @@ Test script to verify Maya's functionality. Used by Claude.
 
 import os
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 import pytest
 

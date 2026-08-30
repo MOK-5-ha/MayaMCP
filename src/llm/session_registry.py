@@ -3,7 +3,7 @@
 import hashlib
 import os
 import threading
-from typing import Any, List, Optional
+from typing import Any
 
 from ..config.logging_config import get_logger
 
@@ -71,10 +71,10 @@ def _remove_admission_locks(session_ids: list[str]) -> None:
 
 def get_session_llm(
     session_id: str,
-    api_key: Optional[str] = None,
-    tools: Optional[List] = None,
-    gcp_project: Optional[str] = None,
-    gcp_location: Optional[str] = None,
+    api_key: str | None = None,
+    tools: list | None = None,
+    gcp_project: str | None = None,
+    gcp_location: str | None = None,
 ):
     """Return a cached or newly created LLM instance for session strictly in Vertex AI Mode.
 

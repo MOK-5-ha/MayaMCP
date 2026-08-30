@@ -1,7 +1,6 @@
 """GCP Vertex AI configuration and environment management for MayaMCP."""
 
 import os
-from typing import Dict, Optional
 
 from dotenv import load_dotenv
 
@@ -44,7 +43,7 @@ def is_vertex_ai_mode() -> bool:
     return True
 
 
-def configure_provider_env() -> Dict[str, Optional[str]]:
+def configure_provider_env() -> dict[str, str | None]:
     """Synchronize environment variables strictly for 100% GCP Vertex AI Mode (Paid Tier).
 
     Purges stale Google AI Studio API key environment variables,
@@ -80,7 +79,7 @@ def configure_provider_env() -> Dict[str, Optional[str]]:
     }
 
 
-def get_api_keys() -> Dict[str, Optional[str]]:
+def get_api_keys() -> dict[str, str | None]:
     """Legacy helper maintained for compatibility.
 
     Returns provider configuration dictionary including GCP project details.
@@ -103,6 +102,6 @@ def get_api_keys() -> Dict[str, Optional[str]]:
         }
 
 
-def get_google_api_key() -> Optional[str]:
+def get_google_api_key() -> str | None:
     """Get Google API key (None in 100% GCP Vertex AI mode)."""
     return None

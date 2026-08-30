@@ -1,12 +1,12 @@
 """Pydantic models for session management requests and responses."""
 
-from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
 class KeySubmissionRequest(BaseModel):
-    gemini_key: Optional[str] = Field(None, description="Optional GCP Project ID or session key override")
-    cartesia_key: Optional[str] = Field(None, description="Optional Cartesia TTS API key")
+    gemini_key: str | None = Field(None, description="Optional GCP Project ID or session key override")
+    cartesia_key: str | None = Field(None, description="Optional Cartesia TTS API key")
 
 
 class SessionStatusResponse(BaseModel):

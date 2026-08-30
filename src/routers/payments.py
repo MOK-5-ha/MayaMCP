@@ -1,6 +1,6 @@
 """Payment management endpoints."""
 
-from typing import Optional
+
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from ..schemas.payment import PaymentStateResponse, TipRequest
@@ -15,14 +15,14 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 def get_payment_tab(
     request: Request,
     response: Response,
-    x_session_id: Optional[str] = Header(None)
+    x_session_id: str | None = Header(None)
 ) -> PaymentStateResponse:
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id
     store = get_session_store(request)
     payment_state = get_payment_state(session_id, store)
     tab_total, balance, tip_percentage, tip_amount = get_overlay_payment_data(payment_state)
-    
+
     return PaymentStateResponse(
         tab_amount=tab_total,
         balance=balance,
@@ -37,12 +37,12 @@ def add_or_update_tip(
     tip_req: TipRequest,
     request: Request,
     response: Response,
-    x_session_id: Optional[str] = Header(None)
+    x_session_id: str | None = Header(None)
 ) -> PaymentStateResponse:
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id
     store = get_session_store(request)
-    
+
     if tip_req.tip_percentage is not None and tip_req.tip_amount is not None:
         raise HTTPException(
             status_code=400,
@@ -59,10 +59,10 @@ def add_or_update_tip(
         kwargs["tip_amount"] = tip_req.tip_amount
 
     update_payment_state(session_id, store, kwargs)
-    
+
     updated_state = get_payment_state(session_id, store)
     tab_total, balance, tip_percentage, tip_amount = get_overlay_payment_data(updated_state)
-    
+
     return PaymentStateResponse(
         tab_amount=tab_total,
         balance=balance,
