@@ -26,6 +26,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
+from ..app_utils.telemetry import get_tracer, record_genai_attributes
 from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.prompts import get_combined_prompt
 from ..llm.tools import clear_current_session, get_all_tools, set_current_session
@@ -127,41 +128,45 @@ def process_order(
         Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data)
     """
     session_id, app_state = _get_store_and_session(session_id, app_state)
-    from google.adk.models import Gemini
-    if llm is None or not isinstance(llm, Gemini):
-        from ..llm.session_registry import get_session_llm
-        llm = get_session_llm(session_id, api_key=api_key)
-    if not user_input_text:
-        logger.warning("Received empty user input.")
-        return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
+    tracer = get_tracer("mayamcp.conversation")
+    with tracer.start_as_current_span("chat.turn") as span:
+        record_genai_attributes(span, system="gemini", session_id=session_id)
+        from google.adk.models import Gemini
+        if llm is None or not isinstance(llm, Gemini):
+            from ..llm.session_registry import get_session_llm
+            llm = get_session_llm(session_id, api_key=api_key)
+        if not user_input_text:
+            logger.warning("Received empty user input.")
+            return "Please tell me what you'd like to order.", current_session_history, current_session_history, get_current_order_state(session_id, app_state), None
 
-    # Security Scan: Input
-    scan_result = scan_input(user_input_text)
-    if not scan_result.is_valid:
-        logger.warning(f"Input blocked by security scanner: {scan_result.blocked_reason}")
-        blocked_msg = scan_result.blocked_reason
+        # Security Scan: Input
+        scan_result = scan_input(user_input_text)
+        if not scan_result.is_valid:
+            logger.warning(f"Input blocked by security scanner: {scan_result.blocked_reason}")
+            blocked_msg = scan_result.blocked_reason
 
-        updated_history = append_to_history(current_session_history, user_input_text, blocked_msg)
+            updated_history = append_to_history(current_session_history, user_input_text, blocked_msg)
 
-        return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
+            return blocked_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
 
-    # Rate limiting check
-    rate_allowed, rate_reason = check_rate_limits(session_id)
-    if not rate_allowed:
-        logger.warning(f"Rate limit exceeded: {rate_reason}")
-        rate_error_msg = f"Rate limit exceeded: {rate_reason}"
+        # Rate limiting check
+        rate_allowed, rate_reason = check_rate_limits(session_id)
+        if not rate_allowed:
+            logger.warning(f"Rate limit exceeded: {rate_reason}")
+            rate_error_msg = f"Rate limit exceeded: {rate_reason}"
 
-        updated_history = append_to_history(current_session_history, user_input_text, rate_error_msg)
+            updated_history = append_to_history(current_session_history, user_input_text, rate_error_msg)
 
-        return rate_error_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
+            return rate_error_msg, updated_history, updated_history, get_current_order_state(session_id, app_state), None
 
-    # Set session context for tools to access
-    # This allows payment tools to know which session they're operating on
-    # Treat None as "no active session" - tools fall back to legacy behavior
-    set_current_session(session_id)
+        # Set session context for tools to access
+        # This allows payment tools to know which session they're operating on
+        # Treat None as "no active session" - tools fall back to legacy behavior
+        set_current_session(session_id)
 
-    # Initialize phase manager
-    phase_manager = ConversationPhaseManager(session_id, app_state)
+        # Initialize phase manager
+        phase_manager = ConversationPhaseManager(session_id, app_state)
+        record_genai_attributes(span, phase=phase_manager.get_current_phase())
 
     # Detect if this is the first interaction (empty history) and state is not yet initialized
     is_first_interaction = len(current_session_history) == 0
@@ -448,263 +453,267 @@ def process_order_stream(
         Dict with streaming response data
     """
     session_id, app_state = _get_store_and_session(session_id, app_state)
-    # Initialize phase manager for conversation flow
-    phase_manager = ConversationPhaseManager(session_id, app_state)
+    tracer = get_tracer("mayamcp.conversation")
+    with tracer.start_as_current_span("chat.turn.stream") as span:
+        record_genai_attributes(span, system="gemini", session_id=session_id)
+        # Initialize phase manager for conversation flow
+        phase_manager = ConversationPhaseManager(session_id, app_state)
+        record_genai_attributes(span, phase=phase_manager.get_current_phase())
 
-    # Security Scan: Input
-    input_scan_result = scan_input(user_input_text)
-    if not input_scan_result.is_valid:
-        logger.warning("Input blocked by security scanner")
-        yield {
-            'type': 'error',
-            'content': input_scan_result.sanitized_text
-        }
-        return
-
-    # Use sanitized input for processing
-    sanitized_input = input_scan_result.sanitized_text
-
-    # Rate limiting check
-    rate_allowed, rate_reason = check_rate_limits(session_id)
-    if not rate_allowed:
-        logger.warning(f"Rate limit exceeded: {rate_reason}")
-        yield {
-            'type': 'error',
-            'content': f"Rate limit exceeded: {rate_reason}"
-        }
-        return
-
-    # Convert Gradio history to Gemini format with same window
-    history_limit = 10
-    truncated_history = current_session_history[-history_limit:]
-
-    # Determine if this is a casual conversation vs. an order/menu-related interaction
-    should_use_rag = phase_manager.should_use_rag(sanitized_input)
-
-    # If this appears to be casual conversation and RAG is available, try enhancing with RAG
-    if should_use_rag and api_key:
-        # Early validation of RAG components before any heavy processing/try
-        if rag_retriever is None or memvid_rag_pipeline is None:
-            logger.debug("Skipping RAG enhancement: required components not initialized/available")
-        else:
-            logger.info("Enhancing response with Memvid RAG for casual conversation")
-            try:
-                # Execute RAG pipeline with timeout to prevent indefinite blocking
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(
-                        memvid_rag_pipeline,
-                        query_text=sanitized_input,
-                        memvid_retriever=rag_retriever,
-                        api_key=api_key
-                    )
-                    try:
-                        rag_response = future.result(timeout=RAG_TIMEOUT)
-                    except concurrent.futures.TimeoutError:
-                        logger.warning(f"RAG pipeline timed out after {RAG_TIMEOUT} seconds")
-                        rag_response = None
-                # Add RAG context to the user input
-                if rag_response and rag_response.strip():
-                    rag_context = f"\n\nRelevant context: {rag_response.strip()}"
-                    sanitized_input += rag_context
-            except Exception as memvid_error:
-                logger.warning(f"Memvid RAG failed: {memvid_error}")
-
-    worker_thread = None
-
-    # Use batch state commits to optimize remote dictionary operations
-    with batch_state_commits(session_id, app_state):
-        try:
-            # Set current session for tool calls
-            set_current_session(session_id)
-
-            # Get current phase and create appropriate prompt
-            current_phase = phase_manager.get_current_phase()
-            from ..llm.tools import get_menu
-            menu_text = get_menu()
-            combined_prompt = get_combined_prompt(current_phase, menu_text)
-
-            # Combine system prompt and menu context for system instruction
-            # Inject current order to prevent the LLM from duplicating orders across turns
-            order_context = _build_order_context(session_id, app_state)
-
-            system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
-
-            # Queue for transferring events from the async background thread
-            event_queue = queue.Queue()
-
-            async def _execute_runner_stream():
-                try:
-                    session_service = InMemorySessionService()
-                    session = await session_service.create_session(
-                        app_name="mayamcp", user_id="user", session_id=session_id
-                    )
-
-                    # Populate history
-                    for entry in truncated_history:
-                        role = entry.get("role")
-                        content = entry.get("content", "")
-                        clean_content = re.sub(r'\[STATE:\s*\w+\]', '', content, flags=re.IGNORECASE).strip()
-                        sdk_role = "model" if role == "assistant" else "user"
-                        msg = types.Content(role=sdk_role, parts=[types.Part.from_text(text=clean_content)])
-                        event = Event(
-                            invocation_id="history",
-                            author=sdk_role,
-                            content=msg
-                        )
-                        await session_service.append_event(session=session, event=event)
-
-                    # Instantiate ADK Agent
-                    agent = Agent(
-                        name="bartender",
-                        model=llm,
-                        instruction=system_instruction,
-                        tools=get_all_tools()
-                    )
-
-                    # Instantiate Runner
-                    runner = Runner(
-                        agent=agent,
-                        app_name="mayamcp",
-                        session_service=session_service,
-                        auto_create_session=False
-                    )
-
-                    new_msg = types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text=sanitized_input)]
-                    )
-
-                    async for event in runner.run_async(
-                        user_id="user",
-                        session_id=session_id,
-                        new_message=new_msg
-                    ):
-                        event_queue.put(('event', event))
-
-                    event_queue.put(('done', None))
-                except Exception as err:
-                    event_queue.put(('error', err))
-
-            import threading
-
-            def _async_thread_worker():
-                try:
-                    set_current_session(session_id)
-                    asyncio.run(_execute_runner_stream())
-                except Exception as t_err:
-                    event_queue.put(('error', t_err))
-
-            # Run the worker thread
-            worker_thread = threading.Thread(target=_async_thread_worker)
-            worker_thread.start()
-
-            # Create sentence buffer for TTS pipelining
-            sentence_buffer = SentenceBuffer()
-            accumulated_text = ""
-
-            while True:
-                try:
-                    msg_type, data = event_queue.get(timeout=30)
-                except queue.Empty:
-                    logger.error("Queue timed out waiting for ADK runner stream.")
-                    yield {
-                        'type': 'error',
-                        'content': "Sorry, I'm having a bit of trouble completing that response."
-                    }
-                    return
-
-                if msg_type == 'error':
-                    if is_quota_error(data):
-                        logger.warning(f"Quota error in stream: {data}")
-                        yield {
-                            'type': 'error',
-                            'content': "It looks like your API key has hit its rate limit. Please check the popup for details."
-                        }
-                    else:
-                        logger.error(f"Error in runner thread: {data}")
-                        yield {
-                            'type': 'error',
-                            'content': "I'm sorry, an unexpected error occurred during processing. Please try again later."
-                        }
-                    return
-
-                elif msg_type == 'done':
-                    break
-
-                elif msg_type == 'event':
-                    event: Event = data
-                    if event.author == 'model' and event.content and event.content.parts:
-                        text_chunk = "".join(part.text for part in event.content.parts if part.text)
-
-                        if text_chunk:
-                            accumulated_text += text_chunk
-
-                            # Security scan only the new chunk before yielding
-                            chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
-                            if not chunk_scan_result.is_valid:
-                                logger.warning("Streaming content blocked by security scanner")
-                                yield {
-                                    'type': 'error',
-                                    'content': chunk_scan_result.sanitized_text
-                                }
-                                return
-
-                            sanitized_chunk = chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text is not None else text_chunk
-
-                            # Check for complete sentences using sanitized text
-                            sentences = sentence_buffer.add_text(sanitized_chunk)
-
-                            # Yield text chunk for immediate UI update
-                            yield {
-                                'type': 'text_chunk',
-                                'content': sanitized_chunk,
-                                'partial': sentence_buffer.get_partial()
-                            }
-
-                            # Yield complete sentences for TTS
-                            for sentence in sentences:
-                                yield {
-                                    'type': 'sentence',
-                                    'content': sentence
-                                }
-
-            # Flush remaining content
-            remaining_sentences = sentence_buffer.flush()
-            for sentence in remaining_sentences:
-                yield {
-                    'type': 'sentence',
-                    'content': sentence
-                }
-
-            clean_response = accumulated_text
-
-            # Final Security Scan
-            output_scan_result = scan_output(
-                clean_response, prompt=sanitized_input
-            )
-            if not output_scan_result.is_valid:
-                logger.warning("Final output blocked by security scanner")
-                clean_response = output_scan_result.sanitized_text
-
-            # Signal completion with final data
-            yield {
-                'type': 'complete',
-                'content': clean_response,
-                'full_response': clean_response
-            }
-
-            # --- Update Conversation State ---
-            phase_manager.increment_turn()
-
-        except Exception as e:
-            logger.exception(f"Critical error in process_order_stream: {str(e)}")
-            error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
+        # Security Scan: Input
+        input_scan_result = scan_input(user_input_text)
+        if not input_scan_result.is_valid:
+            logger.warning("Input blocked by security scanner")
             yield {
                 'type': 'error',
-                'content': error_message
+                'content': input_scan_result.sanitized_text
             }
-        finally:
-            # Always clear session context after processing completes
-            clear_current_session()
-            if worker_thread is not None:
-                worker_thread.join(timeout=1)
+            return
+
+        # Use sanitized input for processing
+        sanitized_input = input_scan_result.sanitized_text
+
+        # Rate limiting check
+        rate_allowed, rate_reason = check_rate_limits(session_id)
+        if not rate_allowed:
+            logger.warning(f"Rate limit exceeded: {rate_reason}")
+            yield {
+                'type': 'error',
+                'content': f"Rate limit exceeded: {rate_reason}"
+            }
+            return
+
+        # Convert Gradio history to Gemini format with same window
+        history_limit = 10
+        truncated_history = current_session_history[-history_limit:]
+
+        # Determine if this is a casual conversation vs. an order/menu-related interaction
+        should_use_rag = phase_manager.should_use_rag(sanitized_input)
+
+        # If this appears to be casual conversation and RAG is available, try enhancing with RAG
+        if should_use_rag and api_key:
+            # Early validation of RAG components before any heavy processing/try
+            if rag_retriever is None or memvid_rag_pipeline is None:
+                logger.debug("Skipping RAG enhancement: required components not initialized/available")
+            else:
+                logger.info("Enhancing response with Memvid RAG for casual conversation")
+                try:
+                    # Execute RAG pipeline with timeout to prevent indefinite blocking
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(
+                            memvid_rag_pipeline,
+                            query_text=sanitized_input,
+                            memvid_retriever=rag_retriever,
+                            api_key=api_key
+                        )
+                        try:
+                            rag_response = future.result(timeout=RAG_TIMEOUT)
+                        except concurrent.futures.TimeoutError:
+                            logger.warning(f"RAG pipeline timed out after {RAG_TIMEOUT} seconds")
+                            rag_response = None
+                    # Add RAG context to the user input
+                    if rag_response and rag_response.strip():
+                        rag_context = f"\n\nRelevant context: {rag_response.strip()}"
+                        sanitized_input += rag_context
+                except Exception as memvid_error:
+                    logger.warning(f"Memvid RAG failed: {memvid_error}")
+
+        worker_thread = None
+
+        # Use batch state commits to optimize remote dictionary operations
+        with batch_state_commits(session_id, app_state):
+            try:
+                # Set current session for tool calls
+                set_current_session(session_id)
+
+                # Get current phase and create appropriate prompt
+                current_phase = phase_manager.get_current_phase()
+                from ..llm.tools import get_menu
+                menu_text = get_menu()
+                combined_prompt = get_combined_prompt(current_phase, menu_text)
+
+                # Combine system prompt and menu context for system instruction
+                # Inject current order to prevent the LLM from duplicating orders across turns
+                order_context = _build_order_context(session_id, app_state)
+
+                system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
+
+                # Queue for transferring events from the async background thread
+                event_queue = queue.Queue()
+
+                async def _execute_runner_stream():
+                    try:
+                        session_service = InMemorySessionService()
+                        session = await session_service.create_session(
+                            app_name="mayamcp", user_id="user", session_id=session_id
+                        )
+
+                        # Populate history
+                        for entry in truncated_history:
+                            role = entry.get("role")
+                            content = entry.get("content", "")
+                            clean_content = re.sub(r'\[STATE:\s*\w+\]', '', content, flags=re.IGNORECASE).strip()
+                            sdk_role = "model" if role == "assistant" else "user"
+                            msg = types.Content(role=sdk_role, parts=[types.Part.from_text(text=clean_content)])
+                            event = Event(
+                                invocation_id="history",
+                                author=sdk_role,
+                                content=msg
+                            )
+                            await session_service.append_event(session=session, event=event)
+
+                        # Instantiate ADK Agent
+                        agent = Agent(
+                            name="bartender",
+                            model=llm,
+                            instruction=system_instruction,
+                            tools=get_all_tools()
+                        )
+
+                        # Instantiate Runner
+                        runner = Runner(
+                            agent=agent,
+                            app_name="mayamcp",
+                            session_service=session_service,
+                            auto_create_session=False
+                        )
+
+                        new_msg = types.Content(
+                            role="user",
+                            parts=[types.Part.from_text(text=sanitized_input)]
+                        )
+
+                        async for event in runner.run_async(
+                            user_id="user",
+                            session_id=session_id,
+                            new_message=new_msg
+                        ):
+                            event_queue.put(('event', event))
+
+                        event_queue.put(('done', None))
+                    except Exception as err:
+                        event_queue.put(('error', err))
+
+                import threading
+
+                def _async_thread_worker():
+                    try:
+                        set_current_session(session_id)
+                        asyncio.run(_execute_runner_stream())
+                    except Exception as t_err:
+                        event_queue.put(('error', t_err))
+
+                # Run the worker thread
+                worker_thread = threading.Thread(target=_async_thread_worker)
+                worker_thread.start()
+
+                # Create sentence buffer for TTS pipelining
+                sentence_buffer = SentenceBuffer()
+                accumulated_text = ""
+
+                while True:
+                    try:
+                        msg_type, data = event_queue.get(timeout=30)
+                    except queue.Empty:
+                        logger.error("Queue timed out waiting for ADK runner stream.")
+                        yield {
+                            'type': 'error',
+                            'content': "Sorry, I'm having a bit of trouble completing that response."
+                        }
+                        return
+
+                    if msg_type == 'error':
+                        if is_quota_error(data):
+                            logger.warning(f"Quota error in stream: {data}")
+                            yield {
+                                'type': 'error',
+                                'content': "It looks like your API key has hit its rate limit. Please check the popup for details."
+                            }
+                        else:
+                            logger.error(f"Error in runner thread: {data}")
+                            yield {
+                                'type': 'error',
+                                'content': "I'm sorry, an unexpected error occurred during processing. Please try again later."
+                            }
+                        return
+
+                    elif msg_type == 'done':
+                        break
+
+                    elif msg_type == 'event':
+                        event: Event = data
+                        if event.author == 'model' and event.content and event.content.parts:
+                            text_chunk = "".join(part.text for part in event.content.parts if part.text)
+
+                            if text_chunk:
+                                accumulated_text += text_chunk
+
+                                # Security scan only the new chunk before yielding
+                                chunk_scan_result = scan_output(text_chunk, prompt=sanitized_input)
+                                if not chunk_scan_result.is_valid:
+                                    logger.warning("Streaming content blocked by security scanner")
+                                    yield {
+                                        'type': 'error',
+                                        'content': chunk_scan_result.sanitized_text
+                                    }
+                                    return
+
+                                sanitized_chunk = chunk_scan_result.sanitized_text if chunk_scan_result.sanitized_text is not None else text_chunk
+
+                                # Check for complete sentences using sanitized text
+                                sentences = sentence_buffer.add_text(sanitized_chunk)
+
+                                # Yield text chunk for immediate UI update
+                                yield {
+                                    'type': 'text_chunk',
+                                    'content': sanitized_chunk,
+                                    'partial': sentence_buffer.get_partial()
+                                }
+
+                                # Yield complete sentences for TTS
+                                for sentence in sentences:
+                                    yield {
+                                        'type': 'sentence',
+                                        'content': sentence
+                                    }
+
+                # Flush remaining content
+                remaining_sentences = sentence_buffer.flush()
+                for sentence in remaining_sentences:
+                    yield {
+                        'type': 'sentence',
+                        'content': sentence
+                    }
+
+                clean_response = accumulated_text
+
+                # Final Security Scan
+                output_scan_result = scan_output(
+                    clean_response, prompt=sanitized_input
+                )
+                if not output_scan_result.is_valid:
+                    logger.warning("Final output blocked by security scanner")
+                    clean_response = output_scan_result.sanitized_text
+
+                # Signal completion with final data
+                yield {
+                    'type': 'complete',
+                    'content': clean_response,
+                    'full_response': clean_response
+                }
+
+                # --- Update Conversation State ---
+                phase_manager.increment_turn()
+
+            except Exception as e:
+                logger.exception(f"Critical error in process_order_stream: {str(e)}")
+                error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
+                yield {
+                    'type': 'error',
+                    'content': error_message
+                }
+            finally:
+                # Always clear session context after processing completes
+                clear_current_session()
+                if worker_thread is not None:
+                    worker_thread.join(timeout=1)

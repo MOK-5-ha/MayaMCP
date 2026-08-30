@@ -21,6 +21,18 @@ def _make_mock_client(embed_return=None, embed_side_effect=None):
     return client
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def fast_retry_sleep(monkeypatch):
+    """Disable retry sleeps during embedding tests for fast execution."""
+    if hasattr(get_embedding, "retry"):
+        monkeypatch.setattr(get_embedding.retry, "sleep", lambda x: None)
+    if hasattr(get_embeddings_batch, "retry"):
+        monkeypatch.setattr(get_embeddings_batch.retry, "sleep", lambda x: None)
+
+
 class TestGetEmbedding:
     """Test cases for get_embedding function."""
 

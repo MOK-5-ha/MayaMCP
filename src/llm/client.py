@@ -10,6 +10,10 @@ from google import genai
 from google.genai import types
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
+from ..app_utils.telemetry import (
+    get_tracer,
+    record_genai_attributes,
+)
 from ..config.logging_config import get_logger
 from ..config.model_config import get_model_config
 from ..utils.errors import classify_and_log_genai_error
@@ -216,28 +220,66 @@ def call_gemini_api(
     # Map our config dict to GenerateContentConfig
     gen_config = build_generate_config(config)
 
-    # Call the API via client
-    try:
-        response = client.models.generate_content(
+    tracer = get_tracer("mayamcp.llm")
+    with tracer.start_as_current_span("llm.generate_content") as span:
+        record_genai_attributes(
+            span,
+            system="gemini",
             model=model_name,
-            contents=prompt_content,
-            config=gen_config,
+            temperature=gen_config.temperature,
+            max_tokens=gen_config.max_output_tokens,
         )
-    except GenaiRateLimitError as e:
-        logger.warning(f"Rate limit hit calling Gemini: {e}")
-        raise
-    except (GenaiAuthError, GenaiPermissionDeniedError, GenaiUnauthenticatedError) as e:
-        logger.error(f"Authentication/authorization error calling Gemini: {e}")
-        raise
-    except GenaiTimeoutError as e:
-        logger.warning(f"Timeout from Gemini API: {e}")
-        raise
-    except Exception as e:
-        _handle_genai_fallback_error(e, logger, "calling Gemini API")
-        raise
+        # Call the API via client
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt_content,
+                config=gen_config,
+            )
+            # Record usage metadata and finish reasons on span
+            input_tokens = None
+            output_tokens = None
+            if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
+                usage = response.usage_metadata
+                input_tokens = getattr(usage, "prompt_token_count", None)
+                output_tokens = getattr(usage, "candidates_token_count", None)
 
-    logger.debug("Gemini API call successful.")
-    return response
+            finish_reasons = []
+            if hasattr(response, "candidates") and response.candidates:
+                for c in response.candidates:
+                    fr = getattr(c, "finish_reason", None)
+                    if fr is not None:
+                        finish_reasons.append(str(fr.name if hasattr(fr, "name") else fr))
+
+            record_genai_attributes(
+                span,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                finish_reasons=finish_reasons if finish_reasons else None,
+            )
+        except GenaiRateLimitError as e:
+            if hasattr(span, "record_exception"):
+                span.record_exception(e)
+            logger.warning(f"Rate limit hit calling Gemini: {e}")
+            raise
+        except (GenaiAuthError, GenaiPermissionDeniedError, GenaiUnauthenticatedError) as e:
+            if hasattr(span, "record_exception"):
+                span.record_exception(e)
+            logger.error(f"Authentication/authorization error calling Gemini: {e}")
+            raise
+        except GenaiTimeoutError as e:
+            if hasattr(span, "record_exception"):
+                span.record_exception(e)
+            logger.warning(f"Timeout from Gemini API: {e}")
+            raise
+        except Exception as e:
+            if hasattr(span, "record_exception"):
+                span.record_exception(e)
+            _handle_genai_fallback_error(e, logger, "calling Gemini API")
+            raise
+
+        logger.debug("Gemini API call successful.")
+        return response
 
 
 def stream_gemini_api(
@@ -262,96 +304,141 @@ def stream_gemini_api(
     """
     logger.debug("Starting Gemini API stream in GCP Vertex AI mode...")
 
-    # Internal helper with retry logic for opening streams
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True
-    )
-    def _open_gemini_stream():
-        """Open a fresh Gemini stream with retry logic."""
-        # Get singleton client in Vertex AI mode
-        client = get_genai_client(gcp_project=gcp_project, gcp_location=gcp_location)
+    # Get model name from shared config
+    model_name = get_model_name()
+    gen_config = build_generate_config(config)
 
-        # Get model name from shared config
-        model_name = get_model_name()
-
-        # Map our config dict to GenerateContentConfig
-        gen_config = build_generate_config(config)
-
-        # Call API via client with streaming
-        response_stream = client.models.generate_content_stream(
+    tracer = get_tracer("mayamcp.llm")
+    with tracer.start_as_current_span("llm.generate_content_stream") as span:
+        record_genai_attributes(
+            span,
+            system="gemini",
             model=model_name,
-            contents=prompt_content,
-            config=gen_config,
+            temperature=gen_config.temperature,
+            max_tokens=gen_config.max_output_tokens,
         )
-        return response_stream
 
-    # Main streaming loop with mid-stream retry handling
-    attempt = 0
-    max_attempts = 3
-    while attempt < max_attempts:
-        try:
-            # Open fresh stream
-            response_stream = _open_gemini_stream()
+        # Internal helper with retry logic for opening streams
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True
+        )
+        def _open_gemini_stream():
+            """Open a fresh Gemini stream with retry logic."""
+            # Get singleton client in Vertex AI mode
+            client = get_genai_client(gcp_project=gcp_project, gcp_location=gcp_location)
 
-            # Iterate through stream with error handling
-            yield from response_stream
+            # Call API via client with streaming
+            response_stream = client.models.generate_content_stream(
+                model=model_name,
+                contents=prompt_content,
+                config=gen_config,
+            )
+            return response_stream
 
-            # Stream completed successfully
-            break
+        # Main streaming loop with mid-stream retry handling
+        attempt = 0
+        max_attempts = 3
+        last_input_tokens = None
+        last_output_tokens = None
+        finish_reasons: list[str] = []
 
-        except (GenaiRateLimitError, GenaiTimeoutError, TimeoutError) as e:
-            attempt += 1
-            if attempt >= max_attempts:
-                logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
-                raise
+        while attempt < max_attempts:
+            try:
+                # Open fresh stream
+                response_stream = _open_gemini_stream()
 
-            logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}): {e}. Retrying...")
+                # Iterate through stream with error handling
+                for chunk in response_stream:
+                    if hasattr(chunk, "usage_metadata") and chunk.usage_metadata is not None:
+                        usage = chunk.usage_metadata
+                        in_t = getattr(usage, "prompt_token_count", None)
+                        out_t = getattr(usage, "candidates_token_count", None)
+                        if in_t is not None:
+                            last_input_tokens = in_t
+                        if out_t is not None:
+                            last_output_tokens = out_t
+                    if hasattr(chunk, "candidates") and chunk.candidates:
+                        for c in chunk.candidates:
+                            fr = getattr(c, "finish_reason", None)
+                            if fr is not None:
+                                fr_str = str(fr.name if hasattr(fr, "name") else fr)
+                                if fr_str not in finish_reasons:
+                                    finish_reasons.append(fr_str)
+                    yield chunk
 
-        except (GenaiAuthError, GenaiPermissionDeniedError,
-                GenaiUnauthenticatedError) as e:
-            # Don't retry auth errors
-            logger.error(f"Authentication error in Gemini stream: {e}")
-            raise
+                # Stream completed successfully
+                break
 
-        except Exception as e:
-            # Classify and handle other errors
-            _handle_genai_fallback_error(e, logger, "Gemini API stream iteration")
-
-            # Determine retry behavior based on error type
-            code = getattr(e, "status_code", None)
-            error_code = getattr(e, "error_code", None)
-
-            # Detect timeouts via common exception types
-            is_timeout = isinstance(e, TimeoutError)
-            if not is_timeout and httpx is not None:
-                httpx_timeout_types = tuple(
-                    t for t in [
-                        getattr(httpx, "TimeoutException", None),
-                        getattr(httpx, "ReadTimeout", None),
-                        getattr(httpx, "WriteTimeout", None),
-                        getattr(httpx, "ConnectTimeout", None),
-                    ] if isinstance(t, type)
-                )
-                if httpx_timeout_types and isinstance(e, httpx_timeout_types):
-                    is_timeout = True
-
-            if is_timeout or code == 429 or error_code == 429:
+            except (GenaiRateLimitError, GenaiTimeoutError, TimeoutError) as e:
                 attempt += 1
                 if attempt >= max_attempts:
+                    if hasattr(span, "record_exception"):
+                        span.record_exception(e)
                     logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
                     raise
+
                 logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}): {e}. Retrying...")
-            elif code in (401, 403) or error_code in (401, 403):
+
+            except (GenaiAuthError, GenaiPermissionDeniedError,
+                    GenaiUnauthenticatedError) as e:
+                if hasattr(span, "record_exception"):
+                    span.record_exception(e)
+                # Don't retry auth errors
                 logger.error(f"Authentication error in Gemini stream: {e}")
                 raise
-            else:
-                attempt += 1
-                if attempt >= max_attempts:
-                    logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
+
+            except Exception as e:
+                # Classify and handle other errors
+                _handle_genai_fallback_error(e, logger, "Gemini API stream iteration")
+
+                # Determine retry behavior based on error type
+                code = getattr(e, "status_code", None)
+                error_code = getattr(e, "error_code", None)
+
+                # Detect timeouts via common exception types
+                is_timeout = isinstance(e, TimeoutError)
+                if not is_timeout and httpx is not None:
+                    httpx_timeout_types = tuple(
+                        t for t in [
+                            getattr(httpx, "TimeoutException", None),
+                            getattr(httpx, "ReadTimeout", None),
+                            getattr(httpx, "WriteTimeout", None),
+                            getattr(httpx, "ConnectTimeout", None),
+                        ] if isinstance(t, type)
+                    )
+                    if httpx_timeout_types and isinstance(e, httpx_timeout_types):
+                        is_timeout = True
+
+                if is_timeout or code == 429 or error_code == 429:
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        if hasattr(span, "record_exception"):
+                            span.record_exception(e)
+                        logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
+                        raise
+                    logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}): {e}. Retrying...")
+                elif code in (401, 403) or error_code in (401, 403):
+                    if hasattr(span, "record_exception"):
+                        span.record_exception(e)
+                    logger.error(f"Authentication error in Gemini stream: {e}")
                     raise
-                logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}). Retrying...")
+                else:
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        if hasattr(span, "record_exception"):
+                            span.record_exception(e)
+                        logger.error(f"Failed to complete Gemini stream after {max_attempts} attempts: {e}")
+                        raise
+                    logger.warning(f"Stream interrupted (attempt {attempt}/{max_attempts}). Retrying...")
+
+        record_genai_attributes(
+            span,
+            input_tokens=last_input_tokens,
+            output_tokens=last_output_tokens,
+            finish_reasons=finish_reasons if finish_reasons else None,
+        )
 
     logger.debug("Gemini API stream completed.")
