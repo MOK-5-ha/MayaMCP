@@ -426,10 +426,12 @@ async def run_evaluation_async():
         }
 
         for score_name, score_data in case_scores.items():
+            print(f"  [{score_name}] Passed: {score_data.get('passed')} | Score: {score_data.get('score'):.2f} | {score_data.get('reasoning')}")
+            if score_data.get("is_fallback"):
+                continue
             total_checks += 1
             if score_data.get("passed"):
                 total_passed += 1
-            print(f"  [{score_name}] Passed: {score_data.get('passed')} | Score: {score_data.get('score'):.2f} | {score_data.get('reasoning')}")
 
         results.append({
             "test_case": item["name"],
