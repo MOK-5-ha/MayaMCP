@@ -54,6 +54,7 @@ flowchart TD
 ## 2. Detailed Task Breakdown
 
 ### Track 1: Foundation & Dependencies
+**STATUS**: PENDING
 
 #### Task 1.1: Dependency Refactoring (Remove Weave, Add GCP Trace & Eval)
 - **ID**: `TASK-1.1`
@@ -73,6 +74,7 @@ flowchart TD
 ---
 
 ### Track 2: Core Engine & State Isolation
+**STATUS**: PENDING
 
 #### Task 2.1: Distributed State Manager & Lock Ordering Validation
 - **ID**: `TASK-2.1`
@@ -85,11 +87,11 @@ flowchart TD
 - **Traceability**: `DS-1`, `FR-1.1`, `NFR-2.1`, `US-4`
 - **Dependencies**: `TASK-2.1`
 - **Description**: Verify FastAPI SSE streaming endpoints ([`src/routers/chat.py`](file:///Users/pretermodernist/Developer/Personal/MayaMCP/src/routers/chat.py)) offload synchronous generator iteration via `await asyncio.to_thread(_fetch_next_stream_event, stream)` to prevent blocking the asyncio event loop thread.
-- **Acceptance Criteria (BDD)**:
 
 ---
 
 ### Track 3: Observability & Google Cloud Trace Instrumentation
+**STATUS**: PENDING
 
 > [!TIP]
 > **PARALLEL EXECUTION**: Task 3.1 and Task 3.2 can execute in parallel once Track 2 is complete.
@@ -109,6 +111,7 @@ flowchart TD
 ---
 
 ### Track 4: Vertex AI Evaluation & Agent-as-a-Judge
+**STATUS**: PENDING
 
 #### Task 4.1: Vertex AI EvalTask Pointwise & Trajectory Harness
 - **ID**: `TASK-4.1`
@@ -131,6 +134,7 @@ flowchart TD
 ---
 
 ### Track 5: Repository Governance & Quality Assurance
+**STATUS**: PENDING
 
 > [!TIP]
 > **PARALLEL EXECUTION**: Documentation tasks (Task 5.1) can run concurrently with test verification (Task 5.2).
