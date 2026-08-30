@@ -22,7 +22,7 @@ session_id = extract_session_id(request)
 
 ## 2. Formatting & Conversion Utilities
 
-### `format_currency(amount: Optional[float], default: float = 0.0) -> str`
+### `format_currency(amount: float | None, default: float = 0.0) -> str`
 - **Location**: [`src/utils/helpers.py`](../src/utils/helpers.py)
 - **Purpose**: Formats numeric floating-point values into standard USD currency strings (`$XX.XX`).
 - **Use Cases**: Tab overlay, receipt formatting, payment responses, conversational logs.
@@ -48,7 +48,7 @@ val = safe_float("15.75", default=0.0)  # Returns: 15.75
 
 ## 3. Security & Obfuscation Utilities
 
-### `mask_api_key(key: Optional[str], visible_chars: int = 4, suffix_chars: int = 4) -> str`
+### `mask_api_key(key: str | None, visible_chars: int = 4, suffix_chars: int = 4) -> str`
 - **Location**: [`src/utils/helpers.py`](../src/utils/helpers.py)
 - **Purpose**: Obfuscates sensitive API keys for safe logging or debug display while retaining prefix/suffix identification.
 - **Use Cases**: Client initialization logs, API key modal validation logging.
@@ -63,12 +63,12 @@ masked = mask_api_key("AIzaSy1234567890SecretKey")  # Returns: "AIza...tKey"
 
 ## 4. Response Standardization & Text Processing
 
-### `build_response_dict(success: bool, message: str = "", data: Optional[Dict[str, Any]] = None, error_code: Optional[str] = None) -> Dict[str, Any]`
+### `build_response_dict(success: bool, message: str = "", data: dict[str, Any] | None = None, error_code: str | None = None) -> dict[str, Any]`
 - **Location**: [`src/utils/helpers.py`](../src/utils/helpers.py)
 - **Purpose**: Constructs a uniform response dictionary with ISO UTC timestamps and consistent status keys.
 - **Use Cases**: Tool execution outputs, security checks, payment status responses.
 
-### `normalize_text(text: Optional[str]) -> str`
+### `normalize_text(text: str | None) -> str`
 - **Location**: [`src/utils/helpers.py`](../src/utils/helpers.py)
 - **Purpose**: Strips leading/trailing whitespace, collapses internal whitespace, and lowercases text.
 - **Use Cases**: Intent detection, keyword searches, speech act classification.
@@ -77,7 +77,7 @@ masked = mask_api_key("AIzaSy1234567890SecretKey")  # Returns: "AIza...tKey"
 
 ## 5. Conversational & Intent Detection Helpers
 
-- `detect_order_inquiry(user_input: str)`: Detects if user is asking about order/bill.
-- `detect_speech_acts(user_input: str, conversation_context: List[str])`: Intent recognition using speech act patterns.
-- `determine_next_phase(current_state: Dict, order_placed: bool)`: Phase transition state machine.
-- `append_to_history(history: List[Dict], user_text: str, assistant_text: str)`: Immutable chat history append helper.
+- `detect_order_inquiry(user_input: str) -> dict[str, Any]`: Detects if user is asking about order/bill.
+- `detect_speech_acts(user_input: str, conversation_context: list[str]) -> list[str]`: Intent recognition using speech act patterns.
+- `determine_next_phase(current_state: dict[str, Any], order_placed: bool) -> str`: Phase transition state machine.
+- `append_to_history(history: list[dict[str, Any]], user_text: str, assistant_text: str) -> list[dict[str, Any]]`: Immutable chat history append helper.
