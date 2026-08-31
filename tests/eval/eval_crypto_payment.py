@@ -363,15 +363,29 @@ def register_malfunction_scorer(turns, expected_logic, output):
             "explanation": "Not a failure test case — skipped",
         }
 
-    all_text = " ".join(output.get("responses", [])).lower()
+    responses = output.get("responses", [])
+    recovery_text = responses[-1].lower() if responses else ""
+
+    # Disqualify generic unhandled pipeline error fallbacks
+    if "unexpected error occurred during processing" in recovery_text or "trouble reaching my brain" in recovery_text:
+        return {
+            "score": 0.0,
+            "explanation": "Generic system error fallback returned instead of domain-level register malfunction handling.",
+        }
+
     acknowledged_failure = (
-        "malfunction" in all_text
-        or "error" in all_text
-        or "register" in all_text
-        or "trouble" in all_text
+        "malfunction" in recovery_text
+        or "register" in recovery_text
+        or "payment failed" in recovery_text
+        or "failed to process" in recovery_text
     )
-    apologized = "sorry" in all_text or "apolog" in all_text
-    offered_retry = "retry" in all_text or "try again" in all_text or "let's try" in all_text
+    apologized = "sorry" in recovery_text or "apolog" in recovery_text
+    offered_retry = (
+        "retry" in recovery_text
+        or "try again" in recovery_text
+        or "let's try" in recovery_text
+        or "try processing" in recovery_text
+    )
     handled = acknowledged_failure and apologized and offered_retry
 
     if handled:

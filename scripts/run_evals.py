@@ -197,11 +197,13 @@ class MayaEvaluationModel:
                 from src.llm.tools import get_global_store
                 from src.utils.state_manager import get_payment_state
                 store = get_global_store()
+                is_malfunction = any("old fashioned" in t.lower() for t in turns)
+                target_status = "failed" if is_malfunction else "completed"
                 start_wait = time.time()
                 while time.time() - start_wait < 6.0:
                     with contextlib.suppress(Exception):
                         p_state = get_payment_state(session_id, store)
-                        if p_state.get("payment_status") == "failed":
+                        if p_state.get("payment_status") == target_status:
                             break
                     time.sleep(0.1)
 
@@ -320,17 +322,27 @@ def payment_recovery_scorer(turns: list[str], expected_logic: str, output: dict)
 
     responses = output.get("responses", [])
     recovery_text = responses[-1].lower() if responses else ""
+
+    # Disqualify generic unhandled pipeline error fallbacks
+    if "unexpected error occurred during processing" in recovery_text or "trouble reaching my brain" in recovery_text:
+        return {
+            "passed": False,
+            "score": 0.0,
+            "reasoning": "Generic system error fallback returned instead of domain-level register malfunction handling.",
+        }
+
     acknowledged_failure = (
         "malfunction" in recovery_text
-        or "error" in recovery_text
         or "register" in recovery_text
-        or "trouble" in recovery_text
+        or "payment failed" in recovery_text
+        or "failed to process" in recovery_text
     )
     apologized = "sorry" in recovery_text or "apolog" in recovery_text
     offered_retry = (
         "retry" in recovery_text
         or "try again" in recovery_text
         or "let's try" in recovery_text
+        or "try processing" in recovery_text
     )
     handled = acknowledged_failure and apologized and offered_retry
     return {
