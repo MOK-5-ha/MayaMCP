@@ -201,7 +201,7 @@ class MayaEvaluationModel:
                 while time.time() - start_wait < 6.0:
                     with contextlib.suppress(Exception):
                         p_state = get_payment_state(session_id, store)
-                        if p_state.get("payment_status") in ("completed", "failed"):
+                        if p_state.get("payment_status") == "failed":
                             break
                     time.sleep(0.1)
 
