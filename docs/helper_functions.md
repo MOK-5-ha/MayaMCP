@@ -81,3 +81,28 @@ masked = mask_api_key("AIzaSy1234567890SecretKey")  # Returns: "AIza...tKey"
 - `detect_speech_acts(user_input: str, conversation_context: list[str]) -> list[str]`: Intent recognition using speech act patterns.
 - `determine_next_phase(current_state: dict[str, Any], order_placed: bool) -> str`: Phase transition state machine.
 - `append_to_history(history: list[dict[str, Any]], user_text: str, assistant_text: str) -> list[dict[str, Any]]`: Immutable chat history append helper.
+
+---
+
+## 6. Evaluation & Agent-as-a-Judge Helpers
+
+### `sanitize_eval_input(text: str | None) -> str`
+- **Location**: [`src/eval/sanitizer.py`](../src/eval/sanitizer.py)
+- **Purpose**: Zero-trust defense neutralizing prompt injection tokens (`[INST]`, `<<SYS>>`, `<|im_start|>`), instruction override directives, and score manipulation attempts before passing to LLM judges.
+
+### `wrap_xml_context(tag_name: str, content: Any) -> str`
+- **Location**: [`src/eval/sanitizer.py`](../src/eval/sanitizer.py)
+- **Purpose**: Delimits dynamic conversation and trajectory elements in structural XML tags (`<user_turns>`, `<maya_responses>`, `<agent_trajectory>`).
+
+### `evaluate_agent_trajectory(...) -> TrajectoryEvaluationRubric`
+- **Location**: [`src/eval/agent_judge.py`](../src/eval/agent_judge.py)
+- **Purpose**: Evaluates multi-turn agent conversations and tool trajectories with Google Antigravity / Gemini models, enforcing structured Pydantic rubrics (`TrajectoryEvaluationRubric`) with `extra="forbid"` and deterministic offline fallback handling.
+
+### `isolate_fallback_benchmark_aggregates(rubrics: list[TrajectoryEvaluationRubric]) -> dict[str, Any]`
+- **Location**: [`src/eval/agent_judge.py`](../src/eval/agent_judge.py)
+- **Purpose**: Separates offline heuristic fallback verdicts from live model judge averages, computing clean pass rates, mean metrics, and explicit fallback counts.
+
+### `run_vertex_eval_task(dataset, outputs, project, location) -> EvalResult | None`
+- **Location**: [`src/eval/eval_task.py`](../src/eval/eval_task.py)
+- **Purpose**: Executes managed Google Cloud Vertex AI Gen AI Evaluation Service (`EvalTask`) with pointwise and trajectory metrics, exporting OpenTelemetry trace spans.
+

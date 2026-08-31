@@ -34,6 +34,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - `notebooks/`: Experimentation and analysis
 - `scripts/`: Utility scripts, including Google Cloud evaluation pipelines
 - `src/`: Core source code with modular organization
+  - `src/eval/`: Vertex AI Gen AI Evaluation Service (`EvalTask`), Antigravity Agent-as-a-Judge rubrics, zero-trust sanitization, and token efficiency scoring
   - `src/routers/`: FastAPI v1 REST and SSE API endpoints (`session`, `payments`, `chat`)
   - `src/schemas/`: Pydantic v2 data transfer schemas
   - `src/utils/`: Errors, helpers (centralized DRY logic cataloged in `docs/helper_functions.md`), and thread-safe state management
@@ -371,7 +372,11 @@ The project includes an evaluation pipeline using **Google Cloud Vertex AI Gen A
 2. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
 3. Run evaluations using the provided script or `agents-cli`:
    ```bash
-   python scripts/run_weave_evals.py
+   # Vertex AI Gen AI Evaluation Pipeline (Pointwise, Trajectory, Viseme, & Agent-as-a-Judge)
+   python scripts/run_evals.py
+
+   # Deterministic Crypto Payment & Register Malfunction Recovery Evaluation
+   python tests/eval/eval_crypto_payment.py
    ```
 
 **Tier-Based Concurrency**: 
