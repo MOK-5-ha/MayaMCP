@@ -161,7 +161,10 @@ class MayaEvaluationModel:
         llm = get_genai_client(gcp_project=GCP_PROJECT, gcp_location=GCP_LOCATION)
         history = []
         session_id = f"eval_session_{int(time.time())}_{uuid4().hex[:8]}"
-        app_state = {}
+        from src.llm.tools import get_global_store
+        from src.utils.state_manager import initialize_state
+        app_state = get_global_store()
+        initialize_state(session_id, app_state)
 
         responses = []
         visemes = []
