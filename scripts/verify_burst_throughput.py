@@ -8,6 +8,7 @@ import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,10 +20,11 @@ if not gcp_project:
     os.environ["GCP_PROJECT"] = "gen-lang-client-0070523080"
     gcp_project = "gen-lang-client-0070523080"
 
-from src.llm.client import get_genai_client, get_model_name
+from src.llm.client import get_genai_client, get_model_name  # noqa: E402
 
 CONCURRENCY = 25
 PROMPT = "Reply in one word: 'Ready'."
+
 
 def send_request(request_id: int):
     start_time = time.time()
@@ -39,6 +41,7 @@ def send_request(request_id: int):
     except Exception as e:
         elapsed = time.time() - start_time
         return {"id": request_id, "success": False, "elapsed": elapsed, "text": "", "error": str(e)}
+
 
 def run_burst_test():
     print("=" * 65)
@@ -62,7 +65,7 @@ def run_burst_test():
 
     avg_latency = sum(r["elapsed"] for r in results) / len(results) if results else 0.0
 
-    print(f"\nResults Summary:")
+    print("\nResults Summary:")
     print(f"  - Total Requests:      {len(results)}")
     print(f"  - Successful:          {len(successful)}")
     print(f"  - Failed:              {len(failed)}")
@@ -82,6 +85,7 @@ def run_burst_test():
 
     print("\n[✓] SUCCESS: 100% of burst requests completed with ZERO rate limit errors.")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(run_burst_test())

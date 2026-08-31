@@ -57,7 +57,11 @@ When reviewing code, pull requests, and commits:
 - **Evaluation Modalities**:
   - Pointwise metrics: `faithfulness`, `response_quality` (against recipe ground truth).
   - Trajectory metrics: `trajectory_precision`, `trajectory_recall`, `trajectory_exact_match` (for multi-turn tool calling like `add_to_order` and `process_crypto_payment`).
-  - **Agent-as-a-Judge**: Qualitative evaluation uses `google-antigravity.Agent` running in Vertex AI Standard Mode (`vertex=True` with Application Default Credentials) validated against Pydantic rubrics.
+  - **Agent-as-a-Judge**: Qualitative evaluation uses `google-antigravity.Agent` running in Vertex AI Standard Mode (`vertex=True` with Application Default Credentials) validated against Pydantic rubrics (`TrajectoryEvaluationRubric`, `PointwiseEvaluationRubric`) with `extra="forbid"`.
+- **Zero-Trust Input Defense & XML Delimitation**: Untrusted user inputs, tool traces, and expected logic passed to LLM judges must be sanitized (`sanitize_eval_input`) and structurally wrapped in XML tags (`<user_turns>`, `<maya_responses>`, `<agent_trajectory>`).
+- **Offline Fallback Isolation**: When live cloud judges are unavailable, local heuristic fallbacks (`is_fallback: bool = True`) MUST be isolated from live average metrics and composite pass rates (`isolate_fallback_benchmark_aggregates`).
+- **Asynchronous Lifecycle Synchronization**: Multi-turn evaluation benchmarks testing asynchronous actions (like the $99.99 deterministic simulated failure) must poll/synchronize for the background state transition before executing subsequent inquiry turns.
+- **Non-Prescriptive Prompt State**: System prompts and order summaries must present factual background state (e.g. `PAYMENT STATUS: Failed (...)`) without pre-scripting exact responses or behavioral directives.
 - **Deterministic Failure Testing**: Order amounts of `$99.99` deterministically trigger simulated background payment failures ("register malfunction") for BDD and Vertex AI evaluations.
 - **Context Prefix Caching**: Evaluation prompts with $>32\text{k}$ tokens must place static rubrics, bartender persona instructions, and menu knowledge at the prompt prefix to trigger GCP's 90% cache discount.
 

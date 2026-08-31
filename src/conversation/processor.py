@@ -97,17 +97,26 @@ def _process_drink_context(drink_context: str) -> str:
 def _build_order_context(session_id: str, app_state: dict) -> str:
     """Helper to build a summary string of the current order for the system instruction."""
     order_list = get_current_order_state(session_id, app_state)
+    order_summary = ""
     if not order_list:
-        return "CURRENT ORDER: Empty."
-    items_str = []
-    for item in order_list:
-        q = item.get('quantity', 1)
-        mods = item.get('modifiers', 'no modifiers')
-        entry = f"{q}x {item['name']}"
-        if mods != 'no modifiers':
-            entry += f" with {mods}"
-        items_str.append(entry)
-    return "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
+        order_summary = "CURRENT ORDER: Empty."
+    else:
+        items_str = []
+        for item in order_list:
+            q = item.get('quantity', 1)
+            mods = item.get('modifiers', 'no modifiers')
+            entry = f"{q}x {item['name']}"
+            if mods != 'no modifiers':
+                entry += f" with {mods}"
+            items_str.append(entry)
+        order_summary = "CURRENT ORDER ALREADY CONTAINS: " + ", ".join(items_str) + ". DO NOT re-add these items unless requested."
+
+    if app_state and session_id in app_state and "payment" in app_state[session_id]:
+        payment = app_state[session_id]["payment"]
+        if payment.get("payment_status") == "failed":
+            order_summary += " PAYMENT STATUS: Failed (register malfunction during settlement)."
+
+    return order_summary
 
 
 def process_order(

@@ -111,7 +111,7 @@ flowchart TD
 ---
 
 ### Track 4: Vertex AI Evaluation & Agent-as-a-Judge
-**STATUS**: PENDING
+**STATUS**: COMPLETED
 
 #### Task 4.1: Vertex AI EvalTask Pointwise & Trajectory Harness
 - **ID**: `TASK-4.1`
