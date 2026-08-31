@@ -29,6 +29,7 @@ Run: python scripts/run_evals.py
 """
 
 import asyncio
+import contextlib
 import os
 import sys
 import time
@@ -190,6 +191,19 @@ class MayaEvaluationModel:
                 predicted_trajectory.append({"tool_name": "add_tip", "tool_input": {"percentage": 20.0}})
             if ("pay" in turn.lower() or "usdc" in turn.lower()) and not any(t["tool_name"] == "process_crypto_payment" for t in predicted_trajectory):
                 predicted_trajectory.append({"tool_name": "process_crypto_payment", "tool_input": {}})
+
+            # Synchronize with asynchronous payment lifecycle before subsequent turns query the agent
+            if ("pay" in turn.lower() or "usdc" in turn.lower()) and any(t["tool_name"] == "process_crypto_payment" for t in predicted_trajectory):
+                from src.llm.tools import get_global_store
+                from src.utils.state_manager import get_payment_state
+                store = get_global_store()
+                start_wait = time.time()
+                while time.time() - start_wait < 6.0:
+                    with contextlib.suppress(Exception):
+                        p_state = get_payment_state(session_id, store)
+                        if p_state.get("payment_status") in ("completed", "failed"):
+                            break
+                    time.sleep(0.1)
 
             viseme = derive_viseme(response)
             print(f"  User : {turn}")
