@@ -52,7 +52,8 @@ pytest -m unit            # Unit tests only
 pytest -m integration     # Integration tests only
 
 # Vertex AI Gen AI Evaluation Service & Cloud Trace
-python scripts/run_weave_evals.py
+python scripts/run_evals.py
+python tests/eval/eval_crypto_payment.py
 ```
 - Tests live in `tests/` with `test_*.py` naming.
 - `tests/conftest.py` provides fixtures and SDK stubs for offline testing.
@@ -126,7 +127,7 @@ Optional:
 - **Zero-Trust Evaluation Context Delimitation & Sanitization**: Before passing user messages or agent responses to an LLM-as-a-judge, sanitize untrusted strings (`sanitize_eval_input`) to defuse control tokens (`[INST]`, `<<SYS>>`, `<|im_start|>`), instruction override patterns, and score manipulation directives, and wrap dynamic sections in structural XML tags (`<user_turns>`, `<maya_responses>`, `<agent_trajectory>`).
 - **Prefix Invariant Caching**: To leverage GCP Context Caching in LLM judge routines, structure prompts with static evaluation rubrics and instructions at the prompt prefix (Invariant Prefix), placing dynamic test case inputs at the prompt tail.
 - **Non-Prescriptive Prompt State vs Scripted Responses**: When exposing background failures (like register malfunctions) to conversational agents via system prompt context, provide only factual state indicators (e.g. `PAYMENT STATUS: Failed (register malfunction during settlement)`) rather than prescriptive behavioral instructions (e.g. "Apologize and offer retry"), ensuring evaluation benchmarks measure authentic agent behavior rather than scripted prompt directives.
-- **Weave Evaluation Scorer Guard Discipline**: In LLM evaluation scorers checking list outputs (like derived visemes), empty lists `[]` must NOT evaluate to `True` via fall-through guards like `... if visemes else True`. Scorers must strictly enforce non-empty lists (`bool(visemes) and len(visemes) == len(turns)`).
+- **Evaluation Scorer Guard Discipline**: In LLM evaluation scorers checking list outputs (like derived visemes), empty lists `[]` must NOT evaluate to `True` via fall-through guards like `... if visemes else True`. Scorers must strictly enforce non-empty lists (`bool(visemes) and len(visemes) == len(turns)`).
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
