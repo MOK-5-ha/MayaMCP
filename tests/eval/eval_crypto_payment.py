@@ -458,14 +458,18 @@ async def main():
     all_scores = []
     for r in results.get("results", []):
         for score_data in r["scores"].values():
+            if score_data.get("is_fallback"):
+                continue
             all_scores.append(score_data["score"])
     if all_scores:
         avg = sum(all_scores) / len(all_scores)
-        print(f"\n  Average Score: {avg:.2f}")
+        print(f"\n  Average Score (Excluding Fallbacks): {avg:.2f}")
         print(
             "  Status: "
             + ("✅ PASSED" if avg >= 0.7 else "❌ NEEDS IMPROVEMENT")
         )
+    else:
+        print("\n  Average Score: N/A (all verdicts evaluated in offline fallback mode)")
 
     print("\nDone.")
 

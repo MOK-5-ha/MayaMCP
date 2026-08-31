@@ -114,7 +114,7 @@ def _build_order_context(session_id: str, app_state: dict) -> str:
     if app_state and session_id in app_state and "payment" in app_state[session_id]:
         payment = app_state[session_id]["payment"]
         if payment.get("payment_status") == "failed":
-            order_summary += " PAYMENT ALERT: Register experienced a malfunction during settlement. Apologize to the patron and offer to retry processing payment."
+            order_summary += " PAYMENT STATUS: Failed (register malfunction during settlement)."
 
     return order_summary
 
