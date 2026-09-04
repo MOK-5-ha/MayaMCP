@@ -135,6 +135,7 @@ def get_genai_client(
             or _genai_client_location != location
         ):
             os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+            os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
             os.environ["GEMINI_TIER"] = "paid"
             _genai_client = genai.Client(
                 vertexai=True, project=project, location=location

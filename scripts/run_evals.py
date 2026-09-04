@@ -45,6 +45,7 @@ GCP_LOCATION = os.getenv("GCP_LOCATION", "global")
 os.environ["GCP_PROJECT"] = GCP_PROJECT
 os.environ["GCP_LOCATION"] = GCP_LOCATION
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
 os.environ["GEMINI_TIER"] = "paid"
 
 # Disable rate limits during evals

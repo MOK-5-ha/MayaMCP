@@ -74,6 +74,7 @@ async def verify_environment() -> bool:
         print(f"⚠️ Warning: GEMINI_TIER is '{tier}'. Enforcing 'paid' tier for Vertex AI.")
     os.environ["GEMINI_TIER"] = "paid"
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+    os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
     print("✓ GEMINI_TIER locked to 'paid' (300+ RPM quota via GCP billing credits)")
 
     # 3. Check google-genai SDK version

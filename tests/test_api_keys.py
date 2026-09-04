@@ -64,6 +64,7 @@ class TestGCPVertexConfig:
         assert ("LLM" + "_API_KEY") not in os.environ
         assert ("BACKUP_LLM" + "_API_KEY") not in os.environ
         assert os.environ["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
+        assert os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] == "true"
         assert os.environ["GEMINI_TIER"] == "paid"
         assert result["gcp_project"] == "my-vertex-project"
         assert result["cartesia_api_key"] == "cartesia_test_key"

@@ -17,7 +17,10 @@ async def simulate_request(req_id: int, project: str, location: str) -> dict[str
     try:
         from google import genai
         # Read environment dynamically per request
-        use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "true") == "true"
+        use_vertex = (
+            os.getenv("GOOGLE_GENAI_USE_ENTERPRISE", "").lower() in ("true", "1")
+            or os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "true").lower() in ("true", "1")
+        )
 
         # Mock or live call depending on environment
         if os.getenv("MOCK_BURST") == "true" or not os.getenv("GCP_PROJECT"):

@@ -67,7 +67,13 @@ markers = [
 filterwarnings = [
     "ignore::DeprecationWarning:websockets.*:",
     "ignore::DeprecationWarning:gradio.*:",
-    "ignore::DeprecationWarning:gradio_client.*:"
+    "ignore::DeprecationWarning:gradio_client.*:",
+    "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated.*:DeprecationWarning:starlette\\.testclient:",
+    "ignore:BaseAgentConfig is deprecated and will be removed.*:DeprecationWarning:",
+    "ignore:\\[EXPERIMENTAL\\].*:UserWarning:google\\.adk\\..*:",
+    "ignore:Passing (nodeid|baseid) to .*:pytest.PytestRemovedIn10Warning:",
+    "ignore:The parameters have been moved from the Blocks constructor to the launch\\(\\) method in Gradio 6\\.0.*:UserWarning:",
+    "ignore:.*tag was found in the content of a `gr\\.HTML` component.*:UserWarning:gradio.*:",
 ]
 
 
