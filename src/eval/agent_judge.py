@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # Model pricing table for token cost calculation (input_rate_per_token, output_rate_per_token)
 MODEL_PRICING_PER_TOKEN = {
     "gemini-3.7-flash": (0.075 / 1_000_000, 0.30 / 1_000_000),
+    "gemini-3.5-flash-lite": (0.0375 / 1_000_000, 0.15 / 1_000_000),
     "gemini-3.1-flash-lite": (0.0375 / 1_000_000, 0.15 / 1_000_000),
     "gemini-2.5-flash": (0.075 / 1_000_000, 0.30 / 1_000_000),
     "gemini-2.5-flash-lite": (0.0375 / 1_000_000, 0.15 / 1_000_000),
@@ -36,7 +37,7 @@ MODEL_PRICING_PER_TOKEN = {
 }
 
 
-def calculate_token_cost(input_tokens: int, output_tokens: int, model: str = "gemini-3.1-flash-lite") -> float:
+def calculate_token_cost(input_tokens: int, output_tokens: int, model: str = "gemini-3.5-flash-lite") -> float:
     """Calculate token cost based on model-aware pricing rates.
 
     Args:

@@ -8,10 +8,9 @@ and model inference connectivity.
 import asyncio
 import os
 import sys
-from typing import List
 
 
-async def _load_env_files_async(paths: List[str]) -> None:
+async def _load_env_files_async(paths: list[str]) -> None:
     """Asynchronously load candidate .env files in priority order without breaking early.
 
     Ensures empty keys (e.g. GCP_PROJECT= in template files) fall back to non-empty keys in valid env files.
@@ -22,7 +21,7 @@ async def _load_env_files_async(paths: List[str]) -> None:
         try:
             def _read_file(p: str):
                 values = {}
-                with open(p, "r", encoding="utf-8") as f:
+                with open(p, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if not line or line.startswith("#") or "=" not in line:
@@ -80,7 +79,6 @@ async def verify_environment() -> bool:
     # 3. Check google-genai SDK version
     try:
         import google.genai
-        from google.genai import types
         print("✓ google-genai SDK loaded successfully")
     except ImportError:
         sys.stderr.write("❌ ERROR: google-genai SDK is not installed!\n")
@@ -95,7 +93,7 @@ async def verify_environment() -> bool:
             from src.config.model_config import get_model_config
             model = get_model_config()["model_version"]
         except ImportError:
-            model = os.getenv("GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite")
+            model = os.getenv("GEMINI_MODEL_VERSION", "gemini-3.5-flash-lite")
         print(f"Testing inference connectivity against model '{model}'...")
 
         def _test_call():

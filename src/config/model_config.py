@@ -44,6 +44,9 @@ def _get_default_temperature(model_version: str) -> float:
     return 0.7
 
 
+DEFAULT_GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+
+
 def get_model_config() -> dict[str, Any]:
     """
     Get model configuration from environment variables.
@@ -52,7 +55,7 @@ def get_model_config() -> dict[str, Any]:
         Dictionary containing model configuration.
     """
     model_version = os.getenv(
-        "GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite"
+        "GEMINI_MODEL_VERSION", DEFAULT_GEMINI_MODEL
     )
     default_temp = _get_default_temperature(model_version)
     return {
@@ -84,6 +87,7 @@ def get_cartesia_config() -> dict[str, Any]:
 
 # Known valid Gemini model identifiers (non-exhaustive; update as needed)
 KNOWN_GEMINI_MODELS: list[str] = [
+    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview",
     "gemini-3-flash-preview",

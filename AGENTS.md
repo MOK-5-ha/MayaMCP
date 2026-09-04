@@ -84,7 +84,7 @@ Required:
 - `CARTESIA_API_KEY` — Cartesia TTS API key
 
 Optional:
-- `GEMINI_MODEL_VERSION` — defaults to `gemini-3.1-flash-lite`
+- `GEMINI_MODEL_VERSION` — defaults to `gemini-3.5-flash-lite`
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `8192`
 - `MAYA_MASTER_KEY` — Fernet key for encrypting session data (ephemeral if unset)

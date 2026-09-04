@@ -8,17 +8,17 @@ import asyncio
 import os
 import sys
 import time
-from typing import Any, Dict
+from typing import Any
 
 
-async def simulate_request(req_id: int, project: str, location: str) -> Dict[str, Any]:
+async def simulate_request(req_id: int, project: str, location: str) -> dict[str, Any]:
     """Execute a single request to verify concurrent throughput."""
     start_time = time.perf_counter()
     try:
         from google import genai
         # Read environment dynamically per request
         use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "true") == "true"
-        
+
         # Mock or live call depending on environment
         if os.getenv("MOCK_BURST") == "true" or not os.getenv("GCP_PROJECT"):
             await asyncio.sleep(0.05)  # Simulate network I/O
@@ -29,7 +29,7 @@ async def simulate_request(req_id: int, project: str, location: str) -> Dict[str
 
         def _sync_call():
             return client.models.generate_content(
-                model=os.getenv("GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite"),
+                model=os.getenv("GEMINI_MODEL_VERSION", "gemini-3.5-flash-lite"),
                 contents=f"High-throughput test request #{req_id}",
             )
 

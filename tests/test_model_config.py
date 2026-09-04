@@ -138,7 +138,7 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-3.1-flash-lite",
+            "model_version": "gemini-3.5-flash-lite",
             "temperature": 1.0,
             "max_output_tokens": 8192,
             "top_p": 0.95,
@@ -174,7 +174,7 @@ class TestGetModelConfig:
         config = get_model_config()
 
         expected = {
-            "model_version": "gemini-3.1-flash-lite",
+            "model_version": "gemini-3.5-flash-lite",
             "temperature": 1.0,
             "max_output_tokens": 8192,
             "top_p": 0.95,
@@ -241,6 +241,7 @@ class TestIsValidGeminiModel:
     def test_is_valid_gemini_model_known_models(self):
         """Test is_valid_gemini_model with known valid models."""
         valid_models = [
+            "gemini-3.5-flash-lite",
             "gemini-3-flash-preview",
             "gemini-3-pro-preview",
             "gemini-2.5-flash-lite",

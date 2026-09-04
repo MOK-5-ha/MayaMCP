@@ -97,7 +97,7 @@ class TestGenAISpanInstrumentation:
         record_genai_attributes(
             mock_span,
             system="gemini",
-            model="gemini-3.1-flash-lite",
+            model="gemini-3.5-flash-lite",
             temperature=0.7,
             max_tokens=2048,
             input_tokens=150,
@@ -110,7 +110,7 @@ class TestGenAISpanInstrumentation:
         )
 
         mock_span.set_attribute.assert_any_call("gen_ai.system", "gemini")
-        mock_span.set_attribute.assert_any_call("gen_ai.request.model", "gemini-3.1-flash-lite")
+        mock_span.set_attribute.assert_any_call("gen_ai.request.model", "gemini-3.5-flash-lite")
         mock_span.set_attribute.assert_any_call("gen_ai.request.temperature", 0.7)
         mock_span.set_attribute.assert_any_call("gen_ai.request.max_tokens", 2048)
         mock_span.set_attribute.assert_any_call("gen_ai.usage.input_tokens", 150)
@@ -123,13 +123,13 @@ class TestGenAISpanInstrumentation:
 
     def test_record_genai_attributes_none_span_safe(self):
         """Test record_genai_attributes does not fail on None span."""
-        record_genai_attributes(None, model="gemini-3.1-flash-lite")
+        record_genai_attributes(None, model="gemini-3.5-flash-lite")
 
     def test_record_genai_attributes_exception_safe(self):
         """Test record_genai_attributes catches and suppresses span set_attribute errors."""
         mock_span = MagicMock()
         mock_span.set_attribute.side_effect = Exception("Span closed")
-        record_genai_attributes(mock_span, model="gemini-3.1-flash-lite")
+        record_genai_attributes(mock_span, model="gemini-3.5-flash-lite")
 
     def test_trace_genai_span_context_manager(self):
         """Test trace_genai_span records attributes and handles exceptions."""

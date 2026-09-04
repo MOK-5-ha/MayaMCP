@@ -48,7 +48,7 @@ def test_build_judge_prompt_structure():
 
 def test_calculate_token_cost():
     """Test model-aware token cost calculations."""
-    cost = calculate_token_cost(1000, 500, model="gemini-3.1-flash-lite")
+    cost = calculate_token_cost(1000, 500, model="gemini-3.5-flash-lite")
     assert cost > 0.0
 
     cost_pro = calculate_token_cost(1000, 500, model="gemini-3.7-pro")

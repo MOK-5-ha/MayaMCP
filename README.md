@@ -66,7 +66,7 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 
 ### Model Information
 
-- Default model: Google Gemini 3 Flash Lite (model id: `gemini-3.1-flash-lite`)
+- Default model: Google Gemini 3.5 Flash Lite (model id: `gemini-3.5-flash-lite`)
 - You can override the model via `GEMINI_MODEL_VERSION` in your `.env`
 
 ## Security
@@ -112,7 +112,7 @@ GEMINI_TIER=paid
 CARTESIA_API_KEY=your_cartesia_api_key_here
 
 # Model Configuration (optional)
-GEMINI_MODEL_VERSION=gemini-3.1-flash-lite
+GEMINI_MODEL_VERSION=gemini-3.5-flash-lite
 TEMPERATURE=1.0
 MAX_OUTPUT_TOKENS=8192
 
