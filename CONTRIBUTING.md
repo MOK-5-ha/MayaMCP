@@ -27,6 +27,9 @@ Our test suite aims to be fast, reliable, and decoupled from external services.
 
 ## Running Tests and Evaluations
 
-- For LLM-as-judge evaluation, use the Google Cloud Vertex AI evaluation pipeline: `python scripts/run_weave_evals.py` (or `agents-cli eval grade`). Authenticate via `gcloud auth application-default login`.
+- **Standard Test Suite**: `pytest` or `pytest -m "not slow"`.
+- **Vertex AI Gen AI Evaluation Pipeline**: `python scripts/run_evals.py` (or `agents-cli eval grade`). Authenticate via `gcloud auth application-default login`.
+- **Deterministic Payment Failure & Malfunction Recovery**: `python tests/eval/eval_crypto_payment.py`.
+- **Telemetry & Tracing**: All evaluation and conversational runs export OpenTelemetry spans directly to Google Cloud Trace (`CloudTraceSpanExporter`) using Application Default Credentials (ADC) with non-blocking local fallbacks.
 
 Thank you for helping improve MayaMCP!

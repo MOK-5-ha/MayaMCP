@@ -134,7 +134,7 @@ flowchart TD
 ---
 
 ### Track 5: Repository Governance & Quality Assurance
-**STATUS**: PENDING
+**STATUS**: COMPLETED
 
 > [!TIP]
 > **PARALLEL EXECUTION**: Documentation tasks (Task 5.1) can run concurrently with test verification (Task 5.2).
@@ -144,9 +144,11 @@ flowchart TD
 - **Traceability**: `DS-1`, `DS-3`, `NFR-1`, `NFR-3`
 - **Dependencies**: `TASK-1.1`, `TASK-1.2`
 - **Description**: Remove all remaining Weave / W&B references across [`AGENTS.md`], [`README.md`], [`TODO.md`], and [`CONTRIBUTING.md`]. Document Google Cloud Trace and Vertex AI Evaluation workflows.
+- **Status**: COMPLETED
 
 #### Task 5.2: Verification via Full Test Suite & Linting
 - **ID**: `TASK-5.2`
 - **Traceability**: `NFR-3.1`, `NFR-3.2`
 - **Dependencies**: `TASK-5.1`
 - **Description**: Execute `pytest -m "not slow"` and `ruff check src/ tests/` to confirm 100% pass rate and clean linting.
+- **Status**: COMPLETED
