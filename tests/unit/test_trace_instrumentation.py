@@ -19,7 +19,7 @@ class TestLLMClientTraceInstrumentation:
         self, mock_get_tracer, mock_build_config, mock_get_model_name, mock_get_client
     ):
         """Test call_gemini_api creates llm.generate_content span with GenAI attributes."""
-        mock_get_model_name.return_value = "gemini-3.1-flash-lite"
+        mock_get_model_name.return_value = "gemini-3.5-flash-lite"
         mock_config = MagicMock()
         mock_config.temperature = 0.8
         mock_config.max_output_tokens = 2048
@@ -49,7 +49,7 @@ class TestLLMClientTraceInstrumentation:
         assert res is mock_response
         mock_tracer.start_as_current_span.assert_called_once_with("llm.generate_content")
         mock_span.set_attribute.assert_any_call("gen_ai.system", "gemini")
-        mock_span.set_attribute.assert_any_call("gen_ai.request.model", "gemini-3.1-flash-lite")
+        mock_span.set_attribute.assert_any_call("gen_ai.request.model", "gemini-3.5-flash-lite")
         mock_span.set_attribute.assert_any_call("gen_ai.request.temperature", 0.8)
         mock_span.set_attribute.assert_any_call("gen_ai.request.max_tokens", 2048)
         mock_span.set_attribute.assert_any_call("gen_ai.usage.input_tokens", 120)
@@ -64,7 +64,7 @@ class TestLLMClientTraceInstrumentation:
         self, mock_get_tracer, mock_build_config, mock_get_model_name, mock_get_client
     ):
         """Test stream_gemini_api creates llm.generate_content_stream span with GenAI attributes."""
-        mock_get_model_name.return_value = "gemini-3.1-flash-lite"
+        mock_get_model_name.return_value = "gemini-3.5-flash-lite"
         mock_config = MagicMock()
         mock_config.temperature = 0.5
         mock_config.max_output_tokens = 1024
@@ -98,7 +98,7 @@ class TestLLMClientTraceInstrumentation:
         assert len(chunks) == 2
         mock_tracer.start_as_current_span.assert_called_once_with("llm.generate_content_stream")
         mock_span.set_attribute.assert_any_call("gen_ai.system", "gemini")
-        mock_span.set_attribute.assert_any_call("gen_ai.request.model", "gemini-3.1-flash-lite")
+        mock_span.set_attribute.assert_any_call("gen_ai.request.model", "gemini-3.5-flash-lite")
         mock_span.set_attribute.assert_any_call("gen_ai.usage.input_tokens", 80)
         mock_span.set_attribute.assert_any_call("gen_ai.usage.output_tokens", 40)
         mock_span.set_attribute.assert_any_call("gen_ai.response.finish_reasons", ["STOP"])

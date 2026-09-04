@@ -198,6 +198,7 @@ class TestProcessPaymentOptimistically:
         client = CryptoPaymentClient()
 
         mock_loop = MagicMock()
+        mock_loop.create_task.side_effect = lambda coro: coro.close()
 
         with patch("src.payments.crypto_client.asyncio.get_running_loop",
                     return_value=mock_loop):

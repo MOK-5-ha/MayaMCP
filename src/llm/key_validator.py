@@ -53,6 +53,7 @@ def validate_gemini_key(
 
     try:
         os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
         os.environ["GEMINI_TIER"] = "paid"
         client = genai.Client(
             vertexai=True,

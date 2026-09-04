@@ -85,7 +85,7 @@ Required:
 - `CARTESIA_API_KEY` — Cartesia TTS API key
 
 Optional:
-- `GEMINI_MODEL_VERSION` — defaults to `gemini-3.1-flash-lite`
+- `GEMINI_MODEL_VERSION` — defaults to `gemini-3.5-flash-lite`
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `8192`
 - `MAYA_MASTER_KEY` — Fernet key for encrypting session data (ephemeral if unset)
@@ -128,6 +128,9 @@ Optional:
 - **Prefix Invariant Caching**: To leverage GCP Context Caching in LLM judge routines, structure prompts with static evaluation rubrics and instructions at the prompt prefix (Invariant Prefix), placing dynamic test case inputs at the prompt tail.
 - **Non-Prescriptive Prompt State vs Scripted Responses**: When exposing background failures (like register malfunctions) to conversational agents via system prompt context, provide only factual state indicators (e.g. `PAYMENT STATUS: Failed (register malfunction during settlement)`) rather than prescriptive behavioral instructions (e.g. "Apologize and offer retry"), ensuring evaluation benchmarks measure authentic agent behavior rather than scripted prompt directives.
 - **Evaluation Scorer Guard Discipline**: In LLM evaluation scorers checking list outputs (like derived visemes), empty lists `[]` must NOT evaluate to `True` via fall-through guards like `... if visemes else True`. Scorers must strictly enforce non-empty lists (`bool(visemes) and len(visemes) == len(turns)`).
+- **Google GenAI Enterprise Mode Flag**: In 100% GCP Vertex AI mode, always set both `GOOGLE_GENAI_USE_VERTEXAI="true"` and `GOOGLE_GENAI_USE_ENTERPRISE="true"` to ensure compatibility with Google ADK runtime and avoid `GOOGLE_GENAI_USE_VERTEXAI is deprecated` warnings.
+- **Mocking Background Event Loop Dispatch**: When mocking `asyncio.get_running_loop().create_task` in unit tests, configure `mock_loop.create_task.side_effect = lambda coro: coro.close()` to cleanly terminate the coroutine and prevent unawaited coroutine `RuntimeWarning` exceptions during garbage collection.
+- **ADK Model Double Generator Protocol**: Test doubles implementing `Gemini.generate_content_async` must be defined as async generators yielding `LlmResponse.create(...)` rather than coroutines returning responses, matching Google ADK's runner interface.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`

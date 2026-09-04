@@ -4,6 +4,7 @@ import threading
 from unittest.mock import MagicMock, patch
 
 from google.adk.models import Gemini
+from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
 from src.llm.tools import (
@@ -37,7 +38,7 @@ class DummyLLM(Gemini):
                 self.citation_metadata = None
             def __getattr__(self, name):
                 return None
-        return MockResponse()
+        yield LlmResponse.create(MockResponse())
 
 class TestSessionContextBasics:
     """Test basic session context operations."""

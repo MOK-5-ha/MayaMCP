@@ -62,6 +62,7 @@ def configure_provider_env() -> dict[str, str | None]:
 
     # Force Vertex AI mode & paid tier quota
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+    os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
     os.environ["GEMINI_TIER"] = "paid"
 
     # Validate GCP Project ID

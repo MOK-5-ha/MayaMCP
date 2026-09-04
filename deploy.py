@@ -146,6 +146,7 @@ def serve_maya():
     if gcp_project:
         logger.info(f"Initialized GCP Vertex AI Mode for project: {gcp_project}")
         os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
         os.environ["GEMINI_TIER"] = "paid"
     else:
         logger.warning("GCP_PROJECT not configured in Modal environment")

@@ -45,6 +45,7 @@ GCP_LOCATION = os.getenv("GCP_LOCATION", "global")
 os.environ["GCP_PROJECT"] = GCP_PROJECT
 os.environ["GCP_LOCATION"] = GCP_LOCATION
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "true"
 os.environ["GEMINI_TIER"] = "paid"
 
 # Disable rate limits during evals
@@ -153,7 +154,7 @@ DATASET = [
 class MayaEvaluationModel:
     """Evaluates multi-turn conversations through Maya's processing pipeline."""
 
-    def __init__(self, model_version: str = "gemini-3.1-flash-lite", temperature: float = 1.0):
+    def __init__(self, model_version: str = "gemini-3.5-flash-lite", temperature: float = 1.0):
         self.model_version = model_version
         self.temperature = temperature
 
@@ -370,7 +371,7 @@ async def run_evaluation_async():
     print("=" * 60)
 
     model = MayaEvaluationModel(
-        model_version=os.getenv("GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite"),
+        model_version=os.getenv("GEMINI_MODEL_VERSION", "gemini-3.5-flash-lite"),
         temperature=float(os.getenv("TEMPERATURE", "1.0")),
     )
 

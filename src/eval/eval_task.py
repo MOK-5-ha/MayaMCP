@@ -89,7 +89,7 @@ def run_vertex_eval_task(
         record_genai_attributes(
             eval_span,
             system="vertex_ai",
-            model=os.getenv("GEMINI_MODEL_VERSION", "gemini-3.1-flash-lite"),
+            model=os.getenv("GEMINI_MODEL_VERSION", "gemini-3.5-flash-lite"),
         )
         eval_span.set_attribute("gen_ai.evaluation.item_count", len(dataset_items))
 
