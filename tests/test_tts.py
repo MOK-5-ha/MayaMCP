@@ -140,7 +140,8 @@ class TestCleanTextForTTS:
         text = "Contact us @ email.com, 100% sure, Tom & Jerry."
         result = clean_text_for_tts(text)
         # The % symbol gets removed but numbers remain
-        assert "Contact us" in result and "email.com" in result and "100" in result
+        tokens = [token.strip(".,!?;:") for token in result.split()]
+        assert "Contact us" in result and "email.com" in tokens and "100" in result
 
     def test_clean_text_preserve_sentence_punctuation(self):
         """Test that sentence punctuation is preserved."""
