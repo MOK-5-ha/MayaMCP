@@ -208,11 +208,11 @@ async def chat_stream_endpoint(
                             set_session_chat_history(effective_session_id, updated_hist, store)
 
                 yield f"data: {json.dumps(event)}\n\n"
-        except SessionLimitExceededError as limit_err:
-            error_event = {"type": "error", "content": f"Bar capacity reached: {limit_err}"}
+        except SessionLimitExceededError as _limit_err:
+            error_event = {"type": "error", "content": "Bar capacity reached. Please try again later."}
             yield f"data: {json.dumps(error_event)}\n\n"
-        except Exception as err:
-            error_event = {"type": "error", "content": str(err)}
+        except Exception as _err:
+            error_event = {"type": "error", "content": "An internal error occurred while processing the stream."}
             yield f"data: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(
