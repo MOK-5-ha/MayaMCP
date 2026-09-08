@@ -1,7 +1,6 @@
 """Thread-safe per-session cache for LLM and TTS client instances."""
 
 import hashlib
-import hmac
 import os
 import threading
 from typing import Any
@@ -55,9 +54,14 @@ class SessionLimitExceededError(RuntimeError):
 
 
 def _key_hash(api_key: str) -> str:
-    """Return a short keyed hash of an API key for comparison (never log raw keys)."""
-    digest = hmac.new(_KEY_HASH_SECRET, api_key.encode("utf-8"), hashlib.sha256).hexdigest()
-    return digest[:16]
+    """Return a short deterministic fingerprint of an API key for in-memory comparison."""
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        api_key.encode("utf-8"),
+        _KEY_HASH_SECRET,
+        310_000,
+    ).hex()
+    return derived[:16]
 
 
 def _get_admission_lock(session_id: str) -> threading.Lock:
