@@ -1,6 +1,7 @@
 """Thread-safe per-session cache for LLM and TTS client instances."""
 
 import hashlib
+import hmac
 import os
 import threading
 from typing import Any
@@ -8,6 +9,10 @@ from typing import Any
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# Secret for keyed hashing of API keys used in in-memory cache fingerprints.
+# This is NOT for authentication; it prevents plain deterministic hashing of secrets.
+_KEY_HASH_SECRET = os.getenv("MAYA_KEY_HASH_SECRET", "maya-dev-key-hash-secret").encode("utf-8")
 
 # Registry: session_id -> {"llm": instance, "tts": instance, "gemini_hash": str, "cartesia_hash": str}
 _session_clients: dict[str, dict[str, Any]] = {}
@@ -50,8 +55,9 @@ class SessionLimitExceededError(RuntimeError):
 
 
 def _key_hash(api_key: str) -> str:
-    """Return a short SHA-256 hash of an API key for comparison (never log raw keys)."""
-    return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    """Return a short keyed hash of an API key for comparison (never log raw keys)."""
+    digest = hmac.new(_KEY_HASH_SECRET, api_key.encode("utf-8"), hashlib.sha256).hexdigest()
+    return digest[:16]
 
 
 def _get_admission_lock(session_id: str) -> threading.Lock:
