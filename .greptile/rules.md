@@ -85,6 +85,41 @@ When reviewing code, pull requests, and commits:
 - **Specification PRs**: PRs focused on drafting specs (`design.md`, `requirements.md`, `tasks.md`), configuring tools (like `.greptile/`), or deprecating obsolete dependencies (`requirements.txt`, `.env.example`) MUST NOT be rejected or penalized for deferring full code implementation of the newly specified architecture to subsequent implementation PRs.
 - Do NOT demand immediate implementation of planned feature metrics or future code tracks during a specification PR as long as the specification is coherent, existing tests pass, and legacy dependencies are cleanly decoupled.
 
+### Rule 12: Parallel Non-Blocking Component Execution
+- Background workers (like chip generation via `ThreadPoolExecutor`) must enforce hard timeouts (3s for chip generation) and never block primary response streams.
+- Flag any parallel execution pattern that fails to use `Future.result(timeout=...)` or lacks graceful degradation on timeout/failure.
+- Ensure background task cancellation when new user input arrives (e.g., canceling pending chip generation tasks).
+- All parallel execution components must use dedicated thread pools with explicit worker limits (max 10 for chip generation).
+
+### Rule 13: Structured Output & Pydantic v2 Validation
+- LLM structured outputs (JSON schemas) must use Pydantic v2 models with field validators (`@field_validator`).
+- Invalid LLM outputs must log validation errors (`ValidationError`) and return graceful fallback values (e.g., empty chip sets, generic greeting chips) without raising exceptions to the user.
+- Structured output schemas must enforce constraints (e.g., 3-6 chips, 2-40 character text, unique chip texts case-insensitive).
+- Flag any structured output implementation that fails to handle `ValidationError` gracefully or propagates validation exceptions to user-facing code.
+
+### Rule 14: BDD Testing Standards (pytest-bdd)
+- Feature-level acceptance tests use pytest-bdd with Gherkin scenarios in `tests/behavior/features/*.feature`.
+- Step definitions must reuse existing fixtures (`session_state`, `mock_llm_client`) and mocks from `tests/conftest.py`.
+- BDD scenarios must cover:
+  - User journeys across conversation phases (greeting, ordering, describing, payment)
+  - Accessibility compliance (ARIA labels, keyboard navigation, 44x44px touch targets, 4.5:1 contrast ratios)
+  - Error handling and graceful degradation (LLM timeouts, validation failures)
+  - State lifecycle (hide/show, persistence, session reset)
+- Flag BDD tests that make real network calls or fail to mock external APIs.
+- BDD step definitions should follow the pattern: `@given`, `@when`, `@then` decorators with parsers for parameterized scenarios.
+
+### Rule 15: Session State Chip Management
+- Session state dictionary must include `chip_state` with keys:
+  - `current_chips`: `SuggestionChipSet | None`
+  - `last_generation_time`: `float | None`
+  - `generation_count`: `int`
+  - `failure_count`: `int`
+  - `pending_task`: `Future | None`
+- All chip state updates must acquire the session `RLock` before modification (thread-safe).
+- Rate limiting: max 1 chip generation per 2 seconds per session.
+- Concurrency limit: max 10 parallel chip generations across all sessions (enforced via `ThreadPoolExecutor` with `max_workers=10`).
+- Flag any chip state modification that bypasses the session lock or violates rate/concurrency limits.
+
 ---
 
 ## 3. Output Tone
