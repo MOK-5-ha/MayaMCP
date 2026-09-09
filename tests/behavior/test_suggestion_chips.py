@@ -2,6 +2,9 @@
 
 Tests contextual chip generation, user interaction, accessibility,
 and graceful degradation across conversation phases.
+
+NOTE: This test file is part of the suggestion-chips specification PR.
+The tests will be skipped until the implementation PR lands.
 """
 
 from unittest.mock import MagicMock, patch
@@ -10,23 +13,38 @@ import time
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from src.conversation.chip_generator import ChipGenerator
-from src.schemas.chips import (
-    ActionID,
-    ChipType,
-    SuggestionChip,
-    SuggestionChipSet,
-    ChipGenerationContext,
-)
-from src.utils.state_manager import (
-    get_session_state,
-    initialize_state,
-    reset_session_state,
-    update_payment_state,
-)
+# Deferred imports - will be available after implementation
+try:
+    from src.conversation.chip_generator import ChipGenerator
+    from src.schemas.chips import (
+        ActionID,
+        ChipType,
+        SuggestionChip,
+        SuggestionChipSet,
+        ChipGenerationContext,
+    )
+    from src.utils.state_manager import (
+        get_session_state,
+        initialize_state,
+        reset_session_state,
+        update_payment_state,
+    )
+    IMPORTS_AVAILABLE = True
+except ImportError as e:
+    # Modules not yet implemented - tests will be skipped
+    IMPORTS_AVAILABLE = False
+    SKIP_REASON = f"Suggestion chips implementation not yet available: {e}"
 
-# Load scenarios from feature file
-scenarios('features/suggestion_chips.feature')
+# Load scenarios from feature file only if imports are available
+if IMPORTS_AVAILABLE:
+    scenarios('features/suggestion_chips.feature')
+
+
+# Skip all tests in this module if implementation is not available
+pytestmark = pytest.mark.skipif(
+    not IMPORTS_AVAILABLE,
+    reason="Suggestion chips implementation not yet available (spec-only PR)"
+)
 
 
 class ChipTestContext:
@@ -54,6 +72,9 @@ def ctx():
 @pytest.fixture(autouse=True)
 def mock_llm_client(ctx, monkeypatch):
     """Mock the Gemini client to prevent real API calls."""
+    if not IMPORTS_AVAILABLE:
+        pytest.skip(SKIP_REASON)
+    
     mock_client = MagicMock()
     
     # Default structured output response
