@@ -1,11 +1,11 @@
 ## Project Overview
-MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, and simulated payments. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio, and API resilience is handled by `tenacity`.
+MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, simulated payments, and contextual suggestion chips. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio with dynamic suggestion chips, and API resilience is handled by `tenacity`.
 
 ## Repository Layout
 ```
 src/
 ├── config/          # API keys, logging, model settings
-├── conversation/    # Phase management, message processing
+├── conversation/    # Phase management, message processing, chip generation
 ├── llm/             # Gemini client, prompts, function tools, session registry
 ├── memvid/          # Memvid RAG implementation
 ├── payments/        # Coinbase CDP crypto payment client and logic
@@ -16,7 +16,9 @@ src/
 ├── ui/              # Gradio components, handlers, tab overlay, BYOK modal
 ├── utils/           # Errors, helpers, state management
 └── voice/           # Cartesia TTS integration
-tests/               # pytest suite (unit, integration, property-based, API)
+tests/               # pytest suite (unit, integration, property-based, BDD, API)
+  ├── behavior/      # BDD test suite with pytest-bdd (Gherkin scenarios)
+  └── conftest.py    # Shared fixtures and SDK stubs for offline testing
 assets/              # Static files (avatar, media)
 deploy.py            # Modal Labs deployment
 run_maya.sh          # Dev runner script
@@ -50,6 +52,7 @@ pytest --cov              # With coverage
 pytest -m "not slow"      # Skip slow tests
 pytest -m unit            # Unit tests only
 pytest -m integration     # Integration tests only
+pytest -m bdd             # BDD tests only
 
 # Vertex AI Gen AI Evaluation Service & Cloud Trace
 python scripts/run_evals.py
@@ -57,8 +60,9 @@ python tests/eval/eval_crypto_payment.py
 ```
 - Tests live in `tests/` with `test_*.py` naming.
 - `tests/conftest.py` provides fixtures and SDK stubs for offline testing.
-- Markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`.
+- Markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`, `bdd`.
 - Property-based tests use Hypothesis.
+- BDD tests use pytest-bdd with Gherkin scenarios in `tests/behavior/features/*.feature`.
 - Always mock external APIs (Google, Cartesia, Coinbase CDP) — never make real calls in tests.
 - **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats instead of obsolete LangChain structures.
 - **Rate Limit Testing**: Never allow global app rate limits to restrict the standard test suite, as it causes false-negative token exhaustion errors. Set rate limit environment variables to high values (e.g., `9999`) in `tests/conftest.py`. When testing the rate limiter itself, use context-manager overrides to temporarily enforce limits strictly within those specific tests.
@@ -131,6 +135,11 @@ Optional:
 - **Google GenAI Enterprise Mode Flag**: In 100% GCP Vertex AI mode, always set both `GOOGLE_GENAI_USE_VERTEXAI="true"` and `GOOGLE_GENAI_USE_ENTERPRISE="true"` to ensure compatibility with Google ADK runtime and avoid `GOOGLE_GENAI_USE_VERTEXAI is deprecated` warnings.
 - **Mocking Background Event Loop Dispatch**: When mocking `asyncio.get_running_loop().create_task` in unit tests, configure `mock_loop.create_task.side_effect = lambda coro: coro.close()` to cleanly terminate the coroutine and prevent unawaited coroutine `RuntimeWarning` exceptions during garbage collection.
 - **ADK Model Double Generator Protocol**: Test doubles implementing `Gemini.generate_content_async` must be defined as async generators yielding `LlmResponse.create(...)` rather than coroutines returning responses, matching Google ADK's runner interface.
+- **Parallel Chip Generation**: Suggestion chips are generated in parallel with Maya's response using a background `ThreadPoolExecutor` (max 10 workers, 3-second timeout). Chip generation MUST NEVER block the response stream. All failures return empty chip sets with logging, never user-visible errors.
+- **Structured Output Validation**: LLM structured outputs (e.g., suggestion chips) use Pydantic v2 schemas with field validators. Invalid outputs must log validation errors and return graceful fallback values (empty chip sets, generic greeting chips).
+- **Chip State Management**: Session state includes `chip_state` dictionary with `current_chips` (SuggestionChipSet), `last_generation_time`, `generation_count`, `failure_count`, and `pending_task` (Future). Thread-safe access via session RLock. Rate limiting: max 1 generation per 2 seconds per session. Concurrency: max 10 parallel generations across all sessions.
+- **Chip Generation Context Window**: ChipGenerator extracts last 4 conversation turns, current conversation phase (greeting, ordering, describing, payment, complete), payment status, and recent user messages (last 2) for deduplication and context-aware generation.
+- **BDD Test Coverage**: Feature-level acceptance tests use pytest-bdd with Gherkin scenarios (`tests/behavior/features/*.feature`) covering user journeys, accessibility (WCAG 2.1 AA: ARIA, keyboard nav, 44x44px touch targets, 4.5:1 contrast), error handling (timeouts, validation failures), and lifecycle (hide/show, persistence, session reset). Step definitions reuse existing fixtures and mocks.
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
