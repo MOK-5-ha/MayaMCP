@@ -2,12 +2,22 @@
 
 import hashlib
 import os
+import secrets
 import threading
 from typing import Any
 
 from ..config.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# Secret for keyed hashing of API keys and project identifiers used in in-memory cache fingerprints.
+# This is NOT for authentication or password storage; it provides fast deterministic cache keys.
+_env_key_hash_secret = os.getenv("MAYA_KEY_HASH_SECRET")
+_KEY_HASH_SECRET: bytes = (
+    _env_key_hash_secret.encode("utf-8")
+    if _env_key_hash_secret and _env_key_hash_secret.strip()
+    else secrets.token_bytes(32)
+)
 
 # Registry: session_id -> {"llm": instance, "tts": instance, "gemini_hash": str, "cartesia_hash": str}
 _session_clients: dict[str, dict[str, Any]] = {}
@@ -49,9 +59,15 @@ class SessionLimitExceededError(RuntimeError):
     pass
 
 
-def _key_hash(api_key: str) -> str:
-    """Return a short SHA-256 hash of an API key for comparison (never log raw keys)."""
-    return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+def _key_hash(raw_value: str) -> str:
+    """Return a short deterministic fingerprint of sensitive strings for in-memory comparison (never log raw keys)."""
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        raw_value.encode("utf-8"),
+        _KEY_HASH_SECRET,
+        210_000,
+    )
+    return derived.hex()[:16]
 
 
 def _get_admission_lock(session_id: str) -> threading.Lock:
