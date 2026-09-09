@@ -4,6 +4,7 @@ Unit tests for src.voice.tts module.
 """
 
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -141,7 +142,8 @@ class TestCleanTextForTTS:
         result = clean_text_for_tts(text)
         # The % symbol gets removed but numbers remain
         tokens = [token.strip(".,!?;:") for token in result.split()]
-        assert "Contact us" in result and "email.com" in tokens and "100" in result
+        has_email_domain = any(urlparse(f"//{token}").hostname == "email.com" for token in tokens)
+        assert "Contact us" in result and has_email_domain and "100" in result
 
     def test_clean_text_preserve_sentence_punctuation(self):
         """Test that sentence punctuation is preserved."""
