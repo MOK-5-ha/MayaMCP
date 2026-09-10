@@ -44,12 +44,21 @@ def mock_chip_set():
 @pytest.fixture(autouse=True)
 def cleanup_test_sessions():
     """Ensure clean lock and sequence state for test sessions."""
-    from src.utils.state_manager import cleanup_session_lock
-    for s_id in ["test_session", "test_cancel_session", "test_concurrent_claims_session"]:
+    from src.utils.state_manager import cleanup_session_lock, clear_session_chip_seq
+    test_ids = [
+        "test_session",
+        "test_cancel_session",
+        "test_concurrent_claims_session",
+        "test_reset_cancel_session",
+        "test_reset_monotonic_session",
+    ]
+    for s_id in test_ids:
         cleanup_session_lock(s_id)
+        clear_session_chip_seq(s_id)
     yield
-    for s_id in ["test_session", "test_cancel_session", "test_concurrent_claims_session"]:
+    for s_id in test_ids:
         cleanup_session_lock(s_id)
+        clear_session_chip_seq(s_id)
 
 
 class TestChipIntegration:
@@ -690,6 +699,32 @@ class TestChipIntegration:
 
         mock_future.cancel.assert_called_once()
         assert session_id not in _session_trigger_tasks
+
+    def test_reset_session_state_advances_sequence_and_preserves_monotonicity(self):
+        """Test reset_session_state advances sequence and preserves strictly monotonic claims."""
+        from src.utils.state_manager import (
+            claim_chip_generation_seq,
+            clear_session_chip_seq,
+            get_chip_generation_seq,
+            reset_session_state,
+        )
+
+        session_id = "test_reset_monotonic_session"
+        clear_session_chip_seq(session_id)
+        store = {session_id: {"chip_state": {"generation_seq": 0}}}
+
+        seq1 = claim_chip_generation_seq(session_id, store)
+        assert seq1 == 1
+
+        # Reset session
+        reset_session_state(session_id, store)
+        latest_after_reset = get_chip_generation_seq(session_id, store)
+        assert latest_after_reset > seq1
+
+        # Post-reset claim must be strictly greater than pre-reset seq1
+        seq2 = claim_chip_generation_seq(session_id, store)
+        assert seq2 > seq1
+        clear_session_chip_seq(session_id)
 
 
 # Mark integration tests

@@ -314,13 +314,17 @@ def cleanup_session_lock(session_id: str) -> None:
             with _session_locks_mutex:
                 _session_locks.pop(session_id, None)
                 _session_last_access.pop(session_id, None)
-                _session_chip_seq.pop(session_id, None)
     else:
         with _session_locks_mutex:
             _session_locks.pop(session_id, None)
             _session_last_access.pop(session_id, None)
-            _session_chip_seq.pop(session_id, None)
     logger.debug(f"Session lock cleaned up for {session_id}")
+
+
+def clear_session_chip_seq(session_id: str) -> None:
+    """Explicitly clear sequence tracking for a session (used for test isolation)."""
+    with _session_locks_mutex:
+        _session_chip_seq.pop(session_id, None)
 
 
 def claim_chip_generation_seq(
@@ -816,6 +820,18 @@ def reset_session_state(session_id: str | None = None, store: MutableMapping | N
     session_id, store = _get_store_and_session(session_id, store)
     lock = get_session_lock(session_id)
     with lock:
+        # Advance sequence counter so any in-flight pre-reset generation tasks
+        # are immediately rendered stale and cannot overwrite post-reset suggestions
+        with _session_locks_mutex:
+            if session_id in _session_chip_seq:
+                _session_chip_seq[session_id] += 1
+            else:
+                data = _get_session_data(session_id, store)
+                _session_chip_seq[session_id] = (
+                    data.get("chip_state", {}).get("generation_seq", 0) + 1
+                )
+            reset_seq = _session_chip_seq[session_id]
+
         # Cancel any active chip trigger task to prevent in-flight overwrites
         try:
             from ..conversation.processor import _session_trigger_tasks
@@ -836,6 +852,13 @@ def reset_session_state(session_id: str | None = None, store: MutableMapping | N
                 exc_info=True,
             )
         initialize_state(session_id, store)
+        # Store the advanced sequence in the reinitialized session state
+        data = _get_session_data(session_id, store)
+        chip_state = data.setdefault("chip_state", {})
+        chip_state["generation_seq"] = reset_seq
+        data["chip_state"] = chip_state
+        _save_session_data(session_id, store, data)
+
         cleanup_session_lock(session_id)
     logger.info(f"Session state reset for {session_id}")
 
