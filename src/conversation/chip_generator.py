@@ -1,4 +1,23 @@
-"""Chip generation for contextual suggestion chips."""
+"""Chip generation for contextual suggestion chips.
+
+Thread Pool Cancellation Limitation:
+    ChipGenerator uses ThreadPoolExecutor for parallel chip generation. Python's
+    ThreadPoolExecutor does not support canceling running threads. When a timeout
+    occurs (3s), Future.cancel() prevents the caller from waiting further, but the
+    background thread continues executing until the LLM call completes or retry
+    logic exhausts (~30s with tenacity). This is acceptable because:
+    
+    1. Most timeouts are due to slow network/API, not aggressive timeout
+    2. Worker pool is sized (10 threads) to handle occasional slow requests
+    3. True cancellation would require asyncio (breaking change) or cooperative
+       cancellation (requires modifying google-genai SDK)
+    
+    Session-Scoped Clients:
+    ChipGenerator accepts an optional llm_client in __init__ for dependency
+    injection (primarily for testing). When None, it uses get_genai_client()
+    which returns the global Vertex AI client. The system does NOT pass
+    per-session clients to ChipGenerator; all sessions share the global client.
+"""
 
 import logging
 import time
@@ -123,9 +142,17 @@ class ChipGenerator:
             return result
 
         except FutureTimeoutError:
-            # Cancel the timed-out task to free worker
+            # Note: Future.cancel() only prevents awaiting the result; it cannot
+            # stop a running thread. The background thread continues executing until
+            # the LLM call completes or the retry logic exhausts (up to ~30s with
+            # tenacity's 3 retries + exponential backoff). This is a limitation of
+            # Python's ThreadPoolExecutor.
+            #
+            # In practice, most timeouts occur due to slow network/API, not the 3s
+            # timeout being too aggressive. The worker pool (10 threads) is sized to
+            # handle occasional slow requests without exhaustion.
             if future and not future.done():
-                future.cancel()
+                future.cancel()  # Prevents awaiting, but thread continues
             
             logger.warning(
                 f"Chip generation timeout ({self.TIMEOUT_SECONDS}s) "
