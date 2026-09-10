@@ -83,7 +83,7 @@ def valid_chip_response():
 
 @pytest.fixture
 def mock_llm_client(valid_chip_response):
-    """Mock LLM client with valid response."""
+    """Mock LLM client with valid response (legacy - for DI tests only)."""
     mock_client = MagicMock()
     mock_models = MagicMock()
     mock_models.generate_content.return_value = valid_chip_response
@@ -92,9 +92,23 @@ def mock_llm_client(valid_chip_response):
 
 
 @pytest.fixture
+def mock_call_gemini_api(valid_chip_response):
+    """Mock call_gemini_api function."""
+    with patch("src.conversation.chip_generator.call_gemini_api") as mock:
+        mock.return_value = valid_chip_response
+        yield mock
+
+
+@pytest.fixture
 def chip_generator(session_id, mock_llm_client):
-    """ChipGenerator instance with mocked LLM client."""
+    """ChipGenerator instance with mocked LLM client (for DI tests)."""
     return ChipGenerator(session_id=session_id, llm_client=mock_llm_client)
+
+
+@pytest.fixture
+def chip_generator_with_api_mock(session_id, mock_call_gemini_api):
+    """ChipGenerator instance with mocked API calls."""
+    return ChipGenerator(session_id=session_id)
 
 
 # =============================================================================
@@ -117,7 +131,8 @@ class TestSuccessfulChipGeneration:
         mock_session_state,
         mock_session_lock,
         valid_context,
-        chip_generator,
+        chip_generator_with_api_mock,
+        mock_call_gemini_api,
     ):
         """
         Test successful chip generation with valid context.
@@ -129,7 +144,7 @@ class TestSuccessfulChipGeneration:
         mock_get_lock.return_value = mock_session_lock
 
         # Act
-        result = chip_generator.generate_chips_async(valid_context)
+        result = chip_generator_with_api_mock.generate_chips_async(valid_context)
 
         # Assert: Valid chip set returned
         assert result is not None
@@ -147,6 +162,9 @@ class TestSuccessfulChipGeneration:
         # Assert: Generation count incremented
         assert mock_session_state["chip_state"]["generation_count"] == 1
         assert "last_generation_time" in mock_session_state["chip_state"]
+        
+        # Assert: call_gemini_api was called
+        mock_call_gemini_api.assert_called_once()
 
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
@@ -160,10 +178,10 @@ class TestSuccessfulChipGeneration:
         mock_session_state,
         mock_session_lock,
         valid_context,
-        mock_llm_client,
+        mock_call_gemini_api,
     ):
         """
-        Test that LLM client is called with correct parameters.
+        Test that call_gemini_api is called with correct parameters.
         
         Validates: Requirements 1.1, 1.6
         """
@@ -171,16 +189,16 @@ class TestSuccessfulChipGeneration:
         mock_get_session.return_value = mock_session_state
         mock_get_lock.return_value = mock_session_lock
         
-        generator = ChipGenerator(session_id=session_id, llm_client=mock_llm_client)
+        generator = ChipGenerator(session_id=session_id)
 
         # Act
         generator.generate_chips_async(valid_context)
 
-        # Assert: LLM called once
-        mock_llm_client.models.generate_content.assert_called_once()
+        # Assert: call_gemini_api called once
+        mock_call_gemini_api.assert_called_once()
         
         # Get call arguments
-        call_args = mock_llm_client.models.generate_content.call_args
+        call_args = mock_call_gemini_api.call_args
         
         # Assert: Correct config parameters
         config = call_args.kwargs["config"]
@@ -188,6 +206,11 @@ class TestSuccessfulChipGeneration:
         assert config["temperature"] == 0.7
         assert config["response_mime_type"] == "application/json"
         assert "response_schema" in config
+        
+        # Assert: Prompt content structure
+        prompt_content = call_args.kwargs["prompt_content"]
+        assert len(prompt_content) == 1
+        assert prompt_content[0]["role"] == "user"
 
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
@@ -201,7 +224,8 @@ class TestSuccessfulChipGeneration:
         mock_session_state,
         mock_session_lock,
         valid_context,
-        chip_generator,
+        chip_generator_with_api_mock,
+        mock_call_gemini_api,
     ):
         """
         Test that context is properly included in prompt.
@@ -213,16 +237,17 @@ class TestSuccessfulChipGeneration:
         mock_get_lock.return_value = mock_session_lock
 
         # Act
-        chip_generator.generate_chips_async(valid_context)
+        chip_generator_with_api_mock.generate_chips_async(valid_context)
 
-        # Assert: LLM was called
-        call_args = chip_generator.llm_client.models.generate_content.call_args
-        prompt = call_args.kwargs["contents"]
+        # Assert: call_gemini_api was called
+        call_args = mock_call_gemini_api.call_args
+        prompt_content = call_args.kwargs["prompt_content"]
+        prompt = prompt_content[0]["parts"][0]["text"]
         
         # Assert: Context elements in prompt
-        assert "ordering" in prompt  # conversation_phase
-        assert "I'd like a mojito" in prompt  # conversation_turns
-        assert "none" in prompt or "Payment Status" in prompt  # payment_status
+        assert "ordering" in prompt.lower()  # conversation_phase
+        assert "mojito" in prompt.lower()  # conversation_turns
+        assert "none" in prompt.lower() or "payment status" in prompt.lower()  # payment_status
 
 
 # =============================================================================
@@ -233,6 +258,7 @@ class TestSuccessfulChipGeneration:
 class TestTimeoutHandling:
     """Test timeout handling returns None."""
 
+    @patch("src.conversation.chip_generator.call_gemini_api")
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
     @patch("src.utils.state_manager._get_session_data")
@@ -241,6 +267,7 @@ class TestTimeoutHandling:
         mock_get_session,
         mock_save_session,
         mock_get_lock,
+        mock_call_api,
         session_id,
         mock_session_state,
         mock_session_lock,
@@ -251,21 +278,17 @@ class TestTimeoutHandling:
         
         Validates: Requirements 1.4, 8.1
         """
-        # Setup: Slow LLM that exceeds timeout
-        mock_client = MagicMock()
-        mock_models = MagicMock()
-
+        # Setup: Slow API call that exceeds timeout
         def slow_generate(*args, **kwargs):
             time.sleep(5.0)  # Exceeds 3 second timeout
             return MagicMock(text='{"chips": []}')
 
-        mock_models.generate_content = slow_generate
-        mock_client.models = mock_models
+        mock_call_api.side_effect = slow_generate
 
         mock_get_session.return_value = mock_session_state
         mock_get_lock.return_value = mock_session_lock
 
-        generator = ChipGenerator(session_id=session_id, llm_client=mock_client)
+        generator = ChipGenerator(session_id=session_id)
 
         # Act
         start_time = time.time()
@@ -282,6 +305,7 @@ class TestTimeoutHandling:
         # Assert: Failure count incremented
         assert mock_session_state["chip_state"]["failure_count"] == 1
 
+    @patch("src.conversation.chip_generator.call_gemini_api")
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
     @patch("src.utils.state_manager._get_session_data")
@@ -290,6 +314,7 @@ class TestTimeoutHandling:
         mock_get_session,
         mock_save_session,
         mock_get_lock,
+        mock_call_api,
         session_id,
         mock_session_state,
         mock_session_lock,
@@ -300,16 +325,13 @@ class TestTimeoutHandling:
         
         Validates: Requirements 1.4, 1.5, 8.1
         """
-        # Setup: Slow LLM
-        mock_client = MagicMock()
-        mock_models = MagicMock()
-        mock_models.generate_content = lambda *args, **kwargs: time.sleep(5.0)
-        mock_client.models = mock_models
+        # Setup: Slow API call
+        mock_call_api.side_effect = lambda *args, **kwargs: time.sleep(5.0)
 
         mock_get_session.return_value = mock_session_state
         mock_get_lock.return_value = mock_session_lock
 
-        generator = ChipGenerator(session_id=session_id, llm_client=mock_client)
+        generator = ChipGenerator(session_id=session_id)
 
         # Act & Assert: No exception raised
         try:
@@ -606,6 +628,7 @@ class TestRateLimitEnforcement:
         # Assert: LLM was not called
         mock_llm_client.models.generate_content.assert_not_called()
 
+    @patch("src.conversation.chip_generator.call_gemini_api")
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
     @patch("src.utils.state_manager._get_session_data")
@@ -614,11 +637,12 @@ class TestRateLimitEnforcement:
         mock_get_session,
         mock_save_session,
         mock_get_lock,
+        mock_call_api,
         session_id,
         mock_session_state,
         mock_session_lock,
         valid_context,
-        mock_llm_client,
+        valid_chip_response,
     ):
         """
         Test that rate limit allows requests after 2 seconds.
@@ -633,8 +657,9 @@ class TestRateLimitEnforcement:
 
         mock_get_session.return_value = mock_session_state
         mock_get_lock.return_value = mock_session_lock
+        mock_call_api.return_value = valid_chip_response
 
-        generator = ChipGenerator(session_id=session_id, llm_client=mock_llm_client)
+        generator = ChipGenerator(session_id=session_id)
 
         # Act
         result = generator.generate_chips_async(valid_context)
@@ -642,8 +667,8 @@ class TestRateLimitEnforcement:
         # Assert: Request allowed
         assert result is not None
 
-        # Assert: LLM was called
-        mock_llm_client.models.generate_content.assert_called_once()
+        # Assert: API was called
+        mock_call_api.assert_called_once()
 
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
@@ -882,6 +907,7 @@ class TestPromptBuilding:
 class TestThreadSafety:
     """Test thread safety of chip generation."""
 
+    @patch("src.conversation.chip_generator.call_gemini_api")
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
     @patch("src.utils.state_manager._get_session_data")
@@ -890,10 +916,11 @@ class TestThreadSafety:
         mock_get_session,
         mock_save_session,
         mock_get_lock,
+        mock_call_api,
         session_id,
         mock_session_state,
         valid_context,
-        mock_llm_client,
+        valid_chip_response,
     ):
         """
         Test that session lock is properly acquired.
@@ -905,8 +932,9 @@ class TestThreadSafety:
 
         mock_get_session.return_value = mock_session_state
         mock_get_lock.return_value = mock_lock
+        mock_call_api.return_value = valid_chip_response
 
-        generator = ChipGenerator(session_id=session_id, llm_client=mock_llm_client)
+        generator = ChipGenerator(session_id=session_id)
 
         # Act
         result = generator.generate_chips_async(valid_context)

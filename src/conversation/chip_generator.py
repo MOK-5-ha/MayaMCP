@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from ..config.logging_config import get_logger
 from ..config.model_config import get_model_config
-from ..llm.client import get_genai_client
+from ..llm.client import build_generate_config, call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
     ChipGenerationContext,
@@ -75,13 +75,15 @@ class ChipGenerator:
         session_id, store = _get_store_and_session(self.session_id, None)
         lock = get_session_lock(session_id)
 
-        # Check rate limit
+        current_time = time.time()
+        future = None
+
+        # Atomically check rate limit, cancel pending task, and submit new task
         with lock:
             data = _get_session_data(session_id, store)
             chip_state = data.get("chip_state", {})
             last_gen_time = chip_state.get("last_generation_time", 0)
 
-            current_time = time.time()
             if current_time - last_gen_time < self.RATE_LIMIT_SECONDS:
                 logger.warning(
                     f"Rate limit exceeded for session {self.session_id}, "
@@ -97,19 +99,14 @@ class ChipGenerator:
                 )
                 pending_task.cancel()
 
-        # Submit generation task
-        try:
+            # Submit generation task and store it atomically
             future = _chip_executor.submit(self._generate_chips_sync, context)
+            chip_state["pending_task"] = future
+            data["chip_state"] = chip_state
+            _save_session_data(session_id, store, data)
 
-            # Store pending task
-            with lock:
-                data = _get_session_data(session_id, store)
-                chip_state = data.get("chip_state", {})
-                chip_state["pending_task"] = future
-                data["chip_state"] = chip_state
-                _save_session_data(session_id, store, data)
-
-            # Wait with timeout
+        # Wait with timeout
+        try:
             result = future.result(timeout=self.TIMEOUT_SECONDS)
 
             # Update metadata
@@ -126,6 +123,10 @@ class ChipGenerator:
             return result
 
         except FutureTimeoutError:
+            # Cancel the timed-out task to free worker
+            if future and not future.done():
+                future.cancel()
+            
             logger.warning(
                 f"Chip generation timeout ({self.TIMEOUT_SECONDS}s) "
                 f"for session {self.session_id}"
@@ -171,7 +172,7 @@ class ChipGenerator:
             model_config = get_model_config()
             model_version = model_config["model_version"]
 
-            # Build the generation config
+            # Build the generation config for structured output
             generation_config = {
                 "max_output_tokens": self.MAX_OUTPUT_TOKENS,
                 "temperature": 0.7,
@@ -179,10 +180,9 @@ class ChipGenerator:
                 "response_schema": SuggestionChipSet.model_json_schema(),
             }
 
-            # Call LLM with structured output
-            response = self.llm_client.models.generate_content(
-                model=model_version,
-                contents=prompt,
+            # Call LLM with retry logic via centralized client
+            response = call_gemini_api(
+                prompt_content=[{"role": "user", "parts": [{"text": prompt}]}],
                 config=generation_config,
             )
 
@@ -214,7 +214,8 @@ class ChipGenerator:
         Build chip generation prompt from context.
 
         This prompt is designed for prefix invariant caching (static instructions
-        at the beginning, dynamic context at the end).
+        at the beginning, dynamic context at the end). Enforces MAX_PROMPT_TOKENS
+        by truncating conversation turns and recent messages.
 
         Args:
             context: Generation context
@@ -222,7 +223,7 @@ class ChipGenerator:
         Returns:
             Formatted prompt string
         """
-        # Static instruction prefix (cacheable)
+        # Static instruction prefix (cacheable) - approximately 300 tokens
         system_instructions = """You are a suggestion chip generator for Maya, an AI bartending agent.
 
 Your task is to generate 3-6 contextual suggestion chips that help users continue the conversation naturally.
@@ -257,19 +258,36 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 }
 """
 
-        # Dynamic context (not cacheable, but small)
-        conversation_context = "\n".join(
-            [
-                f"{turn['role']}: {turn['content']}"
-                for turn in context.conversation_turns
-            ]
-        )
+        # Estimate remaining token budget (MAX_PROMPT_TOKENS - static prefix)
+        # Using rough estimate: 1 token ≈ 4 characters
+        static_prefix_chars = len(system_instructions)
+        static_prefix_tokens = static_prefix_chars // 4
+        remaining_tokens = max(0, self.MAX_PROMPT_TOKENS - static_prefix_tokens)
+        remaining_chars = remaining_tokens * 4
+
+        # Build dynamic context with budget enforcement
+        conversation_lines = []
+        for turn in context.conversation_turns:
+            line = f"{turn['role']}: {turn['content']}"
+            conversation_lines.append(line)
+        
+        conversation_context = "\n".join(conversation_lines)
+        
+        # Truncate conversation context if needed
+        if len(conversation_context) > remaining_chars * 0.7:  # Reserve 30% for other fields
+            max_conv_chars = int(remaining_chars * 0.7)
+            conversation_context = conversation_context[:max_conv_chars] + "..."
 
         recent_messages = (
             "\n".join(context.recent_user_messages)
             if context.recent_user_messages
             else "None"
         )
+        
+        # Truncate recent messages if needed
+        max_recent_chars = int(remaining_chars * 0.2)
+        if len(recent_messages) > max_recent_chars:
+            recent_messages = recent_messages[:max_recent_chars] + "..."
 
         context_section = f"""
 **Current Conversation:**
