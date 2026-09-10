@@ -244,13 +244,16 @@ class ChipGenerator:
         at the beginning, dynamic context at the end). Enforces MAX_PROMPT_TOKENS
         by truncating conversation turns and recent messages.
 
+        Includes context-aware phase-specific instructions to prioritize relevant
+        chips based on conversation phase and payment status.
+
         Args:
             context: Generation context
 
         Returns:
             Formatted prompt string
         """
-        # Static instruction prefix (cacheable) - approximately 300 tokens
+        # Static instruction prefix (cacheable) - approximately 350 tokens
         system_instructions = """You are a suggestion chip generator for Maya, an AI bartending agent.
 
 Your task is to generate 3-6 contextual suggestion chips that help users continue the conversation naturally.
@@ -273,6 +276,28 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 - menu: View drink menu
 - cancel: Cancel current order
 - order_another: Order another drink
+
+**Phase-Specific Priorities:**
+
+**Greeting Phase:**
+- Include menu-related dialogue chips (e.g., "Show me the menu", "What's popular?")
+- Focus on drink preferences and exploration questions
+- Keep conversation welcoming and open-ended
+
+**Ordering Phase:**
+- After order completion, prioritize payment and order_another action chips
+- Include modification dialogue chips (e.g., "Make it stronger", "Extra ice")
+- Offer confirmation or clarification options
+
+**Describing Phase:**
+- Generate follow-up dialogue chips for drink details
+- Include questions about ingredients, taste, or preparation
+- Offer customization suggestions
+
+**Payment Phase:**
+- When payment is pending, prioritize payment action chip as first option
+- Include cancel action chip
+- Add tip-related options after payment completion
 
 **Example Output:**
 {
@@ -316,6 +341,11 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
         if len(recent_messages) > max_recent_chars:
             recent_messages = recent_messages[:max_recent_chars] + "..."
 
+        # Add phase-specific guidance to dynamic context
+        phase_guidance = self._get_phase_specific_guidance(
+            context.conversation_phase, context.payment_status
+        )
+
         context_section = f"""
 **Current Conversation:**
 {conversation_context}
@@ -325,9 +355,43 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 **Recent User Messages (do not repeat):**
 {recent_messages}
 
+**Current Phase Guidance:**
+{phase_guidance}
+
 Generate 3-6 suggestion chips now:"""
 
         return system_instructions + context_section
+    
+    def _get_phase_specific_guidance(
+        self, phase: str, payment_status: str | None
+    ) -> str:
+        """
+        Get phase-specific guidance for chip generation.
+
+        Args:
+            phase: Current conversation phase
+            payment_status: Current payment status
+
+        Returns:
+            Phase-specific guidance string
+        """
+        guidance_map = {
+            "greeting": "Focus on menu exploration and drink preferences. Include at least one menu-related option.",
+            "ordering": "After order completion, prioritize payment and order_another action chips. Include customization options.",
+            "describing": "Generate follow-up dialogue chips for drink details. Include at least 2 dialogue chips with questions about ingredients or taste.",
+            "payment": "Prioritize payment action chip as first option when payment is pending. Include cancel option.",
+            "complete": "Offer order_another action chip and thank-you dialogue options.",
+        }
+        
+        base_guidance = guidance_map.get(
+            phase, "Generate contextually relevant chips for current conversation."
+        )
+        
+        # Add payment-specific guidance if payment is pending
+        if payment_status == "pending":
+            base_guidance += " URGENT: Payment is pending - place payment action chip first."
+        
+        return base_guidance
 
     def generate_fallback_chips(self) -> SuggestionChipSet:
         """

@@ -107,23 +107,23 @@
     - Verify non-blocking behavior (response completes before chips)
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 6. Implement context-aware chip content generation
-  - [ ] 6.1 Add post-order payment chip instructions to prompt
+- [x] 6. Implement context-aware chip content generation
+  - [x] 6.1 Add post-order payment chip instructions to prompt
     - Prioritize payment and order_another action chips after order completion
     - _Requirements: 3.1_
-  - [ ] 6.2 Add drink description follow-up chip instructions
+  - [x] 6.2 Add drink description follow-up chip instructions
     - Generate follow-up dialogue chips after drink descriptions
     - _Requirements: 3.2_
-  - [ ] 6.3 Add greeting phase menu inquiry chips
+  - [x] 6.3 Add greeting phase menu inquiry chips
     - Generate menu-related dialogue chips in greeting phase
     - _Requirements: 3.3_
-  - [ ] 6.4 Add payment pending priority weighting
+  - [x] 6.4 Add payment pending priority weighting
     - Prioritize payment action chip when payment status is pending
     - _Requirements: 3.4_
-  - [ ] 6.5 Implement deduplication logic
+  - [x] 6.5 Implement deduplication logic
     - Filter recent user messages (last 2) from chip text generation
     - _Requirements: 3.5_
-  - [ ] 6.6 Write integration tests for context-aware generation
+  - [x] 6.6 Write integration tests for context-aware generation
     - Test post-order context generates payment chips
     - Test drink description context generates follow-up chips
     - Test greeting context generates menu inquiry chips
