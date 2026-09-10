@@ -98,11 +98,12 @@ class TestChipIntegration:
         assert context.conversation_phase in ["greeting", "ordering", "describing", "payment", "complete"]
         assert len(context.recent_user_messages) <= 2
         
-        # Assert: Chips stored in session state
-        mock_save_session.assert_called_once()
-        saved_data = mock_save_session.call_args[0][2]
-        assert "chip_state" in saved_data
-        assert saved_data["chip_state"]["current_chips"] == mock_chip_set
+        # Assert: Session data saved at least twice — once for seq claim, once for chips
+        assert mock_save_session.call_count >= 2
+        # Verify the final write contains the chips
+        final_saved_data = mock_save_session.call_args[0][2]
+        assert "chip_state" in final_saved_data
+        assert final_saved_data["chip_state"]["current_chips"] == mock_chip_set
 
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")
@@ -141,11 +142,12 @@ class TestChipIntegration:
         mock_generator.generate_fallback_chips.assert_called_once()
         mock_generator.generate_chips_async.assert_not_called()
         
-        # Assert: Fallback chips stored in session state
-        mock_save_session.assert_called_once()
-        saved_data = mock_save_session.call_args[0][2]
-        assert "chip_state" in saved_data
-        assert saved_data["chip_state"]["current_chips"] == mock_chip_set
+        # Assert: Session data saved at least twice — once for seq claim, once for chips
+        assert mock_save_session.call_count >= 2
+        # Verify the final write contains the fallback chips
+        final_saved_data = mock_save_session.call_args[0][2]
+        assert "chip_state" in final_saved_data
+        assert final_saved_data["chip_state"]["current_chips"] == mock_chip_set
 
     @patch("src.utils.state_manager.get_session_lock")
     @patch("src.utils.state_manager._save_session_data")

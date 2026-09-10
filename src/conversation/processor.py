@@ -851,10 +851,17 @@ def _trigger_chip_generation(
             for turn in last_turns
         ]
         
-        # Get session state for payment status and phase detection
+        # Get session state and claim a generation sequence number atomically.
+        # This token is used later to discard stale results if a newer turn's
+        # chip generation has already written to current_chips.
         lock = get_session_lock(session_id)
         with lock:
             session_data = _get_session_data(session_id, app_state)
+            chip_state = session_data.get("chip_state", {})
+            my_seq = chip_state.get("generation_seq", 0) + 1
+            chip_state["generation_seq"] = my_seq
+            session_data["chip_state"] = chip_state
+            _save_session_data(session_id, app_state, session_data)
         
         # Determine conversation phase using existing function
         conversation_phase = determine_conversation_phase(session_data, maya_response)
@@ -888,16 +895,28 @@ def _trigger_chip_generation(
         else:
             chip_set = chip_gen.generate_chips_async(context)
         
-        # Store chips in session state (thread-safe)
+        # Store chips in session state only if this is still the most-recent
+        # generation for this session.  A newer turn's _trigger_chip_generation
+        # increments generation_seq before this one finishes, so a stale result
+        # arriving late is silently discarded instead of overwriting fresh chips.
         if chip_set:
             with lock:
                 session_data = _get_session_data(session_id, app_state)
                 chip_state = session_data.get("chip_state", {})
-                chip_state["current_chips"] = chip_set
-                session_data["chip_state"] = chip_state
-                _save_session_data(session_id, app_state, session_data)
-            
-            logger.info(f"Stored {len(chip_set.chips)} chips for session {session_id}")
+                current_seq = chip_state.get("generation_seq", 0)
+                if current_seq == my_seq:
+                    chip_state["current_chips"] = chip_set
+                    session_data["chip_state"] = chip_state
+                    _save_session_data(session_id, app_state, session_data)
+                    logger.info(
+                        f"Stored {len(chip_set.chips)} chips for session "
+                        f"{session_id} (seq {my_seq})"
+                    )
+                else:
+                    logger.info(
+                        f"Discarding stale chips for session {session_id} "
+                        f"(seq {my_seq}, current {current_seq})"
+                    )
         else:
             logger.info(f"No chips generated for session {session_id}")
     
