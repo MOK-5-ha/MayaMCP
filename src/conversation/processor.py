@@ -736,6 +736,15 @@ def process_order_stream(
                 # --- Update Conversation State ---
                 phase_manager.increment_turn()
 
+                # --- Trigger Chip Generation (Non-blocking, Parallel) ---
+                _trigger_chip_generation(
+                    session_id=session_id,
+                    app_state=app_state,
+                    user_message=sanitized_input,
+                    maya_response=clean_response,
+                    truncated_history=truncated_history
+                )
+
             except Exception as e:
                 logger.exception(f"Critical error in process_order_stream: {str(e)}")
                 error_message = "I'm sorry, an unexpected error occurred during processing. Please try again later."
@@ -792,3 +801,102 @@ def determine_conversation_phase(session_state: dict, latest_response: str) -> s
         return "greeting"
 
     return "ordering"
+
+
+def _trigger_chip_generation(
+    session_id: str,
+    app_state: Any,
+    user_message: str,
+    maya_response: str,
+    truncated_history: list[dict[str, str]]
+) -> None:
+    """
+    Trigger chip generation in parallel after Maya's response completes.
+    
+    This function runs chip generation asynchronously and stores the result
+    in session state. All failures are logged and result in empty chip sets
+    without blocking the conversation flow.
+    
+    Args:
+        session_id: Current session identifier
+        app_state: Application state for session management
+        user_message: Latest user message
+        maya_response: Maya's response text
+        truncated_history: Recent conversation history (limited window)
+    """
+    from ..conversation.chip_generator import ChipGenerator
+    from ..schemas.chips import ChipGenerationContext
+    from ..utils.state_manager import _get_session_data, _save_session_data, get_session_lock
+    
+    try:
+        # Build conversation turns from history (include current turn)
+        # Create updated history with current exchange
+        updated_history = list(truncated_history)
+        updated_history.append({'role': 'user', 'content': user_message})
+        updated_history.append({'role': 'assistant', 'content': maya_response})
+        
+        # Extract last 4 turns for chip generation context
+        last_turns = updated_history[-4:] if len(updated_history) >= 4 else updated_history
+        
+        # Build conversation turns in ChipGenerationContext format
+        conversation_turns = [
+            {'role': turn['role'], 'content': turn['content']}
+            for turn in last_turns
+        ]
+        
+        # Get session state for payment status and phase detection
+        lock = get_session_lock(session_id)
+        with lock:
+            session_data = _get_session_data(session_id, app_state)
+        
+        # Determine conversation phase using existing function
+        conversation_phase = determine_conversation_phase(session_data, maya_response)
+        
+        # Get payment status
+        payment_info = session_data.get("payment", {})
+        payment_status = payment_info.get("status", "none")
+        
+        # Extract recent user messages for deduplication (last 2)
+        recent_user_messages = [
+            turn['content'] for turn in updated_history[-4:]
+            if turn['role'] == 'user'
+        ][-2:]  # Get last 2 user messages
+        
+        # Build chip generation context
+        context = ChipGenerationContext(
+            conversation_turns=conversation_turns,
+            payment_status=payment_status,
+            conversation_phase=conversation_phase,
+            recent_user_messages=recent_user_messages
+        )
+        
+        # Instantiate chip generator
+        chip_gen = ChipGenerator(session_id)
+        
+        # Generate chips (asynchronously with timeout)
+        # If no conversation history (before current turn), use fallback
+        if not truncated_history:
+            chip_set = chip_gen.generate_fallback_chips()
+            logger.info(f"Using fallback chips for session {session_id} (empty history)")
+        else:
+            chip_set = chip_gen.generate_chips_async(context)
+        
+        # Store chips in session state (thread-safe)
+        if chip_set:
+            with lock:
+                session_data = _get_session_data(session_id, app_state)
+                chip_state = session_data.get("chip_state", {})
+                chip_state["current_chips"] = chip_set
+                session_data["chip_state"] = chip_state
+                _save_session_data(session_id, app_state, session_data)
+            
+            logger.info(f"Stored {len(chip_set.chips)} chips for session {session_id}")
+        else:
+            logger.info(f"No chips generated for session {session_id}")
+    
+    except Exception as e:
+        # Log error but never block conversation flow
+        logger.error(
+            f"Chip generation failed for session {session_id}: {e}",
+            exc_info=True
+        )

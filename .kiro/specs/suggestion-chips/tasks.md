@@ -92,7 +92,7 @@
     - Test early conversation default
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6_
 
-- [ ] 5. Integrate chip generation into conversation processor
+- [x] 5. Integrate chip generation into conversation processor
   - [ ] 5.1 Modify `process_user_message()` to trigger chip generation
     - Extract last 4 conversation turns for context
     - Build ChipGenerationContext with turns, payment status, phase
