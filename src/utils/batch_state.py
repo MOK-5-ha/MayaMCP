@@ -236,7 +236,7 @@ class BatchStateCache:
 _batch_context = threading.local()
 
 # Active batch caches keyed by session_id across threads
-_active_session_caches: dict[str, BatchStateCache] = {}
+_active_session_caches: dict[str, list[BatchStateCache]] = {}
 _active_caches_lock = threading.Lock()
 
 
@@ -251,19 +251,20 @@ def get_batch_cache_for_session(session_id: str) -> BatchStateCache | None:
         The active BatchStateCache for this session if one exists, else None.
     """
     with _active_caches_lock:
-        return _active_session_caches.get(session_id)
+        caches = _active_session_caches.get(session_id)
+        return caches[-1] if caches else None
 
 
 def clear_batch_cache_for_session(session_id: str) -> None:
     """
-    Remove any registered batch cache for a session (e.g. on reset or cleanup).
+    Remove and invalidate all registered batch caches for a session (e.g. on reset or cleanup).
 
     Args:
         session_id: Unique identifier for the user session.
     """
     with _active_caches_lock:
-        cache = _active_session_caches.pop(session_id, None)
-    if cache is not None:
+        caches = _active_session_caches.pop(session_id, [])
+    for cache in caches:
         cache.invalidate()
 
 
@@ -292,7 +293,7 @@ def batch_state_commits(session_id: str, store: MutableMapping):
     cache = BatchStateCache(session_id, store)
     _batch_context.cache = cache
     with _active_caches_lock:
-        _active_session_caches[session_id] = cache
+        _active_session_caches.setdefault(session_id, []).append(cache)
 
     try:
         logger.debug(f"Starting batch state commits context for {session_id}")
@@ -305,7 +306,13 @@ def batch_state_commits(session_id: str, store: MutableMapping):
             raise
         finally:
             with _active_caches_lock:
-                _active_session_caches.pop(session_id, None)
+                if session_id in _active_session_caches:
+                    try:
+                        _active_session_caches[session_id].remove(cache)
+                    except ValueError:
+                        pass
+                    if not _active_session_caches[session_id]:
+                        _active_session_caches.pop(session_id, None)
             # Clean up thread-local storage
             if hasattr(_batch_context, 'cache'):
                 delattr(_batch_context, 'cache')

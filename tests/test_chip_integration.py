@@ -915,6 +915,65 @@ class TestChipIntegration:
         assert post_flush_data["conversation"]["turn_count"] == 0
         clear_session_chip_seq(session_id)
 
+    def test_reset_invalidates_all_concurrent_overlapping_batch_caches(self):
+        """Test that reset invalidates ALL active batch caches if multiple requests overlap."""
+        import threading
+
+        from src.utils.batch_state import batch_state_commits
+        from src.utils.state_manager import (
+            clear_session_chip_seq,
+            reset_session_state,
+        )
+
+        session_id = "test_reset_concurrent_caches_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "conversation": {"turn_count": 5},
+                "chip_state": {"generation_seq": 5},
+                "payment": {"status": "completed"},
+                "current_order": {"order": ["drink"], "finished": False},
+                "history": {"items": ["drink"], "total_cost": 10.0},
+                "api_keys": {},
+            }
+        }
+
+        t1_entered = threading.Event()
+        t2_entered = threading.Event()
+        reset_done = threading.Event()
+
+        def worker1():
+            with batch_state_commits(session_id, store) as cache1:
+                cache1.update_section("conversation", {"turn_count": 6})
+                t1_entered.set()
+                reset_done.wait(timeout=5)
+
+        def worker2():
+            with batch_state_commits(session_id, store) as cache2:
+                cache2.update_section("conversation", {"turn_count": 7})
+                t2_entered.set()
+                reset_done.wait(timeout=5)
+
+        t1 = threading.Thread(target=worker1)
+        t2 = threading.Thread(target=worker2)
+        t1.start()
+        assert t1_entered.wait(timeout=5)
+        t2.start()
+        assert t2_entered.wait(timeout=5)
+
+        # Now reset the session while both t1 and t2 have active batch caches
+        reset_session_state(session_id, store)
+
+        # Allow both workers to exit and attempt to flush
+        reset_done.set()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        # Neither worker should have restored its stale turn count!
+        post_flush_data = store[session_id]
+        assert post_flush_data["conversation"]["turn_count"] == 0
+        clear_session_chip_seq(session_id)
+
 
 
 
