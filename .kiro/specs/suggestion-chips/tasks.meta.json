@@ -89,6 +89,37 @@
         "chatSessionId": "sess_faf21783-e3e8-47e0-9838-95e614441348",
         "timestamp": 1788995585202
       }
+    ],
+    "4.1 Add `determine_conversation_phase()` to `src/conversation/processor.py`": [
+      {
+        "executionId": "9bfcc726-a769-45c5-b129-304a1582acce",
+        "chatSessionId": "sess_837d4014-d2b0-44f6-ac4f-62ec1123e122",
+        "timestamp": 1789012338331
+      },
+      {
+        "executionId": "9bfcc726-a769-45c5-b129-304a1582acce",
+        "chatSessionId": "sess_837d4014-d2b0-44f6-ac4f-62ec1123e122",
+        "timestamp": 1789012638528
+      }
+    ],
+    "4.2 Write unit tests for phase detection": [
+      {
+        "executionId": "9bfcc726-a769-45c5-b129-304a1582acce",
+        "chatSessionId": "sess_837d4014-d2b0-44f6-ac4f-62ec1123e122",
+        "timestamp": 1789012641829
+      },
+      {
+        "executionId": "9bfcc726-a769-45c5-b129-304a1582acce",
+        "chatSessionId": "sess_837d4014-d2b0-44f6-ac4f-62ec1123e122",
+        "timestamp": 1789012644459
+      }
+    ],
+    "4. Implement conversation phase detection": [
+      {
+        "executionId": "9bfcc726-a769-45c5-b129-304a1582acce",
+        "chatSessionId": "sess_837d4014-d2b0-44f6-ac4f-62ec1123e122",
+        "timestamp": 1789012644720
+      }
     ]
   }
 }

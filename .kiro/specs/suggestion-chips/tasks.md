@@ -76,15 +76,15 @@
 - [x] 3. Checkpoint - Core chip generation tests pass
   - Ensure all ChipGenerator tests pass, ask user if questions arise
 
-- [ ] 4. Implement conversation phase detection
-  - [ ] 4.1 Add `determine_conversation_phase()` to `src/conversation/processor.py`
+- [x] 4. Implement conversation phase detection
+  - [x] 4.1 Add `determine_conversation_phase()` to `src/conversation/processor.py`
     - Detect payment phase (pending, processing, completed)
     - Detect greeting phase (early conversations <3 turns)
     - Detect describing phase (recipe keywords)
     - Detect ordering phase (order keywords)
     - Return "greeting" as default
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6_
-  - [ ] 4.2 Write unit tests for phase detection
+  - [x] 4.2 Write unit tests for phase detection
     - Test payment phase detection
     - Test greeting phase detection
     - Test describing phase detection

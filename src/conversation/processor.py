@@ -748,3 +748,47 @@ def process_order_stream(
                 clear_current_session()
                 if worker_thread is not None:
                     worker_thread.join(timeout=1)
+
+
+def determine_conversation_phase(session_state: dict, latest_response: str) -> str:
+    """
+    Determine current conversation phase from state and response.
+
+    Args:
+        session_state: Current session state dict (contains conversation_history and payment info)
+        latest_response: Maya's latest response text
+
+    Returns:
+        Phase identifier: one of "greeting", "ordering", "describing", "payment", "complete"
+    """
+    conversation_history = session_state.get("conversation_history", [])
+    payment_status = session_state.get("payment", {}).get("status", "none")
+
+    # Payment phase takes priority over content-based detection
+    if payment_status in ["pending", "processing"]:
+        return "payment"
+    if payment_status == "completed":
+        return "complete"
+
+    # Check response content for phase indicators.
+    # Use word-boundary regex to avoid substring false positives (e.g. "hi" inside
+    # "fashioned", "this", "anything").
+    latest_lower = latest_response.lower()
+
+    _GREETING_PATTERNS = [r'\bhello\b', r'\bhi\b', r'\bwelcome\b', r'good to see you']
+    if any(re.search(pat, latest_lower) for pat in _GREETING_PATTERNS):
+        return "greeting"
+
+    _DESCRIBING_PATTERNS = [r'\brecipe\b', r'\bingredients\b', r'made with', r'\bcontains\b']
+    if any(re.search(pat, latest_lower) for pat in _DESCRIBING_PATTERNS):
+        return "describing"
+
+    _ORDERING_PATTERNS = [r'\border\b', r'\bprepare\b', r'make you', r'coming right up']
+    if any(re.search(pat, latest_lower) for pat in _ORDERING_PATTERNS):
+        return "ordering"
+
+    # Default to greeting if early in conversation
+    if len(conversation_history) < 3:
+        return "greeting"
+
+    return "ordering"
