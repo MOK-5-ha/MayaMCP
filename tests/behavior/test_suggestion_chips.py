@@ -7,8 +7,8 @@ NOTE: This test file is part of the suggestion-chips specification PR.
 The tests will be skipped until the implementation PR lands.
 """
 
-from unittest.mock import MagicMock, patch
 import time
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
@@ -18,10 +18,10 @@ try:
     from src.conversation.chip_generator import ChipGenerator
     from src.schemas.chips import (
         ActionID,
+        ChipGenerationContext,
         ChipType,
         SuggestionChip,
         SuggestionChipSet,
-        ChipGenerationContext,
     )
     from src.utils.state_manager import (
         get_session_state,

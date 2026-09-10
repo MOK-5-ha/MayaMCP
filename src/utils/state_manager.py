@@ -17,14 +17,26 @@ logger = get_logger(__name__)
 
 # Import batch state cache for performance optimization
 try:
-    from .batch_state import get_current_batch_cache, is_in_batch_context
+    from .batch_state import (
+        clear_batch_cache_for_session,
+        get_batch_cache_for_session,
+        get_current_batch_cache,
+        is_in_batch_context,
+    )
 except ImportError:
     # Fallback if batch_state module is not available
     def get_current_batch_cache():
         return None
 
+    def get_batch_cache_for_session(session_id: str):
+        return None
+
+    def clear_batch_cache_for_session(session_id: str) -> None:
+        pass
+
     def is_in_batch_context():
         return False
+
 
 
 # =============================================================================
@@ -218,6 +230,9 @@ _session_locks_mutex = threading.Lock()  # Protects _session_locks dict
 # Track last access time for session expiry
 _session_last_access: dict[str, float] = {}
 
+# Process-wide sequence tracking for suggestion chip generation per session
+_session_chip_seq: dict[str, int] = {}
+
 def _parse_int_env(env_var: str, default: int, description: str) -> int:
     """
     Parse integer environment variable with defensive error handling.
@@ -298,14 +313,73 @@ def cleanup_session_lock(session_id: str) -> None:
 
     MUST be called from reset_session_state() to prevent memory leaks.
     Safe to call even if lock doesn't exist.
+    Acquires the per-session lock to avoid race conditions with in-flight turns.
 
     Args:
         session_id: Unique identifier for user session.
     """
     with _session_locks_mutex:
-        _session_locks.pop(session_id, None)
-        _session_last_access.pop(session_id, None)
+        lock = _session_locks.get(session_id)
+
+    if lock is not None:
+        with lock:
+            with _session_locks_mutex:
+                _session_locks.pop(session_id, None)
+                _session_last_access.pop(session_id, None)
+    else:
+        with _session_locks_mutex:
+            _session_locks.pop(session_id, None)
+            _session_last_access.pop(session_id, None)
     logger.debug(f"Session lock cleaned up for {session_id}")
+
+
+def clear_session_chip_seq(session_id: str) -> None:
+    """Explicitly clear sequence tracking for a session (used for test isolation)."""
+    with _session_locks_mutex:
+        _session_chip_seq.pop(session_id, None)
+
+
+def claim_chip_generation_seq(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> int:
+    """
+    Atomically claim the next generation_seq for a session.
+
+    Thread-safe across concurrent turns, background tasks, and batch contexts.
+    Ensures that concurrent turns cannot claim duplicate sequence numbers.
+    """
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        session_data = _get_session_data(session_id, store)
+        with _session_locks_mutex:
+            if session_id not in _session_chip_seq:
+                _session_chip_seq[session_id] = (
+                    session_data.get("chip_state", {}).get("generation_seq", 0)
+                )
+            _session_chip_seq[session_id] += 1
+            claimed_seq = _session_chip_seq[session_id]
+
+        chip_state = session_data.setdefault("chip_state", {})
+        chip_state["generation_seq"] = claimed_seq
+        session_data["chip_state"] = chip_state
+        _save_session_data(session_id, store, session_data)
+        return claimed_seq
+
+
+def get_chip_generation_seq(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> int:
+    """Get the latest claimed generation_seq for a session."""
+    session_id, store = _get_store_and_session(session_id, store)
+    with _session_locks_mutex:
+        if session_id in _session_chip_seq:
+            return _session_chip_seq[session_id]
+    session_data = _get_session_data(session_id, store)
+    return session_data.get("chip_state", {}).get("generation_seq", 0)
+
 
 
 def _cleanup_expired_sessions() -> None:
@@ -344,6 +418,7 @@ def _cleanup_expired_sessions() -> None:
 
                         _session_locks.pop(session_id, None)
                         _session_last_access.pop(session_id, None)
+                        _session_chip_seq.pop(session_id, None)
 
                     # Attempt client cleanup (may fail, but session state is already removed)
                     try:
@@ -383,6 +458,7 @@ def _cleanup_expired_sessions() -> None:
                         else:
                             _session_locks.pop(session_id, None)
                             _session_last_access.pop(session_id, None)
+                            _session_chip_seq.pop(session_id, None)
                             _session_retry_counts.pop(session_id, None)
 
                             logger.error(
@@ -531,7 +607,7 @@ def _deep_copy_defaults() -> dict[str, Any]:
     }
 
 
-def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
+def _get_session_data(session_id: str, store: MutableMapping | None = None) -> dict[str, Any]:
     """
     Retrieve session data from the store, initializing it if necessary.
 
@@ -542,12 +618,16 @@ def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
     Returns:
         The session data dictionary.
     """
-    # Check if we are in a batch context and can use cached data
-    if is_in_batch_context():
-        batch_cache = get_current_batch_cache()
-        if batch_cache and batch_cache.session_id == session_id and batch_cache.has_cached_data():
-            logger.debug(f"Using cached session data for {session_id}")
-            return batch_cache.get_cached_data()
+    session_id, store = _get_store_and_session(session_id, store)
+
+    # Check if this session has an active batch cache (in this thread or another)
+    batch_cache = get_current_batch_cache()
+    if not (batch_cache and batch_cache.session_id == session_id):
+        batch_cache = get_batch_cache_for_session(session_id)
+
+    if batch_cache and batch_cache.session_id == session_id and batch_cache.has_cached_data():
+        logger.debug(f"Using cached session data for {session_id}")
+        return batch_cache.get_cached_data()
 
     if session_id not in store:
         logger.info(f"Initializing new session state for {session_id}")
@@ -601,7 +681,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
 
     return session_data
 
-def _save_session_data(session_id: str, store: MutableMapping, data: dict[str, Any]) -> None:
+def _save_session_data(session_id: str, store: MutableMapping | None, data: dict[str, Any]) -> None:
     """
     Save session data back to the store.
 
@@ -610,17 +690,22 @@ def _save_session_data(session_id: str, store: MutableMapping, data: dict[str, A
         store: Mutable mapping to update.
         data: The full session data object.
     """
-    # Check if we are in a batch context to avoid immediate remote writes
-    if is_in_batch_context():
-        batch_cache = get_current_batch_cache()
-        if batch_cache and batch_cache.session_id == session_id:
-            # Update the batch cache instead of immediate write
-            batch_cache.set_cached_data(data, dirty=True)
-            logger.debug(f"Saved session data to batch cache for {session_id}")
-            return
+    session_id, store = _get_store_and_session(session_id, store)
+
+    # Check if this session has an active batch cache (in this thread or another)
+    batch_cache = get_current_batch_cache()
+    if not (batch_cache and batch_cache.session_id == session_id):
+        batch_cache = get_batch_cache_for_session(session_id)
+
+    if batch_cache and batch_cache.session_id == session_id and not getattr(batch_cache, '_invalidated', False):
+        # Update the batch cache instead of immediate write
+        batch_cache.set_cached_data(data, dirty=True)
+        logger.debug(f"Saved session data to batch cache for {session_id}")
+        return
 
     # Fall back to immediate write if not in batch context
     store[session_id] = data
+
 
 
 def initialize_state(session_id: str | None = None, store: MutableMapping | None = None) -> None:
@@ -750,19 +835,53 @@ def update_order_state(session_id: str | None = None, store: MutableMapping | No
 def reset_session_state(session_id: str | None = None, store: MutableMapping | None = None) -> None:
     """Reset all session state and cleanup session lock."""
     session_id, store = _get_store_and_session(session_id, store)
-    # Cleanup session lock to prevent memory leaks
-    cleanup_session_lock(session_id)
-    # Cleanup cached LLM/TTS clients for this session
-    try:
-        from ..llm.session_registry import clear_session_clients
-        clear_session_clients(session_id)
-    except Exception:
-        logger.error(
-            "Failed to clear session clients for %s",
-            session_id,
-            exc_info=True,
-        )
-    initialize_state(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        # Invalidate any in-flight batch cache first so that subsequent
+        # reads/writes in this reset do not hit stale batch cache, and any
+        # pending flush from prior request turns into a no-op.
+        clear_batch_cache_for_session(session_id)
+
+        # Advance sequence counter so any in-flight pre-reset generation tasks
+        # are immediately rendered stale and cannot overwrite post-reset suggestions
+        with _session_locks_mutex:
+            if session_id in _session_chip_seq:
+                _session_chip_seq[session_id] += 1
+            else:
+                data = _get_session_data(session_id, store)
+                _session_chip_seq[session_id] = (
+                    data.get("chip_state", {}).get("generation_seq", 0) + 1
+                )
+            reset_seq = _session_chip_seq[session_id]
+
+        # Cancel any active chip trigger task to prevent in-flight overwrites
+        try:
+            from ..conversation.processor import _session_trigger_tasks
+            prior_trigger = _session_trigger_tasks.pop(session_id, None)
+            if prior_trigger and not prior_trigger.done():
+                prior_trigger.cancel()
+        except ImportError:
+            pass
+
+        # Cleanup cached LLM/TTS clients for this session
+        try:
+            from ..llm.session_registry import clear_session_clients
+            clear_session_clients(session_id)
+        except Exception:
+            logger.error(
+                "Failed to clear session clients for %s",
+                session_id,
+                exc_info=True,
+            )
+        initialize_state(session_id, store)
+        # Store the advanced sequence in the reinitialized session state
+        data = _get_session_data(session_id, store)
+        chip_state = data.setdefault("chip_state", {})
+        chip_state["generation_seq"] = reset_seq
+        data["chip_state"] = chip_state
+        _save_session_data(session_id, store, data)
+
+        cleanup_session_lock(session_id)
     logger.info(f"Session state reset for {session_id}")
 
 def is_order_finished(session_id: str | None = None, store: MutableMapping | None = None) -> bool:

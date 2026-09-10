@@ -76,15 +76,15 @@
 - [x] 3. Checkpoint - Core chip generation tests pass
   - Ensure all ChipGenerator tests pass, ask user if questions arise
 
-- [ ] 4. Implement conversation phase detection
-  - [ ] 4.1 Add `determine_conversation_phase()` to `src/conversation/processor.py`
+- [x] 4. Implement conversation phase detection
+  - [x] 4.1 Add `determine_conversation_phase()` to `src/conversation/processor.py`
     - Detect payment phase (pending, processing, completed)
     - Detect greeting phase (early conversations <3 turns)
     - Detect describing phase (recipe keywords)
     - Detect ordering phase (order keywords)
     - Return "greeting" as default
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6_
-  - [ ] 4.2 Write unit tests for phase detection
+  - [x] 4.2 Write unit tests for phase detection
     - Test payment phase detection
     - Test greeting phase detection
     - Test describing phase detection
@@ -92,38 +92,38 @@
     - Test early conversation default
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6_
 
-- [ ] 5. Integrate chip generation into conversation processor
-  - [ ] 5.1 Modify `process_user_message()` to trigger chip generation
+- [x] 5. Integrate chip generation into conversation processor
+  - [x] 5.1 Modify `process_user_message()` to trigger chip generation
     - Extract last 4 conversation turns for context
     - Build ChipGenerationContext with turns, payment status, phase
     - Instantiate ChipGenerator and call generate_chips_async()
     - Store result in session state chip_state.current_chips
     - Use generate_fallback_chips() when conversation history empty
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 8.4_
-  - [ ] 5.2 Write integration test for chip generation flow
+  - [x] 5.2 Write integration test for chip generation flow
     - Test full flow: user message → response stream → chip generation → session storage
     - Test fallback chips for empty conversation history
     - Test chip storage in session state
     - Verify non-blocking behavior (response completes before chips)
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 6. Implement context-aware chip content generation
-  - [ ] 6.1 Add post-order payment chip instructions to prompt
+- [x] 6. Implement context-aware chip content generation
+  - [x] 6.1 Add post-order payment chip instructions to prompt
     - Prioritize payment and order_another action chips after order completion
     - _Requirements: 3.1_
-  - [ ] 6.2 Add drink description follow-up chip instructions
+  - [x] 6.2 Add drink description follow-up chip instructions
     - Generate follow-up dialogue chips after drink descriptions
     - _Requirements: 3.2_
-  - [ ] 6.3 Add greeting phase menu inquiry chips
+  - [x] 6.3 Add greeting phase menu inquiry chips
     - Generate menu-related dialogue chips in greeting phase
     - _Requirements: 3.3_
-  - [ ] 6.4 Add payment pending priority weighting
+  - [x] 6.4 Add payment pending priority weighting
     - Prioritize payment action chip when payment status is pending
     - _Requirements: 3.4_
-  - [ ] 6.5 Implement deduplication logic
+  - [x] 6.5 Implement deduplication logic
     - Filter recent user messages (last 2) from chip text generation
     - _Requirements: 3.5_
-  - [ ] 6.6 Write integration tests for context-aware generation
+  - [x] 6.6 Write integration tests for context-aware generation
     - Test post-order context generates payment chips
     - Test drink description context generates follow-up chips
     - Test greeting context generates menu inquiry chips
@@ -131,7 +131,7 @@
     - Test deduplication filters recent user messages
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 7. Checkpoint - Conversation integration tests pass
+- [x] 7. Checkpoint - Conversation integration tests pass
   - Ensure all processor integration tests pass, ask user if questions arise
 
 - [ ] 8. Create Gradio chip UI components

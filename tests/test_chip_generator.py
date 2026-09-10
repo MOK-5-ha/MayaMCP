@@ -30,7 +30,6 @@ from src.schemas.chips import (
     SuggestionChipSet,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -770,6 +769,44 @@ class TestPendingTaskCancellation:
 
         # Assert: Cancel was not called (task already done)
         mock_future.cancel.assert_not_called()
+
+    @patch("src.utils.state_manager.get_chip_generation_seq", return_value=2)
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    def test_superseded_task_does_not_cancel_newer_pending_task(
+        self,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        mock_get_seq,
+        session_id,
+        mock_session_state,
+        mock_session_lock,
+        valid_context,
+        mock_llm_client,
+    ):
+        """Test that an older task does not cancel a newer task or consume rate limits."""
+        mock_future = Mock(spec=Future)
+        mock_future.done.return_value = False
+        mock_future.cancel = Mock()
+
+        mock_session_state["chip_state"]["pending_task"] = mock_future
+        mock_session_state["chip_state"]["pending_task_seq"] = 2
+        mock_session_state["chip_state"]["last_generation_time"] = 0
+
+        mock_get_session.return_value = mock_session_state
+        mock_get_lock.return_value = mock_session_lock
+
+        generator = ChipGenerator(session_id=session_id, llm_client=mock_llm_client)
+
+        # Act: call with older seq 1 (current is seq 2)
+        result = generator.generate_chips_async(valid_context, generation_seq=1)
+
+        # Assert: returns None immediately, does not cancel newer task, does not save session
+        assert result is None
+        mock_future.cancel.assert_not_called()
+        mock_save_session.assert_not_called()
 
 
 # =============================================================================

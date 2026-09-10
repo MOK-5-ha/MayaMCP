@@ -18,7 +18,6 @@ from hypothesis import strategies as st
 from src.conversation.chip_generator import ChipGenerator
 from src.schemas.chips import ChipGenerationContext, SuggestionChipSet
 
-
 # =============================================================================
 # Test Configuration
 # =============================================================================

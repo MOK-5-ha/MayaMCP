@@ -6,12 +6,12 @@ Thread Pool Cancellation Limitation:
     occurs (3s), Future.cancel() prevents the caller from waiting further, but the
     background thread continues executing until the LLM call completes or retry
     logic exhausts (~30s with tenacity). This is acceptable because:
-    
+
     1. Most timeouts are due to slow network/API, not aggressive timeout
     2. Worker pool is sized (10 threads) to handle occasional slow requests
     3. True cancellation would require asyncio (breaking change) or cooperative
        cancellation (requires modifying google-genai SDK)
-    
+
     Session-Scoped Clients:
     ChipGenerator accepts an optional llm_client in __init__ for dependency
     injection (primarily for testing). When None, it uses get_genai_client()
@@ -19,9 +19,8 @@ Thread Pool Cancellation Limitation:
     per-session clients to ChipGenerator; all sessions share the global client.
 """
 
-import logging
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any
 
@@ -29,8 +28,7 @@ from google import genai
 from pydantic import ValidationError
 
 from ..config.logging_config import get_logger
-from ..config.model_config import get_model_config
-from ..llm.client import build_generate_config, call_gemini_api, get_genai_client
+from ..llm.client import call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
     ChipGenerationContext,
@@ -68,7 +66,9 @@ class ChipGenerator:
         self._cache: dict[str, Any] = {}  # Context representation cache
 
     def generate_chips_async(
-        self, context: ChipGenerationContext
+        self,
+        context: ChipGenerationContext,
+        generation_seq: int | None = None,
     ) -> SuggestionChipSet | None:
         """
         Generate chips asynchronously with timeout.
@@ -79,6 +79,8 @@ class ChipGenerator:
 
         Args:
             context: Chip generation context with conversation history
+            generation_seq: Optional sequence token to prevent superseded tasks from
+                           cancelling or rate-limiting newer generations.
 
         Returns:
             SuggestionChipSet or None on timeout/failure
@@ -88,6 +90,7 @@ class ChipGenerator:
             _get_session_data,
             _get_store_and_session,
             _save_session_data,
+            get_chip_generation_seq,
             get_session_lock,
         )
 
@@ -97,12 +100,22 @@ class ChipGenerator:
         current_time = time.time()
         future = None
 
-        # Atomically check rate limit, cancel pending task, and submit new task
+        # Atomically check freshness, rate limit, cancel pending task, and submit new task
         with lock:
             data = _get_session_data(session_id, store)
             chip_state = data.get("chip_state", {})
-            last_gen_time = chip_state.get("last_generation_time", 0)
 
+            # Check if this generation has been superseded by a newer turn
+            if generation_seq is not None:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq < latest_seq:
+                    logger.info(
+                        f"Skipping superseded chip generation for session {session_id} "
+                        f"(task seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
+            last_gen_time = chip_state.get("last_generation_time", 0)
             if current_time - last_gen_time < self.RATE_LIMIT_SECONDS:
                 logger.warning(
                     f"Rate limit exceeded for session {self.session_id}, "
@@ -110,9 +123,15 @@ class ChipGenerator:
                 )
                 return None
 
-            # Cancel pending task if exists
+            # Cancel pending task if exists (only if pending task is not newer)
             pending_task = chip_state.get("pending_task")
             if pending_task and not pending_task.done():
+                pending_seq = chip_state.get("pending_task_seq")
+                if generation_seq is not None and pending_seq is not None and pending_seq > generation_seq:
+                    logger.info(
+                        f"Not cancelling pending task with newer seq {pending_seq} > {generation_seq}"
+                    )
+                    return None
                 logger.info(
                     f"Cancelling pending chip generation for {self.session_id}"
                 )
@@ -121,6 +140,7 @@ class ChipGenerator:
             # Submit generation task and store it atomically
             future = _chip_executor.submit(self._generate_chips_sync, context)
             chip_state["pending_task"] = future
+            chip_state["pending_task_seq"] = generation_seq
             data["chip_state"] = chip_state
             _save_session_data(session_id, store, data)
 
@@ -130,12 +150,21 @@ class ChipGenerator:
 
             # Update metadata
             with lock:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq is not None and generation_seq < latest_seq:
+                    logger.info(
+                        f"Discarding stale completion metadata for session {self.session_id} "
+                        f"(seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["last_generation_time"] = current_time
                 chip_state["generation_count"] = (
                     chip_state.get("generation_count", 0) + 1
                 )
+                chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
 
@@ -153,15 +182,24 @@ class ChipGenerator:
             # handle occasional slow requests without exhaustion.
             if future and not future.done():
                 future.cancel()  # Prevents awaiting, but thread continues
-            
+
             logger.warning(
                 f"Chip generation timeout ({self.TIMEOUT_SECONDS}s) "
                 f"for session {self.session_id}"
             )
             with lock:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq is not None and generation_seq < latest_seq:
+                    logger.info(
+                        f"Discarding stale timeout metadata for session {self.session_id} "
+                        f"(seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
+                chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
             return None
@@ -172,12 +210,22 @@ class ChipGenerator:
                 exc_info=True,
             )
             with lock:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq is not None and generation_seq < latest_seq:
+                    logger.info(
+                        f"Discarding stale error metadata for session {self.session_id} "
+                        f"(seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
+                chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
             return None
+
 
     def _generate_chips_sync(
         self, context: ChipGenerationContext
@@ -194,10 +242,6 @@ class ChipGenerator:
         try:
             # Build prompt
             prompt = self._build_chip_prompt(context)
-
-            # Get model configuration
-            model_config = get_model_config()
-            model_version = model_config["model_version"]
 
             # Build the generation config for structured output
             generation_config = {
@@ -244,13 +288,16 @@ class ChipGenerator:
         at the beginning, dynamic context at the end). Enforces MAX_PROMPT_TOKENS
         by truncating conversation turns and recent messages.
 
+        Includes context-aware phase-specific instructions to prioritize relevant
+        chips based on conversation phase and payment status.
+
         Args:
             context: Generation context
 
         Returns:
             Formatted prompt string
         """
-        # Static instruction prefix (cacheable) - approximately 300 tokens
+        # Static instruction prefix (cacheable) - approximately 350 tokens
         system_instructions = """You are a suggestion chip generator for Maya, an AI bartending agent.
 
 Your task is to generate 3-6 contextual suggestion chips that help users continue the conversation naturally.
@@ -273,6 +320,28 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 - menu: View drink menu
 - cancel: Cancel current order
 - order_another: Order another drink
+
+**Phase-Specific Priorities:**
+
+**Greeting Phase:**
+- Include menu-related dialogue chips (e.g., "Show me the menu", "What's popular?")
+- Focus on drink preferences and exploration questions
+- Keep conversation welcoming and open-ended
+
+**Ordering Phase:**
+- After order completion, prioritize payment and order_another action chips
+- Include modification dialogue chips (e.g., "Make it stronger", "Extra ice")
+- Offer confirmation or clarification options
+
+**Describing Phase:**
+- Generate follow-up dialogue chips for drink details
+- Include questions about ingredients, taste, or preparation
+- Offer customization suggestions
+
+**Payment Phase:**
+- When payment is pending, prioritize payment action chip as first option
+- Include cancel action chip
+- Add tip-related options after payment completion
 
 **Example Output:**
 {
@@ -297,9 +366,9 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
         for turn in context.conversation_turns:
             line = f"{turn['role']}: {turn['content']}"
             conversation_lines.append(line)
-        
+
         conversation_context = "\n".join(conversation_lines)
-        
+
         # Truncate conversation context if needed
         if len(conversation_context) > remaining_chars * 0.7:  # Reserve 30% for other fields
             max_conv_chars = int(remaining_chars * 0.7)
@@ -310,11 +379,16 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
             if context.recent_user_messages
             else "None"
         )
-        
+
         # Truncate recent messages if needed
         max_recent_chars = int(remaining_chars * 0.2)
         if len(recent_messages) > max_recent_chars:
             recent_messages = recent_messages[:max_recent_chars] + "..."
+
+        # Add phase-specific guidance to dynamic context
+        phase_guidance = self._get_phase_specific_guidance(
+            context.conversation_phase, context.payment_status
+        )
 
         context_section = f"""
 **Current Conversation:**
@@ -325,9 +399,43 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 **Recent User Messages (do not repeat):**
 {recent_messages}
 
+**Current Phase Guidance:**
+{phase_guidance}
+
 Generate 3-6 suggestion chips now:"""
 
         return system_instructions + context_section
+
+    def _get_phase_specific_guidance(
+        self, phase: str, payment_status: str | None
+    ) -> str:
+        """
+        Get phase-specific guidance for chip generation.
+
+        Args:
+            phase: Current conversation phase
+            payment_status: Current payment status
+
+        Returns:
+            Phase-specific guidance string
+        """
+        guidance_map = {
+            "greeting": "Focus on menu exploration and drink preferences. Include at least one menu-related option.",
+            "ordering": "After order completion, prioritize payment and order_another action chips. Include customization options.",
+            "describing": "Generate follow-up dialogue chips for drink details. Include at least 2 dialogue chips with questions about ingredients or taste.",
+            "payment": "Prioritize payment action chip as first option when payment is pending. Include cancel option.",
+            "complete": "Offer order_another action chip and thank-you dialogue options.",
+        }
+
+        base_guidance = guidance_map.get(
+            phase, "Generate contextually relevant chips for current conversation."
+        )
+
+        # Add payment-specific guidance if payment is pending
+        if payment_status == "pending":
+            base_guidance += " URGENT: Payment is pending - place payment action chip first."
+
+        return base_guidance
 
     def generate_fallback_chips(self) -> SuggestionChipSet:
         """
