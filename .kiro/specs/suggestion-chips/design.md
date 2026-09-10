@@ -1428,3 +1428,342 @@ All chip generation events logged at appropriate levels:
 This design provides a comprehensive, production-ready architecture for dynamic suggestion chips in MayaMCP. The parallel execution model ensures zero latency impact on response streaming, while Pydantic v2 validation guarantees type-safe, well-formed chip data. Graceful degradation and thread-safe state management ensure robustness in production environments.
 
 The correctness properties defined above provide a complete specification for property-based testing, ensuring comprehensive coverage of all functional requirements and edge cases.
+
+## BDD Acceptance Testing
+
+### Overview
+
+This specification includes comprehensive Behavior-Driven Development (BDD) acceptance tests using pytest-bdd with Gherkin scenarios. BDD tests provide executable acceptance criteria that bridge the gap between requirements, design, and implementation, allowing product stakeholders and developers to validate system behavior using natural language scenarios.
+
+### Purpose
+
+- **Traceability**: Each scenario maps directly to specific requirements for full requirements coverage
+- **Executable Documentation**: Gherkin scenarios serve as living documentation that stays synchronized with the codebase
+- **Stakeholder Communication**: Non-technical stakeholders can read and validate scenarios
+- **Regression Prevention**: Comprehensive scenario coverage prevents behavioral regressions during refactoring
+
+### Test File Location
+
+- **Feature File**: `tests/behavior/features/suggestion_chips.feature`
+- **Step Definitions**: `tests/behavior/test_suggestion_chips.py`
+- **Execution**: Run with `pytest -m bdd` or alongside full test suite with `pytest`
+
+### Scenario Coverage
+
+The BDD test suite covers the following user-facing behaviors:
+
+1. **Greeting Phase Chip Generation**
+   - Verifies menu inquiry chips appear in greeting phase
+   - Validates chip text contains menu-related suggestions
+   - Ensures fallback chips render when conversation history is empty
+
+2. **Ordering Phase Chip Generation**
+   - Validates payment and order_another action chips after order completion
+   - Ensures chip set prioritizes payment action when order is pending
+
+3. **Payment Pending Phase**
+   - Verifies payment action chip appears with high priority
+   - Validates cancel action chip availability
+   - Ensures chip text reflects payment context
+
+4. **Drink Description Phase**
+   - Validates follow-up dialogue chips after drink description
+   - Ensures chip text prompts additional questions or clarifications
+
+5. **Chip Deduplication**
+   - Validates generated chips do not match recent user messages (last 2)
+   - Tests case-insensitive deduplication
+
+6. **Action Chip Auto-Submit**
+   - Verifies action chips populate textbox and auto-submit
+   - Validates routing to payment, tip, menu, cancel, order_another flows
+
+7. **Dialogue Chip Focus Behavior**
+   - Verifies dialogue chips populate textbox without auto-submit
+   - Validates input receives focus after click for immediate editing
+
+8. **Graceful Degradation on LLM Timeout/Failure**
+   - Validates empty chip set renders when generation times out (>3s)
+   - Ensures conversation continues normally without user-visible errors
+   - Verifies fallback chips render when LLM validation fails
+
+9. **Keyboard Navigation and Accessibility**
+   - Validates Tab key navigation through chips
+   - Verifies Enter and Space keys activate chips
+   - Ensures focus indicators are visible (2px outline)
+   - Validates ARIA labels for screen readers
+
+10. **Session Reset Clears Chips**
+    - Verifies chip state is cleared on session reset
+    - Ensures no stale chips persist across sessions
+
+### Sample Gherkin Scenarios
+
+Below are representative examples from the full feature file. See `tests/behavior/features/suggestion_chips.feature` for the complete scenario suite.
+
+```gherkin
+Feature: Suggestion Chips for Contextual User Guidance
+
+  As a MayaMCP user
+  I want to see contextual suggestion chips after Maya's responses
+  So that I can continue the conversation naturally with one-click actions
+
+  Background:
+    Given a new Maya session is created
+    And the chip generator is initialized
+
+  Scenario: Greeting phase generates menu inquiry chips
+    Given the conversation is in the "greeting" phase
+    When Maya responds with a greeting message
+    And chip generation completes successfully
+    Then suggestion chips should be visible
+    And at least one chip should contain "menu" related text
+    And chip count should be between 3 and 6
+
+  Scenario: Order completion generates payment action chip
+    Given the conversation is in the "ordering" phase
+    And Maya completes a drink order with price "$12"
+    When chip generation completes successfully
+    Then suggestion chips should be visible
+    And at least one chip should be an action chip with action_id "payment"
+    And the payment chip text should contain "payment" or "pay"
+
+  Scenario: Payment pending prioritizes payment action chip
+    Given the conversation is in the "payment" phase
+    And payment status is "pending"
+    When chip generation completes successfully
+    Then suggestion chips should be visible
+    And the first chip should be an action chip with action_id "payment"
+    And at least one chip should be an action chip with action_id "cancel"
+
+  Scenario: Drink description generates follow-up dialogue chips
+    Given the conversation is in the "describing" phase
+    And Maya describes a drink with ingredients
+    When chip generation completes successfully
+    Then suggestion chips should be visible
+    And at least 2 chips should be dialogue chips
+    And dialogue chip text should prompt follow-up questions
+
+  Scenario: Chips are deduplicated against recent user messages
+    Given the user has sent messages: "Tell me more", "What's in it?"
+    When chip generation completes successfully
+    Then suggestion chips should be visible
+    And no chip text should match "Tell me more" (case-insensitive)
+    And no chip text should match "What's in it?" (case-insensitive)
+
+  Scenario: Action chip auto-submits on click
+    Given suggestion chips are visible
+    And a chip with action_id "payment" is present
+    When the user clicks the payment action chip
+    Then the textbox should contain the chip text (without icon prefix)
+    And the message should be auto-submitted
+    And the conversation should route to payment flow
+
+  Scenario: Dialogue chip populates textbox without auto-submit
+    Given suggestion chips are visible
+    And a dialogue chip with text "Tell me more" is present
+    When the user clicks the dialogue chip
+    Then the textbox should contain "Tell me more"
+    And the textbox should have focus
+    And the message should NOT be auto-submitted
+
+  Scenario: Graceful degradation when LLM generation times out
+    Given the LLM call will exceed 3 seconds
+    When chip generation is triggered
+    Then chip generation should timeout after 3 seconds
+    And an empty chip set should be returned
+    And no chips should be visible in the UI
+    And the conversation should continue normally
+    And a timeout warning should be logged
+
+  Scenario: Graceful degradation when LLM validation fails
+    Given the LLM returns invalid JSON for chip generation
+    When chip generation is triggered
+    Then Pydantic validation should fail
+    And an empty chip set should be returned
+    And no chips should be visible in the UI
+    And a validation error should be logged
+
+  Scenario: Keyboard navigation through chips
+    Given suggestion chips are visible with 5 chips
+    When the user presses Tab repeatedly
+    Then focus should cycle through all 5 chips
+    And each focused chip should display a focus indicator (2px outline)
+
+  Scenario: Enter key activates focused chip
+    Given suggestion chips are visible
+    And the first chip (dialogue) is focused
+    When the user presses Enter
+    Then the chip should activate (populate textbox)
+    And the behavior should match a click event
+
+  Scenario: Space key activates focused chip
+    Given suggestion chips are visible
+    And the second chip (action) is focused
+    When the user presses Space
+    Then the chip should activate (populate and auto-submit)
+    And the behavior should match a click event
+
+  Scenario: ARIA labels announce chip type and text
+    Given suggestion chips are visible
+    And a dialogue chip with text "Surprise me" is present
+    When a screen reader queries the chip
+    Then the ARIA label should be "dialogue chip: Surprise me"
+
+  Scenario: Session reset clears chip state
+    Given suggestion chips are visible with 4 chips
+    And chip_state contains current_chips data
+    When the user resets the session
+    Then chip_state should be empty
+    And no chips should be visible in the UI
+
+  Scenario: Chips persist across UI refreshes within same turn
+    Given suggestion chips are visible with 6 chips
+    When the UI component refreshes (without new user message)
+    Then the same 6 chips should remain visible
+    And chip content should be unchanged
+
+  Scenario: Chips hide when user submits new message
+    Given suggestion chips are visible with 5 chips
+    When the user submits a new message
+    Then chips should hide immediately
+    And chips should remain hidden until Maya responds
+
+  Scenario: Empty conversation history generates fallback chips
+    Given the conversation history is empty
+    When chip generation is triggered
+    Then fallback greeting chips should be returned
+    And fallback chips should include "Show me the menu" action chip
+    And fallback chips should include "Surprise me" dialogue chip
+
+  Scenario: Rate limit prevents rapid chip generation
+    Given chip generation completed 1 second ago
+    When chip generation is triggered again
+    Then generation should be skipped (rate limit)
+    And a rate limit warning should be logged
+    And no new chips should be generated
+
+  Scenario: Pending task cancellation when new message arrives
+    Given chip generation is in progress (pending)
+    When the user submits a new message
+    Then the pending chip generation task should be cancelled
+    And new chip generation should start for the new turn
+```
+
+### Implementation Notes
+
+#### Step Definitions
+
+Step definitions in `tests/behavior/test_suggestion_chips.py` will:
+
+1. **Reuse Existing Fixtures**: Leverage `conftest.py` fixtures for session state, mock LLM client, and chip generator instances
+2. **Mock External Dependencies**: Use standard mocking patterns from unit tests for Gemini API calls
+3. **Shared State Management**: Use pytest-bdd context sharing to pass data between Given/When/Then steps
+4. **Assertion Helpers**: Import assertion utilities from existing test modules for DRY principles
+
+Example step definition structure:
+
+```python
+import pytest
+from pytest_bdd import given, when, then, scenario, parsers
+
+from src.conversation.chip_generator import ChipGenerator
+from src.schemas.chips import ChipGenerationContext, SuggestionChipSet
+
+# Scenario registration
+@scenario('../features/suggestion_chips.feature', 'Greeting phase generates menu inquiry chips')
+def test_greeting_phase_chips():
+    pass
+
+# Step definitions
+@given('a new Maya session is created')
+def create_session(mock_session_state):
+    """Set up clean session state for BDD test."""
+    mock_session_state.clear()
+    return "test_session_123"
+
+@given('the conversation is in the "greeting" phase')
+def set_greeting_phase(mock_session_state):
+    """Configure session state for greeting phase."""
+    mock_session_state["conversation_history"] = []
+    mock_session_state["payment"] = {"status": "none"}
+
+@when('Maya responds with a greeting message')
+def maya_greeting_response(mock_session_state):
+    """Simulate Maya greeting response."""
+    mock_session_state["conversation_history"].append({
+        "role": "assistant",
+        "content": "Hello! Welcome to Maya's Bar. What can I get you?"
+    })
+
+@when('chip generation completes successfully')
+def generate_chips(mock_chip_generator, mock_session_state):
+    """Trigger chip generation with mocked LLM."""
+    context = ChipGenerationContext(
+        conversation_turns=mock_session_state["conversation_history"],
+        payment_status="none",
+        conversation_phase="greeting",
+        recent_user_messages=[]
+    )
+    chip_set = mock_chip_generator.generate_chips_async(context)
+    mock_session_state["chip_state"] = {"current_chips": chip_set}
+
+@then('suggestion chips should be visible')
+def assert_chips_visible(mock_session_state):
+    """Verify chips are present in session state."""
+    chip_set = mock_session_state["chip_state"]["current_chips"]
+    assert chip_set is not None
+    assert len(chip_set.chips) > 0
+
+@then(parsers.parse('chip count should be between {min:d} and {max:d}'))
+def assert_chip_count_range(mock_session_state, min, max):
+    """Verify chip count falls within valid range."""
+    chip_set = mock_session_state["chip_state"]["current_chips"]
+    assert min <= len(chip_set.chips) <= max
+```
+
+#### Integration with CI/CD
+
+BDD tests run alongside the standard pytest suite:
+
+```bash
+# Run all tests (including BDD)
+pytest
+
+# Run only BDD tests
+pytest -m bdd
+
+# Run BDD with coverage
+pytest -m bdd --cov=src/conversation --cov=src/schemas --cov=src/ui
+
+# Generate BDD report
+pytest --gherkin-terminal-reporter
+```
+
+#### Traceability Matrix
+
+Each scenario includes inline requirement references via comments:
+
+```gherkin
+# Requirements: 3.3, 3.6, 8.4
+Scenario: Greeting phase generates menu inquiry chips
+  ...
+```
+
+This ensures full traceability from requirements → design → implementation → acceptance tests.
+
+### Benefits
+
+1. **Living Documentation**: Scenarios stay synchronized with codebase, never going stale
+2. **Stakeholder Validation**: Product owners can review and approve scenarios before implementation
+3. **Regression Safety**: Comprehensive coverage prevents behavioral regressions during refactoring
+4. **Onboarding**: New developers understand feature behavior through natural language scenarios
+5. **Requirements Validation**: Ensures all requirements have corresponding acceptance tests
+
+### Maintenance
+
+- **Update scenarios when requirements change**: Treat Gherkin as first-class specification artifact
+- **Keep step definitions DRY**: Reuse fixtures and assertion helpers across scenarios
+- **Run BDD tests in CI**: Ensure no PR merges without passing acceptance tests
+- **Review scenario coverage during design reviews**: Validate completeness before implementation
+
