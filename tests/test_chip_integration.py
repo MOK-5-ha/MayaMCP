@@ -876,6 +876,47 @@ class TestChipIntegration:
                 assert data["chip_state"]["generation_count"] == 0
         clear_session_chip_seq(session_id)
 
+    def test_reset_session_state_invalidates_active_batch_cache_and_prevents_stale_flush(self):
+        """Test that reset invalidates active batch cache and prevents earlier request from restoring stale state."""
+        from src.utils.batch_state import batch_state_commits
+        from src.utils.state_manager import (
+            clear_session_chip_seq,
+            reset_session_state,
+        )
+
+        session_id = "test_reset_stale_batch_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "conversation": {"turn_count": 5},
+                "chip_state": {"generation_seq": 5},
+                "payment": {"status": "completed"},
+                "current_order": {"order": ["drink"], "finished": False},
+                "history": {"items": ["drink"], "total_cost": 10.0},
+                "api_keys": {},
+            }
+        }
+
+        # Turn 1 enters batch_state_commits
+        with batch_state_commits(session_id, store) as batch_cache:
+            # Turn 1 makes changes in batch cache
+            batch_cache.update_section("conversation", {"turn_count": 6})
+
+            # Session is reset while Turn 1 is still active
+            reset_session_state(session_id, store)
+
+            # Store must have clean state now
+            clean_data = store[session_id]
+            assert clean_data["conversation"]["turn_count"] == 0
+
+        # When Turn 1 exits batch_state_commits and calls flush(),
+        # it must NOT restore the pre-reset turn 6!
+        post_flush_data = store[session_id]
+        assert post_flush_data["conversation"]["turn_count"] == 0
+        clear_session_chip_seq(session_id)
+
+
+
 
 
 

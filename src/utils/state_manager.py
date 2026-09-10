@@ -697,7 +697,7 @@ def _save_session_data(session_id: str, store: MutableMapping | None, data: dict
     if not (batch_cache and batch_cache.session_id == session_id):
         batch_cache = get_batch_cache_for_session(session_id)
 
-    if batch_cache and batch_cache.session_id == session_id:
+    if batch_cache and batch_cache.session_id == session_id and not getattr(batch_cache, '_invalidated', False):
         # Update the batch cache instead of immediate write
         batch_cache.set_cached_data(data, dirty=True)
         logger.debug(f"Saved session data to batch cache for {session_id}")
@@ -837,6 +837,11 @@ def reset_session_state(session_id: str | None = None, store: MutableMapping | N
     session_id, store = _get_store_and_session(session_id, store)
     lock = get_session_lock(session_id)
     with lock:
+        # Invalidate any in-flight batch cache first so that subsequent
+        # reads/writes in this reset do not hit stale batch cache, and any
+        # pending flush from prior request turns into a no-op.
+        clear_batch_cache_for_session(session_id)
+
         # Advance sequence counter so any in-flight pre-reset generation tasks
         # are immediately rendered stale and cannot overwrite post-reset suggestions
         with _session_locks_mutex:
@@ -876,7 +881,6 @@ def reset_session_state(session_id: str | None = None, store: MutableMapping | N
         data["chip_state"] = chip_state
         _save_session_data(session_id, store, data)
 
-        clear_batch_cache_for_session(session_id)
         cleanup_session_lock(session_id)
     logger.info(f"Session state reset for {session_id}")
 
