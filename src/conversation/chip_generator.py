@@ -150,12 +150,21 @@ class ChipGenerator:
 
             # Update metadata
             with lock:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq is not None and generation_seq < latest_seq:
+                    logger.info(
+                        f"Discarding stale completion metadata for session {self.session_id} "
+                        f"(seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["last_generation_time"] = current_time
                 chip_state["generation_count"] = (
                     chip_state.get("generation_count", 0) + 1
                 )
+                chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
 
@@ -179,9 +188,18 @@ class ChipGenerator:
                 f"for session {self.session_id}"
             )
             with lock:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq is not None and generation_seq < latest_seq:
+                    logger.info(
+                        f"Discarding stale timeout metadata for session {self.session_id} "
+                        f"(seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
+                chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
             return None
@@ -192,12 +210,22 @@ class ChipGenerator:
                 exc_info=True,
             )
             with lock:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq is not None and generation_seq < latest_seq:
+                    logger.info(
+                        f"Discarding stale error metadata for session {self.session_id} "
+                        f"(seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
+                chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
             return None
+
 
     def _generate_chips_sync(
         self, context: ChipGenerationContext

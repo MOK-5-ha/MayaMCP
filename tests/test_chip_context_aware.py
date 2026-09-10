@@ -10,17 +10,18 @@ Tests all context-aware generation scenarios including:
 **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5**
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from threading import RLock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from src.conversation.chip_generator import ChipGenerator
 from src.schemas.chips import (
-    ChipGenerationContext,
-    SuggestionChipSet,
-    SuggestionChip,
-    ChipType,
     ActionID,
+    ChipGenerationContext,
+    ChipType,
+    SuggestionChip,
+    SuggestionChipSet,
 )
 
 

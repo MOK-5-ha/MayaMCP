@@ -726,9 +726,163 @@ class TestChipIntegration:
         assert seq2 > seq1
         clear_session_chip_seq(session_id)
 
+    def test_batch_flush_does_not_discard_fresh_chips_from_background_generation(self):
+        """Test that batch flush does not overwrite fresh chips written by background generation."""
+        import copy
+        import threading
+
+        from src.schemas.chips import ChipType, SuggestionChip, SuggestionChipSet
+        from src.utils.batch_state import batch_state_commits
+        from src.utils.state_manager import (
+            _get_session_data,
+            _save_session_data,
+            claim_chip_generation_seq,
+            clear_session_chip_seq,
+            get_session_lock,
+        )
+
+        class RemoteStore(dict):
+            """Simulates remote modal.Dict by returning deep copies on read/write."""
+            def __getitem__(self, key):
+                return copy.deepcopy(super().__getitem__(key))
+            def __setitem__(self, key, value):
+                super().__setitem__(key, copy.deepcopy(value))
+
+        session_id = "test_batch_flush_chip_session"
+        clear_session_chip_seq(session_id)
+        store = RemoteStore({
+            session_id: {
+                "conversation": {"turn": 1},
+                "conversation_history": [],
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                },
+            }
+        })
+
+        fresh_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Gin & Tonic", type=ChipType.DIALOGUE),
+                SuggestionChip(text="Old Fashioned", type=ChipType.DIALOGUE),
+                SuggestionChip(text="Margarita", type=ChipType.DIALOGUE),
+            ]
+        )
+
+        # Request thread enters batch_state_commits
+        with batch_state_commits(session_id, store) as batch_cache:
+            # Request modifies conversation in batch cache
+            batch_cache.update_section("conversation", {"turn": 2})
+
+            # Simulate background worker thread writing fresh chips before request exits
+            def background_chip_worker():
+                lock = get_session_lock(session_id)
+                with lock:
+                    seq = claim_chip_generation_seq(session_id, store)
+                    worker_data = _get_session_data(session_id, store)
+                    chip_state = worker_data.get("chip_state", {})
+                    chip_state["current_chips"] = fresh_chips
+                    chip_state["generation_seq"] = seq
+                    worker_data["chip_state"] = chip_state
+                    _save_session_data(session_id, store, worker_data)
+
+            worker_thread = threading.Thread(target=background_chip_worker)
+            worker_thread.start()
+            worker_thread.join()
+
+        # After batch_state_commits exits and flushes, store must retain the fresh chips
+        flushed_data = store[session_id]
+        assert flushed_data["conversation"]["turn"] == 2
+        assert flushed_data["chip_state"]["current_chips"] is not None
+        assert len(flushed_data["chip_state"]["current_chips"].chips) == 3
+        assert flushed_data["chip_state"]["current_chips"].chips[0].text == "Gin & Tonic"
+        clear_session_chip_seq(session_id)
+
+    def test_superseded_task_does_not_update_last_generation_time_or_suppress_new_turn(self):
+        """Test that a superseded task completion does not update last_generation_time."""
+        from src.conversation.chip_generator import ChipGenerator
+        from src.schemas.chips import (
+            ChipGenerationContext,
+            ChipType,
+            SuggestionChip,
+            SuggestionChipSet,
+        )
+        from src.utils.state_manager import (
+            _get_session_data,
+            claim_chip_generation_seq,
+            clear_session_chip_seq,
+        )
+
+        session_id = "test_superseded_rate_limit_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                    "pending_task_seq": None,
+                },
+            }
+        }
+
+        with patch("src.utils.state_manager._global_store", store):
+            generator = ChipGenerator(session_id)
+            context = ChipGenerationContext(
+                conversation_turns=[{"role": "user", "content": "hello"}],
+                payment_status="none",
+                conversation_phase="greeting",
+                recent_user_messages=["hello"],
+            )
+
+            # Claim seq 1 for Turn 1
+            seq1 = claim_chip_generation_seq(session_id, store)
+            assert seq1 == 1
+
+            mock_chip_set = SuggestionChipSet(
+                chips=[
+                    SuggestionChip(text="Gin", type=ChipType.DIALOGUE),
+                    SuggestionChip(text="Tonic", type=ChipType.DIALOGUE),
+                    SuggestionChip(text="Lime", type=ChipType.DIALOGUE),
+                ]
+            )
+
+            # Mock sync generation to return chips
+            with patch.object(generator, "_generate_chips_sync", return_value=mock_chip_set):
+                # Simulate Turn 1 past the initial freshness check by invoking generate_chips_sync
+                # and while waiting on result, Turn 2 claims seq 2
+                def delayed_sync(ctx):
+                    claim_chip_generation_seq(session_id, store)  # seq becomes 2
+                    return mock_chip_set
+
+                generator._generate_chips_sync = delayed_sync
+
+                # Now Turn 1's generate_chips_async runs with seq1=1
+                result = generator.generate_chips_async(context, generation_seq=seq1)
+
+                # Superseded task should return None
+                assert result is None
+
+                # Crucially: last_generation_time must NOT be updated by the superseded task!
+                data = _get_session_data(session_id, store)
+                assert data["chip_state"]["last_generation_time"] == 0
+                assert data["chip_state"]["generation_count"] == 0
+        clear_session_chip_seq(session_id)
+
+
+
+
 
 # Mark integration tests
 pytestmark = pytest.mark.integration
+
 
 
 

@@ -215,6 +215,43 @@ class TestBatchStateCommits:
             "test_session", cache._cached_data
         )
 
+    def test_get_batch_cache_for_session_cross_thread(self):
+        """Test that get_batch_cache_for_session retrieves active cache across threads."""
+        import threading
+
+        from src.utils.batch_state import get_batch_cache_for_session
+
+        store = MagicMock()
+        with batch_state_commits("cross_thread_session", store) as cache:
+            found_cache = []
+
+            def worker():
+                found_cache.append(get_batch_cache_for_session("cross_thread_session"))
+
+            t = threading.Thread(target=worker)
+            t.start()
+            t.join()
+
+            assert len(found_cache) == 1
+            assert found_cache[0] is cache
+
+        # Outside context, should be None
+        assert get_batch_cache_for_session("cross_thread_session") is None
+
+    def test_clear_batch_cache_for_session(self):
+        """Test explicitly clearing batch cache for a session."""
+        from src.utils.batch_state import (
+            clear_batch_cache_for_session,
+            get_batch_cache_for_session,
+        )
+
+        store = MagicMock()
+        with batch_state_commits("session_to_clear", store) as cache:
+            assert get_batch_cache_for_session("session_to_clear") is cache
+            clear_batch_cache_for_session("session_to_clear")
+            assert get_batch_cache_for_session("session_to_clear") is None
+
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

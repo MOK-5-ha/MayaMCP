@@ -17,14 +17,26 @@ logger = get_logger(__name__)
 
 # Import batch state cache for performance optimization
 try:
-    from .batch_state import get_current_batch_cache, is_in_batch_context
+    from .batch_state import (
+        clear_batch_cache_for_session,
+        get_batch_cache_for_session,
+        get_current_batch_cache,
+        is_in_batch_context,
+    )
 except ImportError:
     # Fallback if batch_state module is not available
     def get_current_batch_cache():
         return None
 
+    def get_batch_cache_for_session(session_id: str):
+        return None
+
+    def clear_batch_cache_for_session(session_id: str) -> None:
+        pass
+
     def is_in_batch_context():
         return False
+
 
 
 # =============================================================================
@@ -608,12 +620,14 @@ def _get_session_data(session_id: str, store: MutableMapping | None = None) -> d
     """
     session_id, store = _get_store_and_session(session_id, store)
 
-    # Check if we are in a batch context and can use cached data
-    if is_in_batch_context():
-        batch_cache = get_current_batch_cache()
-        if batch_cache and batch_cache.session_id == session_id and batch_cache.has_cached_data():
-            logger.debug(f"Using cached session data for {session_id}")
-            return batch_cache.get_cached_data()
+    # Check if this session has an active batch cache (in this thread or another)
+    batch_cache = get_current_batch_cache()
+    if not (batch_cache and batch_cache.session_id == session_id):
+        batch_cache = get_batch_cache_for_session(session_id)
+
+    if batch_cache and batch_cache.session_id == session_id and batch_cache.has_cached_data():
+        logger.debug(f"Using cached session data for {session_id}")
+        return batch_cache.get_cached_data()
 
     if session_id not in store:
         logger.info(f"Initializing new session state for {session_id}")
@@ -678,17 +692,20 @@ def _save_session_data(session_id: str, store: MutableMapping | None, data: dict
     """
     session_id, store = _get_store_and_session(session_id, store)
 
-    # Check if we are in a batch context to avoid immediate remote writes
-    if is_in_batch_context():
-        batch_cache = get_current_batch_cache()
-        if batch_cache and batch_cache.session_id == session_id:
-            # Update the batch cache instead of immediate write
-            batch_cache.set_cached_data(data, dirty=True)
-            logger.debug(f"Saved session data to batch cache for {session_id}")
-            return
+    # Check if this session has an active batch cache (in this thread or another)
+    batch_cache = get_current_batch_cache()
+    if not (batch_cache and batch_cache.session_id == session_id):
+        batch_cache = get_batch_cache_for_session(session_id)
+
+    if batch_cache and batch_cache.session_id == session_id:
+        # Update the batch cache instead of immediate write
+        batch_cache.set_cached_data(data, dirty=True)
+        logger.debug(f"Saved session data to batch cache for {session_id}")
+        return
 
     # Fall back to immediate write if not in batch context
     store[session_id] = data
+
 
 
 def initialize_state(session_id: str | None = None, store: MutableMapping | None = None) -> None:
@@ -859,6 +876,7 @@ def reset_session_state(session_id: str | None = None, store: MutableMapping | N
         data["chip_state"] = chip_state
         _save_session_data(session_id, store, data)
 
+        clear_batch_cache_for_session(session_id)
         cleanup_session_lock(session_id)
     logger.info(f"Session state reset for {session_id}")
 

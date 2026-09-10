@@ -179,18 +179,68 @@ class BatchStateCache:
         This is called once at end of request lifecycle to commit
         all accumulated changes in a single remote dictionary operation.
         """
-        with self._lock:
-            if self._dirty and self._cached_data is not None:
-                # Single write-back to remote store
-                self.store[self.session_id] = self._cached_data
-                self._dirty = False
-                logger.info(f"Flushed batch state changes for {self.session_id}")
-            elif not self._dirty:
-                logger.debug(f"No changes to flush for {self.session_id}")
+        from ..utils.state_manager import get_session_lock
+
+        lock = get_session_lock(self.session_id)
+        with lock:
+            with self._lock:
+                if self._dirty and self._cached_data is not None:
+                    # Defensive merge: if persistent store was updated out-of-band with fresh chips,
+                    # ensure we do not overwrite them with older/empty chip_state.
+                    if self.session_id in self.store:
+                        store_data = self.store[self.session_id]
+                        if isinstance(store_data, dict) and "chip_state" in store_data:
+                            store_chips = store_data.get("chip_state", {})
+                            cached_chips = self._cached_data.get("chip_state", {})
+                            store_has_chips = store_chips.get("current_chips") is not None
+                            cached_has_chips = cached_chips.get("current_chips") is not None
+                            if store_has_chips and not cached_has_chips:
+                                self._cached_data["chip_state"] = store_chips
+                            elif store_has_chips and cached_has_chips:
+                                store_seq = store_chips.get("generation_seq", 0)
+                                cached_seq = cached_chips.get("generation_seq", 0)
+                                if store_seq >= cached_seq:
+                                    self._cached_data["chip_state"] = store_chips
+
+                    # Single write-back to remote store
+                    self.store[self.session_id] = self._cached_data
+                    self._dirty = False
+                    logger.info(f"Flushed batch state changes for {self.session_id}")
+                elif not self._dirty:
+                    logger.debug(f"No changes to flush for {self.session_id}")
 
 
 # Thread-local storage for current batch cache
 _batch_context = threading.local()
+
+# Active batch caches keyed by session_id across threads
+_active_session_caches: dict[str, BatchStateCache] = {}
+_active_caches_lock = threading.Lock()
+
+
+def get_batch_cache_for_session(session_id: str) -> BatchStateCache | None:
+    """
+    Get the active batch cache for a session across any thread.
+
+    Args:
+        session_id: Unique identifier for the user session.
+
+    Returns:
+        The active BatchStateCache for this session if one exists, else None.
+    """
+    with _active_caches_lock:
+        return _active_session_caches.get(session_id)
+
+
+def clear_batch_cache_for_session(session_id: str) -> None:
+    """
+    Remove any registered batch cache for a session (e.g. on reset or cleanup).
+
+    Args:
+        session_id: Unique identifier for the user session.
+    """
+    with _active_caches_lock:
+        _active_session_caches.pop(session_id, None)
 
 
 @contextmanager
@@ -217,6 +267,8 @@ def batch_state_commits(session_id: str, store: MutableMapping):
 
     cache = BatchStateCache(session_id, store)
     _batch_context.cache = cache
+    with _active_caches_lock:
+        _active_session_caches[session_id] = cache
 
     try:
         logger.debug(f"Starting batch state commits context for {session_id}")
@@ -228,10 +280,13 @@ def batch_state_commits(session_id: str, store: MutableMapping):
             logger.error(f"Failed to flush batch state changes for {session_id}: {e}")
             raise
         finally:
+            with _active_caches_lock:
+                _active_session_caches.pop(session_id, None)
             # Clean up thread-local storage
             if hasattr(_batch_context, 'cache'):
                 delattr(_batch_context, 'cache')
             logger.debug(f"Ended batch state commits context for {session_id}")
+
 
 
 def get_current_batch_cache() -> BatchStateCache | None:
