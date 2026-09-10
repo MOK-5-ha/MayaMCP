@@ -40,8 +40,11 @@ from ..utils.errors import is_quota_error
 from ..utils.helpers import append_to_history, detect_order_inquiry, detect_speech_acts
 from ..utils.rate_limiter import check_rate_limits
 from ..utils.state_manager import (
+    _get_session_data,
     _get_store_and_session,
+    _save_session_data,
     get_current_order_state,
+    get_session_lock,
     is_order_finished,
 )
 from ..utils.streaming import SentenceBuffer
@@ -741,7 +744,17 @@ def process_order_stream(
                 # --- Update Conversation State ---
                 phase_manager.increment_turn()
 
-                # --- Trigger Chip Generation (Fire-and-forget, Non-blocking) ---
+                # --- Claim Sequence & Trigger Chip Generation (Non-blocking) ---
+                # Atomically claim sequence number in session/batch state before submitting
+                # so the batch flush commits the incremented generation_seq, preventing
+                # stale batch snapshots from rolling back generation_seq.
+                session_data = _get_session_data(session_id, app_state)
+                chip_state = session_data.setdefault("chip_state", {})
+                claimed_seq = chip_state.get("generation_seq", 0) + 1
+                chip_state["generation_seq"] = claimed_seq
+                session_data["chip_state"] = chip_state
+                _save_session_data(session_id, app_state, session_data)
+
                 # Submit to background thread pool so SSE connection can close immediately
                 _chip_trigger_executor.submit(
                     _trigger_chip_generation,
@@ -749,7 +762,8 @@ def process_order_stream(
                     app_state=app_state,
                     user_message=sanitized_input,
                     maya_response=clean_response,
-                    truncated_history=truncated_history
+                    truncated_history=truncated_history,
+                    generation_seq=claimed_seq,
                 )
 
             except Exception as e:
@@ -815,67 +829,73 @@ def _trigger_chip_generation(
     app_state: Any,
     user_message: str,
     maya_response: str,
-    truncated_history: list[dict[str, str]]
+    truncated_history: list[dict[str, str]],
+    generation_seq: int | None = None,
 ) -> None:
     """
     Trigger chip generation in parallel after Maya's response completes.
-    
+
     This function runs chip generation asynchronously and stores the result
     in session state. All failures are logged and result in empty chip sets
     without blocking the conversation flow.
-    
+
     Args:
         session_id: Current session identifier
         app_state: Application state for session management
         user_message: Latest user message
         maya_response: Maya's response text
         truncated_history: Recent conversation history (limited window)
+        generation_seq: Pre-claimed generation sequence number (optional)
     """
     from ..conversation.chip_generator import ChipGenerator
     from ..schemas.chips import ChipGenerationContext
-    from ..utils.state_manager import _get_session_data, _save_session_data, get_session_lock
-    
+    from ..utils.state_manager import _get_session_data, _save_session_data
+
     try:
         # Build conversation turns from history (include current turn)
         # Create updated history with current exchange
         updated_history = list(truncated_history)
         updated_history.append({'role': 'user', 'content': user_message})
         updated_history.append({'role': 'assistant', 'content': maya_response})
-        
+
         # Extract last 4 turns for chip generation context
         last_turns = updated_history[-4:] if len(updated_history) >= 4 else updated_history
-        
+
         # Build conversation turns in ChipGenerationContext format
         conversation_turns = [
             {'role': turn['role'], 'content': turn['content']}
             for turn in last_turns
         ]
-        
-        # Get session state and claim a generation sequence number atomically.
-        # This token is used later to discard stale results if a newer turn's
-        # chip generation has already written to current_chips.
+
+        # Resolve generation sequence number. If pre-claimed by caller (e.g. process_order_stream
+        # inside request batch context), use it directly. Otherwise claim atomically under lock.
         lock = get_session_lock(session_id)
-        with lock:
-            session_data = _get_session_data(session_id, app_state)
-            chip_state = session_data.get("chip_state", {})
-            my_seq = chip_state.get("generation_seq", 0) + 1
-            chip_state["generation_seq"] = my_seq
-            session_data["chip_state"] = chip_state
-            _save_session_data(session_id, app_state, session_data)
-        
+        if generation_seq is not None:
+            my_seq = generation_seq
+            with lock:
+                session_data = _get_session_data(session_id, app_state)
+        else:
+            with lock:
+                session_data = _get_session_data(session_id, app_state)
+                chip_state = session_data.get("chip_state", {})
+                my_seq = chip_state.get("generation_seq", 0) + 1
+                chip_state["generation_seq"] = my_seq
+                session_data["chip_state"] = chip_state
+                _save_session_data(session_id, app_state, session_data)
+
         # Determine conversation phase using existing function
         conversation_phase = determine_conversation_phase(session_data, maya_response)
-        
+
         # Get payment status
         payment_info = session_data.get("payment", {})
         payment_status = payment_info.get("status", "none")
-        
+
         # Extract recent user messages for deduplication (last 2)
         recent_user_messages = [
             turn['content'] for turn in updated_history[-4:]
             if turn['role'] == 'user'
         ][-2:]  # Get last 2 user messages
-        
+
         # Build chip generation context
         context = ChipGenerationContext(
             conversation_turns=conversation_turns,
@@ -883,10 +903,10 @@ def _trigger_chip_generation(
             conversation_phase=conversation_phase,
             recent_user_messages=recent_user_messages
         )
-        
+
         # Instantiate chip generator
         chip_gen = ChipGenerator(session_id)
-        
+
         # Generate chips (asynchronously with timeout)
         # If no conversation history (before current turn), use fallback
         if not truncated_history:
@@ -894,7 +914,7 @@ def _trigger_chip_generation(
             logger.info(f"Using fallback chips for session {session_id} (empty history)")
         else:
             chip_set = chip_gen.generate_chips_async(context)
-        
+
         # Store chips in session state only if this is still the most-recent
         # generation for this session.  A newer turn's _trigger_chip_generation
         # increments generation_seq before this one finishes, so a stale result
@@ -919,7 +939,7 @@ def _trigger_chip_generation(
                     )
         else:
             logger.info(f"No chips generated for session {session_id}")
-    
+
     except Exception as e:
         # Log error but never block conversation flow
         logger.error(

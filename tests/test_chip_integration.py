@@ -3,17 +3,18 @@
 This module tests the full flow: user message → response stream → chip generation → session storage.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from threading import RLock
+from unittest.mock import MagicMock, Mock, patch
 
-from src.conversation.processor import process_order_stream, _trigger_chip_generation
+import pytest
+
+from src.conversation.processor import _trigger_chip_generation, process_order_stream
 from src.schemas.chips import (
-    ChipGenerationContext,
-    SuggestionChipSet,
-    SuggestionChip,
-    ChipType,
     ActionID,
+    ChipGenerationContext,
+    ChipType,
+    SuggestionChip,
+    SuggestionChipSet,
 )
 
 
@@ -421,6 +422,133 @@ class TestChipIntegration:
         context: ChipGenerationContext = context_call_args[0][0]
         assert context.conversation_phase == "ordering"
 
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    @patch("src.conversation.chip_generator.ChipGenerator")
+    def test_trigger_chip_generation_with_explicit_claimed_seq(
+        self,
+        mock_chip_generator_class,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        mock_session_state,
+        mock_chip_set,
+    ):
+        """Test _trigger_chip_generation accepts claimed generation_seq without overwriting it."""
+        mock_session_state["chip_state"] = {"generation_seq": 5}
+        mock_get_session.return_value = mock_session_state
+        mock_get_lock.return_value = RLock()
+
+        mock_generator = Mock()
+        mock_generator.generate_chips_async.return_value = mock_chip_set
+        mock_chip_generator_class.return_value = mock_generator
+
+        history = [{"role": "user", "content": "hi"}]
+        _trigger_chip_generation(
+            session_id="test_session",
+            app_state=None,
+            user_message="hi",
+            maya_response="Hello!",
+            truncated_history=history,
+            generation_seq=5,
+        )
+
+        # Chips saved with seq 5
+        mock_save_session.assert_called_once()
+        saved_data = mock_save_session.call_args[0][2]
+        assert saved_data["chip_state"]["generation_seq"] == 5
+        assert saved_data["chip_state"]["current_chips"] == mock_chip_set
+
+    @patch("src.conversation.processor._chip_trigger_executor")
+    @patch("src.conversation.processor.ConversationPhaseManager")
+    @patch("src.conversation.processor.get_combined_prompt", return_value="sys prompt")
+    @patch("src.llm.tools.get_menu", return_value="menu")
+    @patch("src.conversation.processor._build_order_context", return_value="")
+    @patch("src.conversation.processor.scan_input")
+    @patch("src.conversation.processor.scan_output")
+    def test_process_order_stream_claims_seq_in_batch_context(
+        self,
+        mock_scan_output,
+        mock_scan_input,
+        mock_order_ctx,
+        mock_get_menu,
+        mock_combined_prompt,
+        mock_phase_manager_class,
+        mock_executor,
+    ):
+        """Test process_order_stream increments generation_seq in batch context and passes it to executor."""
+        mock_scan_input.return_value = Mock(is_valid=True, sanitized_text="hello")
+        mock_scan_output.return_value = Mock(is_valid=True, sanitized_text="Hello back!")
+        mock_phase_manager = Mock()
+        mock_phase_manager.get_current_phase.return_value = "greeting"
+        mock_phase_manager_class.return_value = mock_phase_manager
+
+        mock_llm = "gemini-2.5-flash"
+        # Mock runner event generator
+        async def mock_run_async(*args, **kwargs):
+            mock_event = MagicMock()
+            mock_event.content.parts = [MagicMock(text="Hello back!")]
+            yield mock_event
+
+        app_state = {"test_session": {"chip_state": {"generation_seq": 2}}}
+
+        with patch("google.adk.runners.Runner.run_async", side_effect=mock_run_async):
+            events = list(process_order_stream(
+                user_input_text="hello",
+                current_session_history=[],
+                llm=mock_llm,
+                session_id="test_session",
+                app_state=app_state,
+            ))
+
+        # Check executor was called with generation_seq=3
+        mock_executor.submit.assert_called_once()
+        submit_kwargs = mock_executor.submit.call_args[1]
+        assert submit_kwargs["generation_seq"] == 3
+
+        # Check store has generation_seq=3 after batch flush
+        assert app_state["test_session"]["chip_state"]["generation_seq"] == 3
+
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    @patch("src.conversation.chip_generator.ChipGenerator")
+    def test_trigger_chip_generation_discards_stale_chips_when_superseded(
+        self,
+        mock_chip_generator_class,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        mock_session_state,
+        mock_chip_set,
+    ):
+        """Test _trigger_chip_generation discards stale chips when generation_seq is superseded."""
+        # Setup: session state has already progressed to seq 3 (e.g. from newer turns)
+        mock_session_state["chip_state"] = {"generation_seq": 3}
+        mock_get_session.return_value = mock_session_state
+        mock_get_lock.return_value = RLock()
+
+        mock_generator = Mock()
+        mock_generator.generate_chips_async.return_value = mock_chip_set
+        mock_chip_generator_class.return_value = mock_generator
+
+        # Execute: older turn with seq 1 finishes
+        history = [{"role": "user", "content": "hi"}]
+        _trigger_chip_generation(
+            session_id="test_session",
+            app_state=None,
+            user_message="hi",
+            maya_response="Hello!",
+            truncated_history=history,
+            generation_seq=1,
+        )
+
+        # Assert: Chips were NOT saved because seq 1 != current seq 3
+        mock_save_session.assert_not_called()
+
 
 # Mark integration tests
 pytestmark = pytest.mark.integration
+
+
