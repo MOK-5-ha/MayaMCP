@@ -301,14 +301,25 @@ def cleanup_session_lock(session_id: str) -> None:
 
     MUST be called from reset_session_state() to prevent memory leaks.
     Safe to call even if lock doesn't exist.
+    Acquires the per-session lock to avoid race conditions with in-flight turns.
 
     Args:
         session_id: Unique identifier for user session.
     """
     with _session_locks_mutex:
-        _session_locks.pop(session_id, None)
-        _session_last_access.pop(session_id, None)
-        _session_chip_seq.pop(session_id, None)
+        lock = _session_locks.get(session_id)
+
+    if lock is not None:
+        with lock:
+            with _session_locks_mutex:
+                _session_locks.pop(session_id, None)
+                _session_last_access.pop(session_id, None)
+                _session_chip_seq.pop(session_id, None)
+    else:
+        with _session_locks_mutex:
+            _session_locks.pop(session_id, None)
+            _session_last_access.pop(session_id, None)
+            _session_chip_seq.pop(session_id, None)
     logger.debug(f"Session lock cleaned up for {session_id}")
 
 
@@ -803,19 +814,29 @@ def update_order_state(session_id: str | None = None, store: MutableMapping | No
 def reset_session_state(session_id: str | None = None, store: MutableMapping | None = None) -> None:
     """Reset all session state and cleanup session lock."""
     session_id, store = _get_store_and_session(session_id, store)
-    # Cleanup session lock to prevent memory leaks
-    cleanup_session_lock(session_id)
-    # Cleanup cached LLM/TTS clients for this session
-    try:
-        from ..llm.session_registry import clear_session_clients
-        clear_session_clients(session_id)
-    except Exception:
-        logger.error(
-            "Failed to clear session clients for %s",
-            session_id,
-            exc_info=True,
-        )
-    initialize_state(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        # Cancel any active chip trigger task to prevent in-flight overwrites
+        try:
+            from ..conversation.processor import _session_trigger_tasks
+            prior_trigger = _session_trigger_tasks.pop(session_id, None)
+            if prior_trigger and not prior_trigger.done():
+                prior_trigger.cancel()
+        except ImportError:
+            pass
+
+        # Cleanup cached LLM/TTS clients for this session
+        try:
+            from ..llm.session_registry import clear_session_clients
+            clear_session_clients(session_id)
+        except Exception:
+            logger.error(
+                "Failed to clear session clients for %s",
+                session_id,
+                exc_info=True,
+            )
+        initialize_state(session_id, store)
+        cleanup_session_lock(session_id)
     logger.info(f"Session state reset for {session_id}")
 
 def is_order_finished(session_id: str | None = None, store: MutableMapping | None = None) -> bool:

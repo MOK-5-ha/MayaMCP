@@ -916,6 +916,17 @@ def _trigger_chip_generation(
             recent_user_messages=recent_user_messages
         )
 
+        # Re-verify freshness before invoking generation to avoid touching rate limits
+        # or worker pool if superseded while extracting context
+        with lock:
+            latest_seq = get_chip_generation_seq(session_id, app_state)
+            if my_seq < latest_seq:
+                logger.info(
+                    f"Skipping superseded chip generation before async submit for session {session_id} "
+                    f"(claimed seq {my_seq} < latest seq {latest_seq})"
+                )
+                return
+
         # Instantiate chip generator
         chip_gen = ChipGenerator(session_id)
 
@@ -925,7 +936,7 @@ def _trigger_chip_generation(
             chip_set = chip_gen.generate_fallback_chips()
             logger.info(f"Using fallback chips for session {session_id} (empty history)")
         else:
-            chip_set = chip_gen.generate_chips_async(context)
+            chip_set = chip_gen.generate_chips_async(context, generation_seq=my_seq)
 
         # Store chips in session state only if this is still the most-recent
         # generation for this session. A newer turn's _trigger_chip_generation

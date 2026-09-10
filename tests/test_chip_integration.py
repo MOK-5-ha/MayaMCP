@@ -664,6 +664,33 @@ class TestChipIntegration:
         # Assert: prior future was cancelled
         mock_prior_future.cancel.assert_called_once()
 
+    def test_cleanup_session_lock_acquires_lock(self):
+        """Test cleanup_session_lock safely synchronizes with the per-session lock."""
+        from src.utils.state_manager import cleanup_session_lock, get_session_lock
+
+        session_id = "test_cleanup_sync_session"
+        lock = get_session_lock(session_id)
+        assert lock is not None
+
+        # Lock can be acquired and cleaned up
+        cleanup_session_lock(session_id)
+
+    def test_reset_session_state_cancels_pending_trigger_task(self):
+        """Test reset_session_state cancels any in-flight outer trigger task."""
+        from src.conversation.processor import _session_trigger_tasks
+        from src.utils.state_manager import reset_session_state
+
+        session_id = "test_reset_cancel_session"
+        mock_future = Mock()
+        mock_future.done.return_value = False
+        _session_trigger_tasks[session_id] = mock_future
+
+        store = {session_id: {}}
+        reset_session_state(session_id, store)
+
+        mock_future.cancel.assert_called_once()
+        assert session_id not in _session_trigger_tasks
+
 
 # Mark integration tests
 pytestmark = pytest.mark.integration

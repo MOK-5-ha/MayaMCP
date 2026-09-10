@@ -6,12 +6,12 @@ Thread Pool Cancellation Limitation:
     occurs (3s), Future.cancel() prevents the caller from waiting further, but the
     background thread continues executing until the LLM call completes or retry
     logic exhausts (~30s with tenacity). This is acceptable because:
-    
+
     1. Most timeouts are due to slow network/API, not aggressive timeout
     2. Worker pool is sized (10 threads) to handle occasional slow requests
     3. True cancellation would require asyncio (breaking change) or cooperative
        cancellation (requires modifying google-genai SDK)
-    
+
     Session-Scoped Clients:
     ChipGenerator accepts an optional llm_client in __init__ for dependency
     injection (primarily for testing). When None, it uses get_genai_client()
@@ -19,9 +19,8 @@ Thread Pool Cancellation Limitation:
     per-session clients to ChipGenerator; all sessions share the global client.
 """
 
-import logging
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any
 
@@ -29,8 +28,7 @@ from google import genai
 from pydantic import ValidationError
 
 from ..config.logging_config import get_logger
-from ..config.model_config import get_model_config
-from ..llm.client import build_generate_config, call_gemini_api, get_genai_client
+from ..llm.client import call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
     ChipGenerationContext,
@@ -68,7 +66,9 @@ class ChipGenerator:
         self._cache: dict[str, Any] = {}  # Context representation cache
 
     def generate_chips_async(
-        self, context: ChipGenerationContext
+        self,
+        context: ChipGenerationContext,
+        generation_seq: int | None = None,
     ) -> SuggestionChipSet | None:
         """
         Generate chips asynchronously with timeout.
@@ -79,6 +79,8 @@ class ChipGenerator:
 
         Args:
             context: Chip generation context with conversation history
+            generation_seq: Optional sequence token to prevent superseded tasks from
+                           cancelling or rate-limiting newer generations.
 
         Returns:
             SuggestionChipSet or None on timeout/failure
@@ -88,6 +90,7 @@ class ChipGenerator:
             _get_session_data,
             _get_store_and_session,
             _save_session_data,
+            get_chip_generation_seq,
             get_session_lock,
         )
 
@@ -97,12 +100,22 @@ class ChipGenerator:
         current_time = time.time()
         future = None
 
-        # Atomically check rate limit, cancel pending task, and submit new task
+        # Atomically check freshness, rate limit, cancel pending task, and submit new task
         with lock:
             data = _get_session_data(session_id, store)
             chip_state = data.get("chip_state", {})
-            last_gen_time = chip_state.get("last_generation_time", 0)
 
+            # Check if this generation has been superseded by a newer turn
+            if generation_seq is not None:
+                latest_seq = get_chip_generation_seq(session_id, store)
+                if generation_seq < latest_seq:
+                    logger.info(
+                        f"Skipping superseded chip generation for session {session_id} "
+                        f"(task seq {generation_seq} < latest seq {latest_seq})"
+                    )
+                    return None
+
+            last_gen_time = chip_state.get("last_generation_time", 0)
             if current_time - last_gen_time < self.RATE_LIMIT_SECONDS:
                 logger.warning(
                     f"Rate limit exceeded for session {self.session_id}, "
@@ -110,9 +123,15 @@ class ChipGenerator:
                 )
                 return None
 
-            # Cancel pending task if exists
+            # Cancel pending task if exists (only if pending task is not newer)
             pending_task = chip_state.get("pending_task")
             if pending_task and not pending_task.done():
+                pending_seq = chip_state.get("pending_task_seq")
+                if generation_seq is not None and pending_seq is not None and pending_seq > generation_seq:
+                    logger.info(
+                        f"Not cancelling pending task with newer seq {pending_seq} > {generation_seq}"
+                    )
+                    return None
                 logger.info(
                     f"Cancelling pending chip generation for {self.session_id}"
                 )
@@ -121,6 +140,7 @@ class ChipGenerator:
             # Submit generation task and store it atomically
             future = _chip_executor.submit(self._generate_chips_sync, context)
             chip_state["pending_task"] = future
+            chip_state["pending_task_seq"] = generation_seq
             data["chip_state"] = chip_state
             _save_session_data(session_id, store, data)
 
@@ -153,7 +173,7 @@ class ChipGenerator:
             # handle occasional slow requests without exhaustion.
             if future and not future.done():
                 future.cancel()  # Prevents awaiting, but thread continues
-            
+
             logger.warning(
                 f"Chip generation timeout ({self.TIMEOUT_SECONDS}s) "
                 f"for session {self.session_id}"
@@ -194,10 +214,6 @@ class ChipGenerator:
         try:
             # Build prompt
             prompt = self._build_chip_prompt(context)
-
-            # Get model configuration
-            model_config = get_model_config()
-            model_version = model_config["model_version"]
 
             # Build the generation config for structured output
             generation_config = {
@@ -322,9 +338,9 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
         for turn in context.conversation_turns:
             line = f"{turn['role']}: {turn['content']}"
             conversation_lines.append(line)
-        
+
         conversation_context = "\n".join(conversation_lines)
-        
+
         # Truncate conversation context if needed
         if len(conversation_context) > remaining_chars * 0.7:  # Reserve 30% for other fields
             max_conv_chars = int(remaining_chars * 0.7)
@@ -335,7 +351,7 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
             if context.recent_user_messages
             else "None"
         )
-        
+
         # Truncate recent messages if needed
         max_recent_chars = int(remaining_chars * 0.2)
         if len(recent_messages) > max_recent_chars:
@@ -361,7 +377,7 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 Generate 3-6 suggestion chips now:"""
 
         return system_instructions + context_section
-    
+
     def _get_phase_specific_guidance(
         self, phase: str, payment_status: str | None
     ) -> str:
@@ -382,15 +398,15 @@ Generate 3-6 suggestion chips now:"""
             "payment": "Prioritize payment action chip as first option when payment is pending. Include cancel option.",
             "complete": "Offer order_another action chip and thank-you dialogue options.",
         }
-        
+
         base_guidance = guidance_map.get(
             phase, "Generate contextually relevant chips for current conversation."
         )
-        
+
         # Add payment-specific guidance if payment is pending
         if payment_status == "pending":
             base_guidance += " URGENT: Payment is pending - place payment action chip first."
-        
+
         return base_guidance
 
     def generate_fallback_chips(self) -> SuggestionChipSet:
