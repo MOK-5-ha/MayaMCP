@@ -52,6 +52,11 @@ logger = get_logger(__name__)
 # Timeout for RAG pipeline calls to prevent indefinite blocking
 RAG_TIMEOUT = 10.0  # seconds
 
+# Thread pool for fire-and-forget chip generation triggers (non-blocking)
+_chip_trigger_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=5, thread_name_prefix="chip_trigger"
+)
+
 def _process_drink_context(drink_context: str) -> str:
     """
     Process multi-token drink context into a single drink item.
@@ -736,8 +741,10 @@ def process_order_stream(
                 # --- Update Conversation State ---
                 phase_manager.increment_turn()
 
-                # --- Trigger Chip Generation (Non-blocking, Parallel) ---
-                _trigger_chip_generation(
+                # --- Trigger Chip Generation (Fire-and-forget, Non-blocking) ---
+                # Submit to background thread pool so SSE connection can close immediately
+                _chip_trigger_executor.submit(
+                    _trigger_chip_generation,
                     session_id=session_id,
                     app_state=app_state,
                     user_message=sanitized_input,
