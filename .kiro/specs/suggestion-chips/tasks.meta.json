@@ -144,6 +144,18 @@
         "chatSessionId": "sess_7f03b7a6-e5c6-4ae0-910b-4bb4d2b466c9",
         "timestamp": 1789014589384
       }
+    ],
+    "7. Checkpoint - Conversation integration tests pass": [
+      {
+        "executionId": "43ca9e60-7b3d-456a-8751-e8d8aee13ab4",
+        "chatSessionId": "sess_12fc0675-aadd-4641-8dd3-71dd11c62a16",
+        "timestamp": 1789014915745
+      },
+      {
+        "executionId": "43ca9e60-7b3d-456a-8751-e8d8aee13ab4",
+        "chatSessionId": "sess_12fc0675-aadd-4641-8dd3-71dd11c62a16",
+        "timestamp": 1789014988042
+      }
     ]
   }
 }
