@@ -40,9 +40,8 @@ from ..utils.errors import is_quota_error
 from ..utils.helpers import append_to_history, detect_order_inquiry, detect_speech_acts
 from ..utils.rate_limiter import check_rate_limits
 from ..utils.state_manager import (
-    _get_session_data,
     _get_store_and_session,
-    _save_session_data,
+    claim_chip_generation_seq,
     get_current_order_state,
     get_session_lock,
     is_order_finished,
@@ -59,6 +58,7 @@ RAG_TIMEOUT = 10.0  # seconds
 _chip_trigger_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=5, thread_name_prefix="chip_trigger"
 )
+_session_trigger_tasks: dict[str, concurrent.futures.Future] = {}
 
 def _process_drink_context(drink_context: str) -> str:
     """
@@ -745,26 +745,27 @@ def process_order_stream(
                 phase_manager.increment_turn()
 
                 # --- Claim Sequence & Trigger Chip Generation (Non-blocking) ---
-                # Atomically claim sequence number in session/batch state before submitting
-                # so the batch flush commits the incremented generation_seq, preventing
-                # stale batch snapshots from rolling back generation_seq.
-                session_data = _get_session_data(session_id, app_state)
-                chip_state = session_data.setdefault("chip_state", {})
-                claimed_seq = chip_state.get("generation_seq", 0) + 1
-                chip_state["generation_seq"] = claimed_seq
-                session_data["chip_state"] = chip_state
-                _save_session_data(session_id, app_state, session_data)
+                # Atomically claim sequence number across concurrent turns and batch contexts
+                claimed_seq = claim_chip_generation_seq(session_id, app_state)
 
-                # Submit to background thread pool so SSE connection can close immediately
-                _chip_trigger_executor.submit(
-                    _trigger_chip_generation,
-                    session_id=session_id,
-                    app_state=app_state,
-                    user_message=sanitized_input,
-                    maya_response=clean_response,
-                    truncated_history=truncated_history,
-                    generation_seq=claimed_seq,
-                )
+                lock = get_session_lock(session_id)
+                with lock:
+                    # Cancel any prior outer trigger future still queued in the executor
+                    prior_trigger = _session_trigger_tasks.get(session_id)
+                    if prior_trigger and not prior_trigger.done():
+                        prior_trigger.cancel()
+
+                    # Submit to background thread pool so SSE connection can close immediately
+                    trigger_future = _chip_trigger_executor.submit(
+                        _trigger_chip_generation,
+                        session_id=session_id,
+                        app_state=app_state,
+                        user_message=sanitized_input,
+                        maya_response=clean_response,
+                        truncated_history=truncated_history,
+                        generation_seq=claimed_seq,
+                    )
+                    _session_trigger_tasks[session_id] = trigger_future
 
             except Exception as e:
                 logger.exception(f"Critical error in process_order_stream: {str(e)}")
@@ -849,7 +850,13 @@ def _trigger_chip_generation(
     """
     from ..conversation.chip_generator import ChipGenerator
     from ..schemas.chips import ChipGenerationContext
-    from ..utils.state_manager import _get_session_data, _save_session_data
+    from ..utils.state_manager import (
+        _get_session_data,
+        _save_session_data,
+        claim_chip_generation_seq,
+        get_chip_generation_seq,
+        get_session_lock,
+    )
 
     try:
         # Build conversation turns from history (include current turn)
@@ -872,16 +879,21 @@ def _trigger_chip_generation(
         lock = get_session_lock(session_id)
         if generation_seq is not None:
             my_seq = generation_seq
-            with lock:
-                session_data = _get_session_data(session_id, app_state)
         else:
-            with lock:
-                session_data = _get_session_data(session_id, app_state)
-                chip_state = session_data.get("chip_state", {})
-                my_seq = chip_state.get("generation_seq", 0) + 1
-                chip_state["generation_seq"] = my_seq
-                session_data["chip_state"] = chip_state
-                _save_session_data(session_id, app_state, session_data)
+            my_seq = claim_chip_generation_seq(session_id, app_state)
+
+        # Early freshness check: if a newer turn has already arrived and claimed a higher
+        # sequence number, abort immediately. This prevents older trigger jobs from running
+        # after newer triggers, cancelling newer tasks, or consuming the 2-second rate limit.
+        with lock:
+            latest_seq = get_chip_generation_seq(session_id, app_state)
+            if my_seq < latest_seq:
+                logger.info(
+                    f"Skipping superseded chip generation for session {session_id} "
+                    f"(claimed seq {my_seq} < latest seq {latest_seq})"
+                )
+                return
+            session_data = _get_session_data(session_id, app_state)
 
         # Determine conversation phase using existing function
         conversation_phase = determine_conversation_phase(session_data, maya_response)
@@ -916,15 +928,15 @@ def _trigger_chip_generation(
             chip_set = chip_gen.generate_chips_async(context)
 
         # Store chips in session state only if this is still the most-recent
-        # generation for this session.  A newer turn's _trigger_chip_generation
+        # generation for this session. A newer turn's _trigger_chip_generation
         # increments generation_seq before this one finishes, so a stale result
         # arriving late is silently discarded instead of overwriting fresh chips.
         if chip_set:
             with lock:
-                session_data = _get_session_data(session_id, app_state)
-                chip_state = session_data.get("chip_state", {})
-                current_seq = chip_state.get("generation_seq", 0)
-                if current_seq == my_seq:
+                latest_seq = get_chip_generation_seq(session_id, app_state)
+                if latest_seq == my_seq:
+                    session_data = _get_session_data(session_id, app_state)
+                    chip_state = session_data.get("chip_state", {})
                     chip_state["current_chips"] = chip_set
                     session_data["chip_state"] = chip_state
                     _save_session_data(session_id, app_state, session_data)
@@ -935,7 +947,7 @@ def _trigger_chip_generation(
                 else:
                     logger.info(
                         f"Discarding stale chips for session {session_id} "
-                        f"(seq {my_seq}, current {current_seq})"
+                        f"(seq {my_seq}, current {latest_seq})"
                     )
         else:
             logger.info(f"No chips generated for session {session_id}")

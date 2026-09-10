@@ -41,6 +41,17 @@ def mock_chip_set():
     )
 
 
+@pytest.fixture(autouse=True)
+def cleanup_test_sessions():
+    """Ensure clean lock and sequence state for test sessions."""
+    from src.utils.state_manager import cleanup_session_lock
+    for s_id in ["test_session", "test_cancel_session", "test_concurrent_claims_session"]:
+        cleanup_session_lock(s_id)
+    yield
+    for s_id in ["test_session", "test_cancel_session", "test_concurrent_claims_session"]:
+        cleanup_session_lock(s_id)
+
+
 class TestChipIntegration:
     """Integration tests for chip generation in conversation flow."""
 
@@ -547,8 +558,115 @@ class TestChipIntegration:
         # Assert: Chips were NOT saved because seq 1 != current seq 3
         mock_save_session.assert_not_called()
 
+    def test_concurrent_sequence_claims_are_atomic(self):
+        """Test concurrent sequence claims for same session produce strictly unique monotonically increasing seqs."""
+        import threading
+
+        from src.utils.state_manager import (
+            claim_chip_generation_seq,
+            cleanup_session_lock,
+        )
+
+        session_id = "test_concurrent_claims_session"
+        cleanup_session_lock(session_id)
+        store = {session_id: {"chip_state": {"generation_seq": 0}}}
+
+        claimed_seqs = []
+        lock = threading.Lock()
+
+        def claim_worker():
+            seq = claim_chip_generation_seq(session_id=session_id, store=store)
+            with lock:
+                claimed_seqs.append(seq)
+
+        threads = [threading.Thread(target=claim_worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(claimed_seqs) == 10
+        assert sorted(claimed_seqs) == list(range(1, 11))
+        cleanup_session_lock(session_id)
+
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager.get_chip_generation_seq", return_value=3)
+    @patch("src.conversation.chip_generator.ChipGenerator")
+    def test_older_trigger_job_aborts_early_without_touching_chip_generator(
+        self,
+        mock_chip_generator_class,
+        mock_get_seq,
+        mock_get_lock,
+    ):
+        """Test older trigger job aborts early without calling ChipGenerator or checking rate limits."""
+        mock_get_lock.return_value = RLock()
+        history = [{"role": "user", "content": "hi"}]
+
+        _trigger_chip_generation(
+            session_id="test_session",
+            app_state=None,
+            user_message="hi",
+            maya_response="Hello!",
+            truncated_history=history,
+            generation_seq=1,  # Older than current seq 3
+        )
+
+        # Assert: ChipGenerator was NEVER initialized, avoiding task cancellation and rate limiting
+        mock_chip_generator_class.assert_not_called()
+
+    @patch("src.conversation.processor._chip_trigger_executor")
+    @patch("src.conversation.processor.ConversationPhaseManager")
+    @patch("src.conversation.processor.get_combined_prompt", return_value="sys prompt")
+    @patch("src.llm.tools.get_menu", return_value="menu")
+    @patch("src.conversation.processor._build_order_context", return_value="")
+    @patch("src.conversation.processor.scan_input")
+    @patch("src.conversation.processor.scan_output")
+    def test_prior_trigger_future_is_cancelled_on_new_turn(
+        self,
+        mock_scan_output,
+        mock_scan_input,
+        mock_order_ctx,
+        mock_get_menu,
+        mock_combined_prompt,
+        mock_phase_manager_class,
+        mock_executor,
+    ):
+        """Test that any prior pending trigger future in _session_trigger_tasks is cancelled when a new turn arrives."""
+        from src.conversation.processor import _session_trigger_tasks
+
+        mock_scan_input.return_value = Mock(is_valid=True, sanitized_text="hello")
+        mock_scan_output.return_value = Mock(is_valid=True, sanitized_text="Hello back!")
+        mock_phase_manager = Mock()
+        mock_phase_manager.get_current_phase.return_value = "greeting"
+        mock_phase_manager_class.return_value = mock_phase_manager
+
+        # Set up a mock prior trigger future for the session
+        mock_prior_future = Mock()
+        mock_prior_future.done.return_value = False
+        _session_trigger_tasks["test_cancel_session"] = mock_prior_future
+
+        async def mock_run_async(*args, **kwargs):
+            mock_event = MagicMock()
+            mock_event.content.parts = [MagicMock(text="Hello back!")]
+            yield mock_event
+
+        app_state = {"test_cancel_session": {"chip_state": {"generation_seq": 1}}}
+
+        with patch("google.adk.runners.Runner.run_async", side_effect=mock_run_async):
+            events = list(process_order_stream(
+                user_input_text="hello",
+                current_session_history=[],
+                llm="gemini-2.5-flash",
+                session_id="test_cancel_session",
+                app_state=app_state,
+            ))
+
+        # Assert: prior future was cancelled
+        mock_prior_future.cancel.assert_called_once()
+
 
 # Mark integration tests
 pytestmark = pytest.mark.integration
+
 
 

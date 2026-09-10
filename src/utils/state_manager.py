@@ -218,6 +218,9 @@ _session_locks_mutex = threading.Lock()  # Protects _session_locks dict
 # Track last access time for session expiry
 _session_last_access: dict[str, float] = {}
 
+# Process-wide sequence tracking for suggestion chip generation per session
+_session_chip_seq: dict[str, int] = {}
+
 def _parse_int_env(env_var: str, default: int, description: str) -> int:
     """
     Parse integer environment variable with defensive error handling.
@@ -305,7 +308,51 @@ def cleanup_session_lock(session_id: str) -> None:
     with _session_locks_mutex:
         _session_locks.pop(session_id, None)
         _session_last_access.pop(session_id, None)
+        _session_chip_seq.pop(session_id, None)
     logger.debug(f"Session lock cleaned up for {session_id}")
+
+
+def claim_chip_generation_seq(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> int:
+    """
+    Atomically claim the next generation_seq for a session.
+
+    Thread-safe across concurrent turns, background tasks, and batch contexts.
+    Ensures that concurrent turns cannot claim duplicate sequence numbers.
+    """
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        session_data = _get_session_data(session_id, store)
+        with _session_locks_mutex:
+            if session_id not in _session_chip_seq:
+                _session_chip_seq[session_id] = (
+                    session_data.get("chip_state", {}).get("generation_seq", 0)
+                )
+            _session_chip_seq[session_id] += 1
+            claimed_seq = _session_chip_seq[session_id]
+
+        chip_state = session_data.setdefault("chip_state", {})
+        chip_state["generation_seq"] = claimed_seq
+        session_data["chip_state"] = chip_state
+        _save_session_data(session_id, store, session_data)
+        return claimed_seq
+
+
+def get_chip_generation_seq(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> int:
+    """Get the latest claimed generation_seq for a session."""
+    session_id, store = _get_store_and_session(session_id, store)
+    with _session_locks_mutex:
+        if session_id in _session_chip_seq:
+            return _session_chip_seq[session_id]
+    session_data = _get_session_data(session_id, store)
+    return session_data.get("chip_state", {}).get("generation_seq", 0)
+
 
 
 def _cleanup_expired_sessions() -> None:
@@ -344,6 +391,7 @@ def _cleanup_expired_sessions() -> None:
 
                         _session_locks.pop(session_id, None)
                         _session_last_access.pop(session_id, None)
+                        _session_chip_seq.pop(session_id, None)
 
                     # Attempt client cleanup (may fail, but session state is already removed)
                     try:
@@ -383,6 +431,7 @@ def _cleanup_expired_sessions() -> None:
                         else:
                             _session_locks.pop(session_id, None)
                             _session_last_access.pop(session_id, None)
+                            _session_chip_seq.pop(session_id, None)
                             _session_retry_counts.pop(session_id, None)
 
                             logger.error(
@@ -531,7 +580,7 @@ def _deep_copy_defaults() -> dict[str, Any]:
     }
 
 
-def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
+def _get_session_data(session_id: str, store: MutableMapping | None = None) -> dict[str, Any]:
     """
     Retrieve session data from the store, initializing it if necessary.
 
@@ -542,6 +591,8 @@ def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
     Returns:
         The session data dictionary.
     """
+    session_id, store = _get_store_and_session(session_id, store)
+
     # Check if we are in a batch context and can use cached data
     if is_in_batch_context():
         batch_cache = get_current_batch_cache()
@@ -601,7 +652,7 @@ def _get_session_data(session_id: str, store: MutableMapping) -> dict[str, Any]:
 
     return session_data
 
-def _save_session_data(session_id: str, store: MutableMapping, data: dict[str, Any]) -> None:
+def _save_session_data(session_id: str, store: MutableMapping | None, data: dict[str, Any]) -> None:
     """
     Save session data back to the store.
 
@@ -610,6 +661,8 @@ def _save_session_data(session_id: str, store: MutableMapping, data: dict[str, A
         store: Mutable mapping to update.
         data: The full session data object.
     """
+    session_id, store = _get_store_and_session(session_id, store)
+
     # Check if we are in a batch context to avoid immediate remote writes
     if is_in_batch_context():
         batch_cache = get_current_batch_cache()
