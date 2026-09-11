@@ -681,6 +681,14 @@ def _get_session_data(session_id: str, store: MutableMapping | None = None) -> d
 
     return session_data
 
+
+def get_session_state(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> dict[str, Any]:
+    """Retrieve session state dictionary (public alias for _get_session_data)."""
+    return _get_session_data(session_id, store)
+
 def _save_session_data(session_id: str, store: MutableMapping | None, data: dict[str, Any]) -> None:
     """
     Save session data back to the store.
