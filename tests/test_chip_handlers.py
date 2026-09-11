@@ -201,7 +201,12 @@ class TestRegisterChipHandlers:
             assert callable(call_kwargs.get("fn"))
             assert call_kwargs.get("inputs") == [btn]
             assert call_kwargs.get("outputs") == [mock_textbox, mock_submit_btn]
-            assert "sendBtn" in call_kwargs.get("js", "")
+            # Verify action auto-submission is chained strictly after textbox update via .then()
+            ev = btn.click.return_value
+            ev.then.assert_called_once()
+            then_kwargs = ev.then.call_args[1]
+            assert then_kwargs.get("inputs") == [mock_submit_btn]
+            assert "sendBtn" in then_kwargs.get("js", "")
 
     def test_registered_callback_distinguishes_action_and_dialogue(self):
         """Callback attached by register_chip_handlers must resolve action vs dialogue chips properly."""

@@ -376,13 +376,11 @@ def register_chip_handlers(
         app_state: Optional application state dictionary
     """
     action_submit_js = """
-    (text) => {
-        if (text && (/^[💳💰📋❌🍹]/.test(text.trim()) || text.includes('action'))) {
-            setTimeout(() => {
-                const sendBtn = document.querySelector('#send-message-btn') ||
-                                Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.trim() === 'Send');
-                if (sendBtn) sendBtn.click();
-            }, 100);
+    (trigger) => {
+        if (trigger === 'submit') {
+            const sendBtn = document.querySelector('#send-message-btn') ||
+                            Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.trim() === 'Send');
+            if (sendBtn) sendBtn.click();
         }
     }
     """
@@ -415,10 +413,16 @@ def register_chip_handlers(
                 )
             return _handler
 
-        chip_btn.click(
+        click_ev = chip_btn.click(
             fn=_make_handler(i),
             inputs=[chip_btn],
             outputs=[textbox, submit_btn],
-            js=action_submit_js,
             show_progress=False,
         )
+        if hasattr(click_ev, "then"):
+            click_ev.then(
+                fn=None,
+                inputs=[submit_btn],
+                js=action_submit_js,
+                show_progress=False,
+            )
