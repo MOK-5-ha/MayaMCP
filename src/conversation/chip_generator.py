@@ -27,7 +27,7 @@ from typing import Any
 from google import genai
 from pydantic import ValidationError
 
-from ..config.logging_config import get_logger
+from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.client import call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
@@ -374,19 +374,31 @@ class ChipGenerator:
             SuggestionChipSet or None on failure
         """
         try:
-            logger.debug(
-                f"Chip generation starting for session {self.session_id}: "
-                f"phase={context.conversation_phase}, payment_status={context.payment_status}, "
-                f"turns={len(context.conversation_turns)}, recent_msgs={len(context.recent_user_messages)}"
-            )
-            logger.debug(f"Chip generation context: {context.model_dump()}")
+            if should_log_sensitive():
+                logger.debug(
+                    f"Chip generation starting for session {self.session_id}: "
+                    f"phase={context.conversation_phase}, payment_status={context.payment_status}, "
+                    f"turns={len(context.conversation_turns)}, recent_msgs={len(context.recent_user_messages)}"
+                )
+                logger.debug(f"Chip generation context: {context.model_dump()}")
+            else:
+                logger.debug(
+                    f"Chip generation starting for session {self.session_id}: "
+                    f"phase={context.conversation_phase}, payment_status={context.payment_status}, "
+                    f"turns_count={len(context.conversation_turns)}, recent_msgs_count={len(context.recent_user_messages)}"
+                )
 
             if self.test_mode:
                 deterministic_chips = self._generate_deterministic_chips(context)
-                logger.debug(
-                    f"[TEST MODE] Generated deterministic chips for session {self.session_id}: "
-                    f"{deterministic_chips.model_dump()}"
-                )
+                if should_log_sensitive():
+                    logger.debug(
+                        f"[TEST MODE] Generated deterministic chips for session {self.session_id}: "
+                        f"{deterministic_chips.model_dump()}"
+                    )
+                else:
+                    logger.debug(
+                        f"[TEST MODE] Generated {len(deterministic_chips.chips)} deterministic chips for session {self.session_id}"
+                    )
                 return deterministic_chips
 
             # Build prompt
@@ -434,10 +446,16 @@ class ChipGenerator:
                 )
                 return None
 
-            logger.debug(
-                f"Chip generation result for session {self.session_id}: "
-                f"{chip_set.model_dump() if chip_set else None}"
-            )
+            if should_log_sensitive():
+                logger.debug(
+                    f"Chip generation result for session {self.session_id}: "
+                    f"{chip_set.model_dump() if chip_set else None}"
+                )
+            else:
+                logger.debug(
+                    f"Chip generation result for session {self.session_id}: "
+                    f"chips_count={len(chip_set.chips) if chip_set else 0}"
+                )
             logger.info(
                 f"Generated {len(chip_set.chips)} chips for session {self.session_id}"
             )
@@ -516,60 +534,64 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 }
 """
 
-        # Estimate remaining token budget (MAX_PROMPT_TOKENS - static prefix)
-        # Using rough estimate: 1 token ≈ 4 characters
-        static_prefix_chars = len(system_instructions)
-        static_prefix_tokens = static_prefix_chars // 4
-        remaining_tokens = max(0, self.MAX_PROMPT_TOKENS - static_prefix_tokens)
-        remaining_chars = remaining_tokens * 4
-
-        # Build dynamic context with budget enforcement
-        conversation_lines = []
-        for turn in context.conversation_turns:
-            line = f"{turn['role']}: {turn['content']}"
-            conversation_lines.append(line)
-
-        conversation_context = "\n".join(conversation_lines)
-
-        # Truncate conversation context if needed
-        if len(conversation_context) > remaining_chars * 0.7:  # Reserve 30% for other fields
-            max_conv_chars = int(remaining_chars * 0.7)
-            conversation_context = conversation_context[:max_conv_chars] + "..."
-
-        recent_messages = (
-            "\n".join(context.recent_user_messages)
-            if context.recent_user_messages
-            else "None"
-        )
-
-        # Truncate recent messages if needed
-        max_recent_chars = int(remaining_chars * 0.2)
-        if len(recent_messages) > max_recent_chars:
-            recent_messages = recent_messages[:max_recent_chars] + "..."
-
-        # Add phase-specific guidance to dynamic context
+        # Static suffix with phase guidance and generation directive (never truncated)
         phase_guidance = self._get_phase_specific_guidance(
             context.conversation_phase, context.payment_status
         )
-
-        context_section = f"""
-**Current Conversation:**
-{conversation_context}
-
+        suffix_section = f"""
 **Conversation Phase:** {context.conversation_phase}
 **Payment Status:** {context.payment_status or "none"}
-**Recent User Messages (do not repeat):**
-{recent_messages}
 
 **Current Phase Guidance:**
 {phase_guidance}
 
 Generate 3-6 suggestion chips now:"""
 
-        full_prompt = system_instructions + context_section
-        max_allowed_chars = self.MAX_PROMPT_TOKENS * 4
-        if len(full_prompt) > max_allowed_chars:
-            full_prompt = full_prompt[:max_allowed_chars]
+        # Calculate exact remaining character budget for dynamic conversation turns and recent messages
+        max_total_chars = self.MAX_PROMPT_TOKENS * 4
+        framing_chars = (
+            len(system_instructions)
+            + len(suffix_section)
+            + len("\n**Current Conversation:**\n\n**Recent User Messages (do not repeat):**\n\n")
+        )
+        available_dynamic_chars = max(0, max_total_chars - framing_chars)
+
+        # Allocate budget: 75% for conversation turns, 25% for recent messages
+        max_conv_chars = int(available_dynamic_chars * 0.75)
+        max_recent_chars = int(available_dynamic_chars * 0.25)
+
+        # Build and truncate conversation context
+        conversation_lines = [
+            f"{turn['role']}: {turn['content']}"
+            for turn in context.conversation_turns
+        ]
+        conversation_context = "\n".join(conversation_lines)
+        if len(conversation_context) > max_conv_chars:
+            conversation_context = conversation_context[:max_conv_chars] + "..."
+
+        # Build and truncate recent user messages
+        recent_messages = (
+            "\n".join(context.recent_user_messages)
+            if context.recent_user_messages
+            else "None"
+        )
+        if len(recent_messages) > max_recent_chars:
+            recent_messages = recent_messages[:max_recent_chars] + "..."
+
+        dynamic_section = f"""
+**Current Conversation:**
+{conversation_context}
+
+**Recent User Messages (do not repeat):**
+{recent_messages}
+"""
+
+        full_prompt = system_instructions + dynamic_section + suffix_section
+        if len(full_prompt) > max_total_chars:
+            excess = len(full_prompt) - max_total_chars
+            # Trim excess from dynamic section right before suffix_section to keep instructions intact
+            dynamic_section = dynamic_section[:-excess]
+            full_prompt = system_instructions + dynamic_section + suffix_section
 
         if len(self._cache) >= 50:
             self._cache.pop(next(iter(self._cache)))

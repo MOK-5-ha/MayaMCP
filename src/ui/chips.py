@@ -10,7 +10,7 @@ import gradio as gr
 
 from ..config.logging_config import get_logger
 from ..schemas.chips import ActionID, ChipType, SuggestionChip, SuggestionChipSet
-from ..utils.state_manager import get_session_state
+from ..utils.state_manager import get_session_state, update_chip_state
 
 logger = get_logger(__name__)
 
@@ -215,7 +215,7 @@ def create_chip_row(session_id: str = "default") -> tuple[gr.Row, list[gr.Button
         elem_classes=["chip-container"],
     ) as chip_row:
         # ARIA live region for screen readers to announce chip updates (Requirement 9.3)
-        gr.HTML(
+        live_html = gr.HTML(
             '<div class="chip-updates" aria-live="polite" aria-atomic="true" id="chip-live-region"></div>'
             '<script>'
             '(function() {'
@@ -257,6 +257,7 @@ def create_chip_row(session_id: str = "default") -> tuple[gr.Row, list[gr.Button
             )
             chip_buttons.append(btn)
 
+    chip_row.live_region_html = live_html
     return chip_row, chip_buttons
 
 
@@ -385,10 +386,7 @@ def inject_chips_programmatically(
     Returns:
         List of updated button components
     """
-    session_state = get_session_state(session_id, app_state)
-    chip_state = session_state.get("chip_state", {})
-    chip_state["current_chips"] = chip_set
-    session_state["chip_state"] = chip_state
+    update_chip_state(session_id, app_state, {"current_chips": chip_set})
 
     if chip_buttons is not None:
         return update_chips(session_id, chip_buttons, app_state=app_state)

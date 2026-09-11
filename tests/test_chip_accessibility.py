@@ -86,10 +86,14 @@ class TestAriaLiveRegion:
 
     def test_create_chip_row_contains_aria_live_region(self):
         """create_chip_row must contain an ARIA live region container with polite and atomic attributes."""
-        assert 'aria-live="polite"' in CHIP_CSS or 'aria-live="polite"' in str(CHIP_CSS)
         row, buttons = create_chip_row(session_id="test-live-region")
         assert len(buttons) == 6
         assert row.elem_id == "suggestion-chips-row"
+        assert hasattr(row, "live_region_html")
+        live_html_content = getattr(row.live_region_html, "value", "")
+        assert 'aria-live="polite"' in live_html_content
+        assert 'aria-atomic="true"' in live_html_content
+        assert 'id="chip-live-region"' in live_html_content
 
     def test_format_chip_live_announcement_with_chips(self):
         """format_chip_live_announcement should produce a readable announcement string."""
