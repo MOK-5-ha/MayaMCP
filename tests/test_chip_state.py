@@ -7,6 +7,7 @@ Tasks: 11.1, 11.2, 11.3
 import threading
 import time
 from concurrent.futures import Future
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,6 +24,7 @@ from src.utils.state_manager import (
     clear_chip_state,
     get_chip_state,
     get_current_chips,
+    get_session_lock,
     get_session_state,
     initialize_state,
     reset_session_state,
@@ -216,29 +218,26 @@ class TestThreadSafeConcurrentAccess:
     """Test thread-safe concurrent access to chip state (Task 11.3)."""
 
     def test_concurrent_chip_state_updates(self, session_id, session_store):
-        """Verify concurrent updates across threads do not corrupt chip state."""
+        """Verify concurrent atomic updates across threads do not lose updates."""
         initialize_state(session_id, session_store)
         num_threads = 10
         updates_per_thread = 20
+        lock = get_session_lock(session_id)
 
         def worker(worker_idx: int):
-            for i in range(updates_per_thread):
-                update_chip_state(
-                    session_id,
-                    session_store,
-                    {
-                        "last_generation_time": time.time(),
-                    },
-                )
-                # Read and update counts
-                current = get_chip_state(session_id, session_store)
-                gen_count = current.get("generation_count", 0)
-                update_chip_state(
-                    session_id,
-                    session_store,
-                    {"generation_count": gen_count + 1},
-                )
-                time.sleep(0.001)
+            for _ in range(updates_per_thread):
+                with lock:
+                    current = get_chip_state(session_id, session_store)
+                    gen_count = current.get("generation_count", 0)
+                    update_chip_state(
+                        session_id,
+                        session_store,
+                        {
+                            "generation_count": gen_count + 1,
+                            "last_generation_time": time.time(),
+                        },
+                    )
+                time.sleep(0.0001)
 
         threads = [
             threading.Thread(target=worker, args=(i,)) for i in range(num_threads)
@@ -247,7 +246,59 @@ class TestThreadSafeConcurrentAccess:
             t.start()
         for t in threads:
             t.join(timeout=10.0)
+            assert not t.is_alive(), "Worker thread timed out"
 
         final_state = get_chip_state(session_id, session_store)
-        assert final_state["generation_count"] > 0
+        assert final_state["generation_count"] == num_threads * updates_per_thread
         assert final_state["last_generation_time"] is not None
+
+    def test_clear_chip_state_during_active_generation(self, session_id, session_store):
+        """Verify that in-flight generation completing after clear_chip_state does not repopulate chips."""
+        from src.conversation.chip_generator import ChipGenerator
+        from src.schemas.chips import ChipGenerationContext
+
+        initialize_state(session_id, session_store)
+        gen = ChipGenerator(session_id=session_id)
+
+        start_event = threading.Event()
+        finish_event = threading.Event()
+
+        def slow_generate(prompt_content, config, api_key=None, gcp_project=None, gcp_location=None, client=None):
+            start_event.set()
+            finish_event.wait(timeout=5.0)
+            mock_resp = MagicMock()
+            mock_resp.text = '{"chips": [{"text": "Late chips", "type": "dialogue"}]}'
+            return mock_resp
+
+        with patch("src.conversation.chip_generator.call_gemini_api", side_effect=slow_generate):
+            ctx = ChipGenerationContext(
+                conversation_turns=[{"role": "user", "content": "Hi"}],
+                payment_status="none",
+                conversation_phase="greeting",
+            )
+            # Submit generation in worker thread
+            result_holder = []
+            def run_gen():
+                res = gen.generate_chips_async(ctx)
+                result_holder.append(res)
+
+            gen_thread = threading.Thread(target=run_gen)
+            gen_thread.start()
+
+            # Wait until generation is actively executing
+            assert start_event.wait(timeout=2.0)
+
+            # Clear chip state while generation is in flight
+            clear_chip_state(session_id, session_store)
+
+            # Allow slow generation to complete
+            finish_event.set()
+            gen_thread.join(timeout=5.0)
+
+            # In-flight generation result must be None (discarded as stale)
+            assert len(result_holder) == 1
+            assert result_holder[0] is None
+
+            # Current chips in store must remain None
+            chips = get_current_chips(session_id, session_store)
+            assert chips is None

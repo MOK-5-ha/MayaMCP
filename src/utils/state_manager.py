@@ -1397,8 +1397,40 @@ def clear_chip_state(
     session_id, store = _get_store_and_session(session_id, store)
     lock = get_session_lock(session_id)
     with lock:
+        # Invalidate any in-flight batch cache first
+        clear_batch_cache_for_session(session_id)
+
+        # Advance sequence counter so any in-flight generation tasks
+        # are immediately rendered stale and cannot overwrite cleared chips
+        with _session_locks_mutex:
+            if session_id in _session_chip_seq:
+                _session_chip_seq[session_id] += 1
+            else:
+                data = _get_session_data(session_id, store)
+                _session_chip_seq[session_id] = (
+                    data.get("chip_state", {}).get("generation_seq", 0) + 1
+                )
+            clear_seq = _session_chip_seq[session_id]
+
+        # Cancel any active trigger task
+        try:
+            from ..conversation.processor import _session_trigger_tasks
+            prior_trigger = _session_trigger_tasks.pop(session_id, None)
+            if prior_trigger and not prior_trigger.done():
+                prior_trigger.cancel()
+        except ImportError:
+            pass
+
+        # Cancel any in-flight pending chip generation future
         data = _get_session_data(session_id, store)
-        data["chip_state"] = copy.deepcopy(DEFAULT_CHIP_STATE)
+        old_chip_state = data.get("chip_state", {})
+        pending = old_chip_state.get("pending_task")
+        if pending and not pending.done():
+            pending.cancel()
+
+        new_chip_state = copy.deepcopy(DEFAULT_CHIP_STATE)
+        new_chip_state["generation_seq"] = clear_seq
+        data["chip_state"] = new_chip_state
         _save_session_data(session_id, store, data)
     logger.debug(f"Chip state cleared for {session_id}")
 

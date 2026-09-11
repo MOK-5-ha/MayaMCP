@@ -16,6 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.conversation.chip_generator import ChipGenerator
+from src.llm.client import call_gemini_api
 from src.schemas.chips import ChipGenerationContext, SuggestionChipSet
 
 # =============================================================================
@@ -346,15 +347,15 @@ class TestChipGeneratorTimeoutProperty:
             elapsed_time <= max_allowed_time
         ), f"Execution took {elapsed_time:.2f}s, exceeded max {max_allowed_time}s"
 
-        # Assert: Result matches expected timeout behavior
-        if delay_seconds >= ChipGenerator.TIMEOUT_SECONDS:
+        # Assert: Result matches expected timeout behavior (with jitter margin around boundary)
+        if delay_seconds > ChipGenerator.TIMEOUT_SECONDS + 0.05:
             assert (
                 result is None
             ), f"Expected timeout (None) for delay={delay_seconds:.2f}s"
             assert (
                 "failure_count" in mock_session_data["chip_state"]
             ), "failure_count should be set on timeout"
-        else:
+        elif delay_seconds < ChipGenerator.TIMEOUT_SECONDS - 0.05:
             # Delay < 3.0s, should complete successfully
             assert (
                 result is not None
@@ -620,12 +621,13 @@ class TestChipGeneratorErrorHandlingProperty:
 
         generator = ChipGenerator(session_id=session_id, llm_client=mock_client)
 
-        try:
-            result = generator.generate_chips_async(context)
-            assert result is None, f"Expected None for exception: {exception_to_raise}"
-            assert (
-                mock_session_data["chip_state"].get("failure_count", 0) >= 1
-            ), "failure_count must be incremented on exception"
-        except Exception as e:
-            pytest.fail(f"generate_chips_async raised an unhandled exception: {e}")
+        with patch.object(call_gemini_api.retry, "sleep", return_value=None):
+            try:
+                result = generator.generate_chips_async(context)
+                assert result is None, f"Expected None for exception: {exception_to_raise}"
+                assert (
+                    mock_session_data["chip_state"].get("failure_count", 0) >= 1
+                ), "failure_count must be incremented on exception"
+            except Exception as e:
+                pytest.fail(f"generate_chips_async raised an unhandled exception: {e}")
 

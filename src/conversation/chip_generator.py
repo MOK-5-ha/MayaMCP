@@ -28,7 +28,6 @@ from google import genai
 from pydantic import ValidationError
 
 from ..config.logging_config import get_logger
-from ..config.model_config import get_model_config
 from ..llm.client import call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
@@ -63,7 +62,6 @@ class ChipGenerator:
             llm_client: Optional LLM client for dependency injection (testing)
         """
         self.session_id = session_id
-        self._custom_client = llm_client is not None
         self.llm_client = llm_client or get_genai_client()
         self._cache: dict[str, Any] = {}  # Context representation cache
 
@@ -107,17 +105,18 @@ class ChipGenerator:
             data = _get_session_data(session_id, store)
             chip_state = data.get("chip_state", {})
 
-            # Check if this generation has been superseded by a newer turn
-            if generation_seq is not None:
-                latest_seq = get_chip_generation_seq(session_id, store)
-                if generation_seq < latest_seq:
-                    logger.info(
-                        f"Skipping superseded chip generation for session {session_id} "
-                        f"(task seq {generation_seq} < latest seq {latest_seq})"
-                    )
-                    return None
+            # Snapshot or verify generation sequence token
+            latest_seq = get_chip_generation_seq(session_id, store)
+            if generation_seq is None:
+                generation_seq = latest_seq
+            elif generation_seq < latest_seq:
+                logger.info(
+                    f"Skipping superseded chip generation for session {session_id} "
+                    f"(task seq {generation_seq} < latest seq {latest_seq})"
+                )
+                return None
 
-            last_gen_time = chip_state.get("last_generation_time", 0)
+            last_gen_time = chip_state.get("last_generation_time") or 0.0
             if current_time - last_gen_time < self.RATE_LIMIT_SECONDS:
                 logger.warning(
                     f"Rate limit exceeded for session {self.session_id}, "
@@ -165,8 +164,8 @@ class ChipGenerator:
 
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
+                chip_state["last_generation_time"] = current_time
                 if result is not None:
-                    chip_state["last_generation_time"] = current_time
                     chip_state["generation_count"] = (
                         chip_state.get("generation_count", 0) + 1
                     )
@@ -219,6 +218,7 @@ class ChipGenerator:
 
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
+                chip_state["last_generation_time"] = current_time
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
                 chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
@@ -244,6 +244,7 @@ class ChipGenerator:
 
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
+                chip_state["last_generation_time"] = current_time
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
                 chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
@@ -274,19 +275,12 @@ class ChipGenerator:
                 "response_schema": SuggestionChipSet.model_json_schema(),
             }
 
-            # Call LLM with retry logic via centralized client, or injected client
-            if self._custom_client:
-                model_version = get_model_config()["model_version"]
-                response = self.llm_client.models.generate_content(
-                    model=model_version,
-                    contents=prompt,
-                    config=generation_config,
-                )
-            else:
-                response = call_gemini_api(
-                    prompt_content=[{"role": "user", "parts": [{"text": prompt}]}],
-                    config=generation_config,
-                )
+            # Call LLM via centralized client wrapper
+            response = call_gemini_api(
+                prompt_content=[{"role": "user", "parts": [{"text": prompt}]}],
+                config=generation_config,
+                client=self.llm_client,
+            )
 
             # Parse and validate response
             response_text = getattr(response, "text", "")
