@@ -174,11 +174,14 @@ class TestLauncherChipIntegration:
             Mock(),  # submit_button
         ]
 
+        app_state = {"session_store": {}}
         launch_bartender_interface(
             handle_input_fn=Mock(),
             clear_state_fn=Mock(),
             avatar_path="assets/bartender_avatar.jpg",
+            app_state=app_state,
         )
 
         mock_create_chip_row.assert_called_once()
         mock_register_chip_handlers.assert_called_once()
+        assert mock_register_chip_handlers.call_args[1].get("app_state") == app_state

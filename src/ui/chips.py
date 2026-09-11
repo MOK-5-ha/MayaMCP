@@ -14,9 +14,9 @@ from ..utils.state_manager import get_session_state
 
 logger = get_logger(__name__)
 
-# Chip styling constants
+# Chip styling constants (WCAG 2.1 AA compliant, >= 4.5:1 text contrast against #ffffff)
 DIALOGUE_CHIP_STYLE = """
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #4338ca 0%, #312e81 100%);
     color: white;
     border: none;
     border-radius: 20px;
@@ -30,7 +30,7 @@ DIALOGUE_CHIP_STYLE = """
 """
 
 ACTION_CHIP_STYLE = """
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, #be185d 0%, #881337 100%);
     color: white;
     border: none;
     border-radius: 20px;
@@ -146,12 +146,12 @@ CHIP_CSS = """
 }
 
 .chip-dialogue {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: linear-gradient(135deg, #4338ca 0%, #312e81 100%) !important;
     color: white !important;
 }
 
 .chip-action {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
+    background: linear-gradient(135deg, #be185d 0%, #881337 100%) !important;
     color: white !important;
     font-weight: 600 !important;
 }
@@ -213,6 +213,12 @@ def create_chip_row(session_id: str = "default") -> tuple[gr.Row, list[gr.Button
         elem_id="suggestion-chips-row",
         elem_classes=["chip-container"],
     ) as chip_row:
+        # ARIA live region for screen readers to announce chip updates (Requirement 9.3)
+        gr.HTML(
+            '<div class="chip-updates" aria-live="polite" aria-atomic="true" id="chip-live-region"></div>',
+            visible=True,
+            elem_id="chip-live-region-html",
+        )
         chip_buttons = []
         for i in range(6):
             btn = gr.Button(
@@ -281,18 +287,21 @@ def update_chips(
                 icon = ACTION_ICONS.get(chip.action_id, "")
                 display_text = f"{icon}{chip.text}"
 
-            updates.append(
-                gr.Button(
-                    value=display_text,
-                    visible=True,
-                    elem_classes=[
-                        "suggestion-chip",
-                        f"chip-{chip_type_str}",
-                    ],
-                    variant="primary" if chip_type_str == ChipType.ACTION.value else "secondary",
-                    elem_id=f"chip-{i}-{chip_type_str}-{action_id_str}",
-                )
+            # Calculate and set accessibility ARIA label (Requirements 5.1, 9.1)
+            aria_label = get_chip_aria_label(chip)
+
+            btn_update = gr.Button(
+                value=display_text,
+                visible=True,
+                elem_classes=[
+                    "suggestion-chip",
+                    f"chip-{chip_type_str}",
+                ],
+                variant="primary" if chip_type_str == ChipType.ACTION.value else "secondary",
+                elem_id=f"chip-{i}-{chip_type_str}-{action_id_str}",
             )
+            btn_update.aria_label = aria_label
+            updates.append(btn_update)
         else:
             updates.append(gr.Button(value="", visible=False))
 
@@ -366,24 +375,50 @@ def register_chip_handlers(
         session_id: Current session identifier
         app_state: Optional application state dictionary
     """
-    for chip_btn in chip_buttons:
+    action_submit_js = """
+    (text) => {
+        if (text && (/^[💳💰📋❌🍹]/.test(text.trim()) || text.includes('action'))) {
+            setTimeout(() => {
+                const sendBtn = document.querySelector('#send-message-btn') ||
+                                Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.trim() === 'Send');
+                if (sendBtn) sendBtn.click();
+            }, 100);
+        }
+    }
+    """
+    for i, chip_btn in enumerate(chip_buttons):
+        def _make_handler(chip_idx: int):
+            def _handler(text: str, sid: str = session_id):
+                # Retrieve session chip state to resolve true chip type and action_id
+                target_state = get_session_state(sid, app_state)
+                chip_set = target_state.get("chip_state", {}).get("current_chips")
+                chip_type = "dialogue"
+                action_id = None
+                if chip_set and hasattr(chip_set, "chips") and chip_idx < len(chip_set.chips):
+                    chip = chip_set.chips[chip_idx]
+                    chip_type = chip.type
+                    action_id = chip.action_id
+                else:
+                    # Fallback: detect from icon prefix in text
+                    for act_id, icon in ACTION_ICONS.items():
+                        if text and text.startswith(icon):
+                            chip_type = ChipType.ACTION
+                            action_id = act_id
+                            break
+
+                return handle_chip_click(
+                    chip_text=text,
+                    chip_type=chip_type,
+                    action_id=action_id,
+                    session_id=sid,
+                    textbox=textbox,
+                )
+            return _handler
+
         chip_btn.click(
-            fn=lambda text, elem_id, sid=session_id: handle_chip_click(
-                chip_text=text,
-                chip_type=(
-                    elem_id.split("-")[2]
-                    if elem_id and len(elem_id.split("-")) > 2
-                    else "dialogue"
-                ),
-                action_id=(
-                    elem_id.split("-")[3]
-                    if elem_id and len(elem_id.split("-")) > 3 and elem_id.split("-")[3] != "none"
-                    else None
-                ),
-                session_id=sid,
-                textbox=textbox,
-            ),
-            inputs=[chip_btn, chip_btn],
+            fn=_make_handler(i),
+            inputs=[chip_btn],
             outputs=[textbox, submit_btn],
+            js=action_submit_js,
             show_progress=False,
         )

@@ -69,7 +69,8 @@ def launch_bartender_interface(
     clear_state_fn: Callable | None = None,
     handle_key_submission_fn: Callable | None = None,
     handle_streaming_input_fn: Callable | None = None,
-    avatar_path: str | None = None
+    avatar_path: str | None = None,
+    app_state: MutableMapping | None = None,
 ) -> gr.Blocks:
     """
     Create the Gradio interface for Maya the bartender and return it.
@@ -80,6 +81,7 @@ def launch_bartender_interface(
         handle_key_submission_fn: Function to validate and store API keys (defaults to handle_key_submission)
         handle_streaming_input_fn: Function to handle streaming input (defaults to handle_gradio_streaming_input)
         avatar_path: Path to avatar image (will setup default if None)
+        app_state: Optional application state dictionary for session management
 
     Returns:
         gr.Blocks: The interface object (not launched), suitable for external serving
@@ -210,7 +212,7 @@ def launch_bartender_interface(
                     )
                     with gr.Row():
                         clear_btn = gr.Button("Clear Conversation")
-                        submit_btn = gr.Button("Send", variant="primary")
+                        submit_btn = gr.Button("Send", variant="primary", elem_id="send-message-btn")
 
         # =================================================================
         # Event Handlers
@@ -267,17 +269,37 @@ def launch_bartender_interface(
             textbox=msg_input,
             submit_btn=submit_btn,
             session_id="default",
+            app_state=app_state,
         )
 
         def refresh_chips_after_response(request: gr.Request):
             """Refresh and reveal suggestion chips after Maya's response completes."""
             sid = extract_session_id(request) if request else "default"
-            session_state = get_session_state(sid)
+
+            # Await pending background chip generation task if in-flight (max 3.5s timeout)
+            try:
+                from ..conversation.processor import _session_trigger_tasks
+                trigger_task = _session_trigger_tasks.get(sid)
+                if trigger_task and not trigger_task.done():
+                    trigger_task.result(timeout=3.5)
+            except Exception as e:
+                logger.warning(f"Pending chip trigger task did not finish cleanly: {e}")
+
+            session_state = get_session_state(sid, app_state)
             chip_state = session_state.get("chip_state", {})
+            pending_task = chip_state.get("pending_task")
+            if pending_task and not pending_task.done():
+                try:
+                    pending_task.result(timeout=3.5)
+                except Exception as e:
+                    logger.warning(f"Pending chip generation future did not finish cleanly: {e}")
+                session_state = get_session_state(sid, app_state)
+                chip_state = session_state.get("chip_state", {})
+
             chip_set = chip_state.get("current_chips")
             has_chips = bool(chip_set and getattr(chip_set, "chips", None))
             row_update = gr.Row(visible=has_chips)
-            button_updates = update_chips(sid, chip_buttons)
+            button_updates = update_chips(sid, chip_buttons, app_state=app_state)
             return [row_update] + button_updates
 
         submit_event = msg_input.submit(handle_input_wrapper, submit_inputs, submit_outputs)

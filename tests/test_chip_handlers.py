@@ -158,6 +158,7 @@ class TestUpdateChips:
         assert updates[0].value == "Surprise me"
         assert updates[0].variant == "secondary"
         assert "chip-dialogue" in updates[0].elem_classes
+        assert getattr(updates[0], "aria_label", None) == "dialogue chip: Surprise me"
 
         # Chip 1: Action with icon prefix
         assert updates[1].visible is True
@@ -165,11 +166,13 @@ class TestUpdateChips:
         assert updates[1].variant == "primary"
         assert "chip-action" in updates[1].elem_classes
         assert "menu" in updates[1].elem_id
+        assert getattr(updates[1], "aria_label", None) == "action chip: Show me the menu"
 
         # Chip 2: Dialogue
         assert updates[2].visible is True
         assert updates[2].value == "What's popular?"
         assert updates[2].variant == "secondary"
+        assert getattr(updates[2], "aria_label", None) == "dialogue chip: What's popular?"
 
         # Chips 3-5: Inactive (hidden)
         for i in range(3, 6):
@@ -196,4 +199,45 @@ class TestRegisterChipHandlers:
             btn.click.assert_called_once()
             call_kwargs = btn.click.call_args[1]
             assert callable(call_kwargs.get("fn"))
+            assert call_kwargs.get("inputs") == [btn]
             assert call_kwargs.get("outputs") == [mock_textbox, mock_submit_btn]
+            assert "sendBtn" in call_kwargs.get("js", "")
+
+    def test_registered_callback_distinguishes_action_and_dialogue(self):
+        """Callback attached by register_chip_handlers must resolve action vs dialogue chips properly."""
+        mock_buttons = [Mock(spec=gr.Button) for _ in range(6)]
+        mock_textbox = Mock(spec=gr.Textbox)
+        mock_submit_btn = Mock(spec=gr.Button)
+
+        app_state = {}
+        session_id = "test_callback_session"
+        session_state = get_session_state(session_id, app_state)
+        session_state["chip_state"] = {
+            "current_chips": SuggestionChipSet(
+                chips=[
+                    SuggestionChip(text="Surprise me", type=ChipType.DIALOGUE),
+                    SuggestionChip(text="Show menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+                    SuggestionChip(text="Pay tab", type=ChipType.ACTION, action_id=ActionID.PAYMENT),
+                ]
+            )
+        }
+
+        register_chip_handlers(
+            chip_buttons=mock_buttons,
+            textbox=mock_textbox,
+            submit_btn=mock_submit_btn,
+            session_id=session_id,
+            app_state=app_state,
+        )
+
+        # Dialogue chip callback (index 0)
+        dialogue_fn = mock_buttons[0].click.call_args[1]["fn"]
+        text, trigger = dialogue_fn("Surprise me")
+        assert text == "Surprise me"
+        assert trigger is None
+
+        # Action chip callback (index 1)
+        action_fn = mock_buttons[1].click.call_args[1]["fn"]
+        text, trigger = action_fn(f"{ACTION_ICONS[ActionID.MENU]}Show menu")
+        assert text == "Show menu"
+        assert trigger == "submit"

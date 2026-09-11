@@ -48,8 +48,8 @@ class TestChipStylingConstants:
     def test_dialogue_chip_style_properties(self):
         """Dialogue chips must use neutral gradient with rounded corners and 44x44px min sizing."""
         assert "linear-gradient" in DIALOGUE_CHIP_STYLE
-        assert "#667eea" in DIALOGUE_CHIP_STYLE
-        assert "#764ba2" in DIALOGUE_CHIP_STYLE
+        assert "#4338ca" in DIALOGUE_CHIP_STYLE
+        assert "#312e81" in DIALOGUE_CHIP_STYLE
         assert "border-radius: 20px" in DIALOGUE_CHIP_STYLE
         assert "min-height: 44px" in DIALOGUE_CHIP_STYLE
         assert "min-width: 44px" in DIALOGUE_CHIP_STYLE
@@ -57,8 +57,8 @@ class TestChipStylingConstants:
     def test_action_chip_style_properties(self):
         """Action chips must use accent gradient, bold weight, and 44x44px min sizing."""
         assert "linear-gradient" in ACTION_CHIP_STYLE
-        assert "#f093fb" in ACTION_CHIP_STYLE
-        assert "#f5576c" in ACTION_CHIP_STYLE
+        assert "#be185d" in ACTION_CHIP_STYLE
+        assert "#881337" in ACTION_CHIP_STYLE
         assert "font-weight: 600" in ACTION_CHIP_STYLE
         assert "min-height: 44px" in ACTION_CHIP_STYLE
         assert "min-width: 44px" in ACTION_CHIP_STYLE
@@ -85,14 +85,14 @@ class TestChipStylingConstants:
         assert "outline-offset: 2px" in CHIP_FOCUS_STYLE
 
     def test_wcag_color_contrast(self):
-        """Chip text must maintain adequate contrast against gradient background stops."""
+        """Chip text must maintain >= 4.5:1 contrast against all gradient background stops (WCAG 2.1 AA)."""
         text_color = "#ffffff"
-        # Primary dark endpoint of dialogue gradient (#764ba2) satisfies WCAG AA (>= 4.5:1)
-        assert _contrast_ratio(text_color, "#764ba2") >= 4.5
-        # Lighter endpoint (#667eea) satisfies graphical UI element contrast (>= 3.0:1)
-        assert _contrast_ratio(text_color, "#667eea") >= 3.0
-        # Action gradient dark endpoint (#f5576c) satisfies UI contrast (>= 3.0:1)
-        assert _contrast_ratio(text_color, "#f5576c") >= 3.0
+        # Dialogue gradient endpoints satisfy WCAG AA (>= 4.5:1)
+        assert _contrast_ratio(text_color, "#4338ca") >= 4.5
+        assert _contrast_ratio(text_color, "#312e81") >= 4.5
+        # Action gradient endpoints satisfy WCAG AA (>= 4.5:1)
+        assert _contrast_ratio(text_color, "#be185d") >= 4.5
+        assert _contrast_ratio(text_color, "#881337") >= 4.5
 
 
 class TestChipCSSRules:
