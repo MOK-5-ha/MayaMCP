@@ -685,6 +685,76 @@ class TestRateLimitEnforcement:
         """
         assert ChipGenerator.RATE_LIMIT_SECONDS == 2.0
 
+    @patch("src.conversation.chip_generator.call_gemini_api")
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    def test_rate_limit_with_none_timestamp_generates_chips(
+        self,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        mock_call_api,
+        session_id,
+        mock_session_state,
+        mock_session_lock,
+        valid_context,
+        valid_chip_response,
+    ):
+        """
+        Test that an initialized session with last_generation_time=None does not raise TypeError.
+
+        Validates: Requirements 6.3, 10.6
+        """
+        mock_session_state["chip_state"]["last_generation_time"] = None
+        mock_get_session.return_value = mock_session_state
+        mock_get_lock.return_value = mock_session_lock
+        mock_call_api.return_value = valid_chip_response
+
+        generator = ChipGenerator(session_id=session_id)
+        result = generator.generate_chips_async(valid_context)
+
+        assert result is not None
+        mock_call_api.assert_called_once()
+
+    @patch("src.conversation.chip_generator.call_gemini_api")
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    def test_rate_limit_enforced_after_failed_generation(
+        self,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        mock_call_api,
+        session_id,
+        mock_session_state,
+        mock_session_lock,
+        valid_context,
+    ):
+        """
+        Test that an invalid/failed generation updates last_generation_time and throttles immediate retries.
+
+        Validates: Requirements 8.1, 10.6
+        """
+        mock_session_state["chip_state"]["last_generation_time"] = None
+        mock_get_session.return_value = mock_session_state
+        mock_get_lock.return_value = mock_session_lock
+        mock_call_api.side_effect = Exception("API error")
+
+        generator = ChipGenerator(session_id=session_id)
+
+        # First attempt fails
+        result1 = generator.generate_chips_async(valid_context)
+        assert result1 is None
+        assert mock_session_state["chip_state"]["last_generation_time"] is not None
+
+        # Immediate second attempt should be rate limited
+        result2 = generator.generate_chips_async(valid_context)
+        assert result2 is None
+        # mock_call_api was only called on the first attempt
+        assert mock_call_api.call_count == 1
+
 
 # =============================================================================
 # Test Suite: Pending Task Cancellation

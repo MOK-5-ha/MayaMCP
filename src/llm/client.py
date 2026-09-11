@@ -157,14 +157,19 @@ def build_generate_config(config_dict: dict[str, Any]) -> types.GenerateContentC
                 processed_tools.append(t.func)
             else:
                 processed_tools.append(t)
-    return types.GenerateContentConfig(
-        temperature=config_dict.get("temperature"),
-        top_p=config_dict.get("top_p"),
-        top_k=config_dict.get("top_k"),
-        max_output_tokens=config_dict.get("max_output_tokens"),
-        tools=processed_tools,
-        system_instruction=config_dict.get("system_instruction"),
-    )
+    gen_kwargs: dict[str, Any] = {
+        "temperature": config_dict.get("temperature"),
+        "top_p": config_dict.get("top_p"),
+        "top_k": config_dict.get("top_k"),
+        "max_output_tokens": config_dict.get("max_output_tokens"),
+        "tools": processed_tools,
+        "system_instruction": config_dict.get("system_instruction"),
+    }
+    if "response_mime_type" in config_dict:
+        gen_kwargs["response_mime_type"] = config_dict["response_mime_type"]
+    if "response_schema" in config_dict:
+        gen_kwargs["response_schema"] = config_dict["response_schema"]
+    return types.GenerateContentConfig(**gen_kwargs)
 
 
 def get_model_name() -> str:
@@ -196,6 +201,7 @@ def call_gemini_api(
     api_key: str | None = None,
     gcp_project: str | None = None,
     gcp_location: str | None = None,
+    client: genai.Client | None = None,
 ) -> types.GenerateContentResponse:
     """
     Internal function to call the Gemini API in Vertex AI mode with retry logic.
@@ -206,14 +212,16 @@ def call_gemini_api(
         api_key: Deprecated / unused API key parameter
         gcp_project: Optional GCP Project ID
         gcp_location: Optional GCP Location
+        client: Optional pre-configured or injected genai.Client instance
 
     Returns:
         Gemini API response
     """
     logger.debug("Calling Gemini API in GCP Vertex AI mode...")
 
-    # Get singleton client in Vertex AI mode
-    client = get_genai_client(gcp_project=gcp_project, gcp_location=gcp_location)
+    # Get client (use injected or fallback to singleton in Vertex AI mode)
+    if client is None:
+        client = get_genai_client(gcp_project=gcp_project, gcp_location=gcp_location)
 
     # Get model name from shared config
     model_name = get_model_name()

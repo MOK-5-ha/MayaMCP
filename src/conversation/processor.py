@@ -4,6 +4,7 @@ import asyncio
 import concurrent.futures
 import queue
 import re
+import time
 from collections.abc import Generator
 from typing import Any
 
@@ -932,11 +933,18 @@ def _trigger_chip_generation(
 
         # Generate chips (asynchronously with timeout)
         # If no conversation history (before current turn), use fallback
+        chip_start_time = time.time()
         if not truncated_history:
             chip_set = chip_gen.generate_fallback_chips()
             logger.info(f"Using fallback chips for session {session_id} (empty history)")
         else:
             chip_set = chip_gen.generate_chips_async(context, generation_seq=my_seq)
+        chip_end_time = time.time()
+        chip_duration = chip_end_time - chip_start_time
+        logger.info(
+            f"Chip generation timing metric for session {session_id}: "
+            f"start={chip_start_time:.3f}, end={chip_end_time:.3f}, duration={chip_duration:.3f}s"
+        )
 
         # Store chips in session state only if this is still the most-recent
         # generation for this session. A newer turn's _trigger_chip_generation
@@ -962,6 +970,14 @@ def _trigger_chip_generation(
                     )
         else:
             logger.info(f"No chips generated for session {session_id}")
+            with lock:
+                latest_seq = get_chip_generation_seq(session_id, app_state)
+                if latest_seq == my_seq:
+                    session_data = _get_session_data(session_id, app_state)
+                    chip_state = session_data.get("chip_state", {})
+                    chip_state["current_chips"] = None
+                    session_data["chip_state"] = chip_state
+                    _save_session_data(session_id, app_state, session_data)
 
     except Exception as e:
         # Log error but never block conversation flow

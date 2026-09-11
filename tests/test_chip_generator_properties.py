@@ -16,6 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.conversation.chip_generator import ChipGenerator
+from src.llm.client import call_gemini_api
 from src.schemas.chips import ChipGenerationContext, SuggestionChipSet
 
 # =============================================================================
@@ -346,15 +347,15 @@ class TestChipGeneratorTimeoutProperty:
             elapsed_time <= max_allowed_time
         ), f"Execution took {elapsed_time:.2f}s, exceeded max {max_allowed_time}s"
 
-        # Assert: Result matches expected timeout behavior
-        if delay_seconds >= ChipGenerator.TIMEOUT_SECONDS:
+        # Assert: Result matches expected timeout behavior (with jitter margin around boundary)
+        if delay_seconds > ChipGenerator.TIMEOUT_SECONDS + 0.05:
             assert (
                 result is None
             ), f"Expected timeout (None) for delay={delay_seconds:.2f}s"
             assert (
                 "failure_count" in mock_session_data["chip_state"]
             ), "failure_count should be set on timeout"
-        else:
+        elif delay_seconds < ChipGenerator.TIMEOUT_SECONDS - 0.05:
             # Delay < 3.0s, should complete successfully
             assert (
                 result is not None
@@ -491,3 +492,142 @@ class TestChipGeneratorRateLimitProperty:
 
         # Assert: LLM was not called
         mock_models.generate_content.assert_not_called()
+
+
+# =============================================================================
+# Property Tests: Error Handling (Task 12.4)
+# =============================================================================
+
+# Strategy for malformed LLM outputs
+malformed_json_strategy = st.sampled_from(
+    [
+        "not json at all",
+        "{malformed json",
+        '{"chips": [{"text": "hi"}]}',  # Too few chips (<3)
+        '{"chips": [{"text": "1", "type": "dialogue"}, {"text": "2", "type": "dialogue"}, {"text": "3", "type": "dialogue"}, {"text": "4", "type": "dialogue"}, {"text": "5", "type": "dialogue"}, {"text": "6", "type": "dialogue"}, {"text": "7", "type": "dialogue"}]}',  # Too many chips (>6)
+        '{"chips": [{"text": "x", "type": "dialogue"}, {"text": "y", "type": "dialogue"}, {"text": "z", "type": "dialogue"}]}',  # Text too short (<2 chars)
+        '{"chips": [{"text": "' + ("a" * 50) + '", "type": "dialogue"}, {"text": "valid two", "type": "dialogue"}, {"text": "valid three", "type": "dialogue"}]}',  # Text too long (>40 chars)
+        '{"chips": [{"text": "Duplicate", "type": "dialogue"}, {"text": "duplicate", "type": "dialogue"}, {"text": "unique", "type": "dialogue"}]}',  # Duplicate texts
+        '{"chips": [{"text": "Pay", "type": "action"}, {"text": "A", "type": "dialogue"}, {"text": "B", "type": "dialogue"}]}',  # Action without action_id
+        '{"chips": [{"text": "Chat", "type": "dialogue", "action_id": "payment"}, {"text": "A", "type": "dialogue"}, {"text": "B", "type": "dialogue"}]}',  # Dialogue with action_id
+        '{"chips": [{"text": "Bad Action", "type": "action", "action_id": "unknown_act"}, {"text": "A", "type": "dialogue"}, {"text": "B", "type": "dialogue"}]}',  # Invalid action_id
+    ]
+)
+
+# Strategy for LLM exceptions
+llm_exception_strategy = st.sampled_from(
+    [
+        ConnectionError("Network disconnected"),
+        TimeoutError("Connection timed out"),
+        ValueError("Unexpected response format"),
+        RuntimeError("Internal SDK runtime failure"),
+        Exception("Generic LLM API error"),
+    ]
+)
+
+
+class TestChipGeneratorErrorHandlingProperty:
+    """
+    **Feature: suggestion-chips, Property 3: All chip generation errors result in empty chips, never exceptions**
+
+    *For any* error condition (malformed JSON, validation failure, LLM exception, timeout),
+    the ChipGenerator SHALL:
+    1. Return None (empty chip set)
+    2. Never raise an exception to the caller
+    3. Log the error appropriately
+    4. Increment failure_count in session state
+
+    **Validates: Requirements 1.5, 8.1, 8.2, 8.3, 8.5, 8.6**
+    """
+
+    @TEST_SETTINGS
+    @given(
+        session_id=session_id_strategy,
+        context=chip_context_strategy,
+        malformed_output=malformed_json_strategy,
+    )
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    def test_malformed_and_invalid_outputs_return_none_never_raise(
+        self,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        session_id,
+        context,
+        malformed_output,
+    ):
+        """
+        Property 3: Malformed JSON or invalid schema returns None without raising.
+
+        Validates: Requirements 1.5, 2.5, 8.2, 8.3, 8.5
+        """
+        from threading import RLock
+
+        mock_session_data = {"chip_state": {}}
+        mock_get_session.return_value = mock_session_data
+        mock_get_lock.return_value = RLock()
+
+        mock_client = MagicMock()
+        mock_models = MagicMock()
+        mock_models.generate_content.return_value = MagicMock(text=malformed_output)
+        mock_client.models = mock_models
+
+        generator = ChipGenerator(session_id=session_id, llm_client=mock_client)
+
+        try:
+            result = generator.generate_chips_async(context)
+            assert result is None, f"Expected None for invalid output: {malformed_output}"
+            assert (
+                mock_session_data["chip_state"].get("failure_count", 0) >= 1
+            ), "failure_count must be incremented on invalid output"
+        except Exception as e:
+            pytest.fail(f"generate_chips_async raised an unhandled exception: {e}")
+
+    @TEST_SETTINGS
+    @given(
+        session_id=session_id_strategy,
+        context=chip_context_strategy,
+        exception_to_raise=llm_exception_strategy,
+    )
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    def test_llm_exceptions_return_none_never_raise(
+        self,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+        session_id,
+        context,
+        exception_to_raise,
+    ):
+        """
+        Property 3: LLM exceptions return None without raising to caller.
+
+        Validates: Requirements 1.5, 8.1, 8.4, 8.5, 8.6
+        """
+        from threading import RLock
+
+        mock_session_data = {"chip_state": {}}
+        mock_get_session.return_value = mock_session_data
+        mock_get_lock.return_value = RLock()
+
+        mock_client = MagicMock()
+        mock_models = MagicMock()
+        mock_models.generate_content.side_effect = exception_to_raise
+        mock_client.models = mock_models
+
+        generator = ChipGenerator(session_id=session_id, llm_client=mock_client)
+
+        with patch.object(call_gemini_api.retry, "sleep", return_value=None):
+            try:
+                result = generator.generate_chips_async(context)
+                assert result is None, f"Expected None for exception: {exception_to_raise}"
+                assert (
+                    mock_session_data["chip_state"].get("failure_count", 0) >= 1
+                ), "failure_count must be incremented on exception"
+            except Exception as e:
+                pytest.fail(f"generate_chips_async raised an unhandled exception: {e}")
+

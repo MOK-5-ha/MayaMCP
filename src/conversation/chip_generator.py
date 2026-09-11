@@ -105,17 +105,18 @@ class ChipGenerator:
             data = _get_session_data(session_id, store)
             chip_state = data.get("chip_state", {})
 
-            # Check if this generation has been superseded by a newer turn
-            if generation_seq is not None:
-                latest_seq = get_chip_generation_seq(session_id, store)
-                if generation_seq < latest_seq:
-                    logger.info(
-                        f"Skipping superseded chip generation for session {session_id} "
-                        f"(task seq {generation_seq} < latest seq {latest_seq})"
-                    )
-                    return None
+            # Snapshot or verify generation sequence token
+            latest_seq = get_chip_generation_seq(session_id, store)
+            if generation_seq is None:
+                generation_seq = latest_seq
+            elif generation_seq < latest_seq:
+                logger.info(
+                    f"Skipping superseded chip generation for session {session_id} "
+                    f"(task seq {generation_seq} < latest seq {latest_seq})"
+                )
+                return None
 
-            last_gen_time = chip_state.get("last_generation_time", 0)
+            last_gen_time = chip_state.get("last_generation_time") or 0.0
             if current_time - last_gen_time < self.RATE_LIMIT_SECONDS:
                 logger.warning(
                     f"Rate limit exceeded for session {self.session_id}, "
@@ -144,9 +145,12 @@ class ChipGenerator:
             data["chip_state"] = chip_state
             _save_session_data(session_id, store, data)
 
+        start_time = time.time()
         # Wait with timeout
         try:
             result = future.result(timeout=self.TIMEOUT_SECONDS)
+            end_time = time.time()
+            duration = end_time - start_time
 
             # Update metadata
             with lock:
@@ -161,9 +165,22 @@ class ChipGenerator:
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
                 chip_state["last_generation_time"] = current_time
-                chip_state["generation_count"] = (
-                    chip_state.get("generation_count", 0) + 1
-                )
+                if result is not None:
+                    chip_state["generation_count"] = (
+                        chip_state.get("generation_count", 0) + 1
+                    )
+                    logger.info(
+                        f"Chip generation succeeded for session {self.session_id} in {duration:.3f}s "
+                        f"(start={start_time:.3f}, end={end_time:.3f}, chips={len(result.chips)})"
+                    )
+                else:
+                    chip_state["failure_count"] = (
+                        chip_state.get("failure_count", 0) + 1
+                    )
+                    logger.warning(
+                        f"Chip generation returned empty/None for session {self.session_id} in {duration:.3f}s "
+                        f"(start={start_time:.3f}, end={end_time:.3f})"
+                    )
                 chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
@@ -171,6 +188,8 @@ class ChipGenerator:
             return result
 
         except FutureTimeoutError:
+            end_time = time.time()
+            duration = end_time - start_time
             # Note: Future.cancel() only prevents awaiting the result; it cannot
             # stop a running thread. The background thread continues executing until
             # the LLM call completes or the retry logic exhausts (up to ~30s with
@@ -185,7 +204,8 @@ class ChipGenerator:
 
             logger.warning(
                 f"Chip generation timeout ({self.TIMEOUT_SECONDS}s) "
-                f"for session {self.session_id}"
+                f"for session {self.session_id} in {duration:.3f}s "
+                f"(start={start_time:.3f}, end={end_time:.3f})"
             )
             with lock:
                 latest_seq = get_chip_generation_seq(session_id, store)
@@ -198,6 +218,7 @@ class ChipGenerator:
 
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
+                chip_state["last_generation_time"] = current_time
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
                 chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
@@ -205,8 +226,11 @@ class ChipGenerator:
             return None
 
         except Exception as e:
+            end_time = time.time()
+            duration = end_time - start_time
             logger.error(
-                f"Chip generation failed for session {self.session_id}: {e}",
+                f"Chip generation failed for session {self.session_id} in {duration:.3f}s "
+                f"(start={start_time:.3f}, end={end_time:.3f}): {e}",
                 exc_info=True,
             )
             with lock:
@@ -220,12 +244,12 @@ class ChipGenerator:
 
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
+                chip_state["last_generation_time"] = current_time
                 chip_state["failure_count"] = chip_state.get("failure_count", 0) + 1
                 chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
             return None
-
 
     def _generate_chips_sync(
         self, context: ChipGenerationContext
@@ -251,27 +275,44 @@ class ChipGenerator:
                 "response_schema": SuggestionChipSet.model_json_schema(),
             }
 
-            # Call LLM with retry logic via centralized client
+            # Call LLM via centralized client wrapper
             response = call_gemini_api(
                 prompt_content=[{"role": "user", "parts": [{"text": prompt}]}],
                 config=generation_config,
+                client=self.llm_client,
             )
 
             # Parse and validate response
-            response_text = response.text
-            chip_set = SuggestionChipSet.model_validate_json(response_text)
+            response_text = getattr(response, "text", "")
+            try:
+                chip_set = SuggestionChipSet.model_validate_json(response_text)
+            except ValidationError as val_err:
+                is_json_parse_err = any(
+                    "json_invalid" in str(err.get("type", ""))
+                    for err in val_err.errors()
+                )
+                if is_json_parse_err:
+                    logger.error(
+                        f"Chip JSON parsing error for session {self.session_id}: {val_err}",
+                        exc_info=True,
+                    )
+                else:
+                    logger.error(
+                        f"Chip validation failed for session {self.session_id}: {val_err}",
+                        exc_info=True,
+                    )
+                return None
+            except Exception as parse_err:
+                logger.error(
+                    f"Chip JSON parsing error for session {self.session_id}: {parse_err}",
+                    exc_info=True,
+                )
+                return None
 
             logger.info(
                 f"Generated {len(chip_set.chips)} chips for session {self.session_id}"
             )
             return chip_set
-
-        except ValidationError as e:
-            logger.error(
-                f"Chip validation failed for session {self.session_id}: {e}",
-                exc_info=True,
-            )
-            return None
 
         except Exception as e:
             logger.error(
