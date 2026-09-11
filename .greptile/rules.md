@@ -126,8 +126,9 @@ When reviewing code, pull requests, and commits:
 - Concurrency limit: max 10 parallel chip generations across all sessions (enforced via `ThreadPoolExecutor` with `max_workers=10`).
 - Flag any chip state modification that bypasses the session lock or violates rate/concurrency limits.
 
-### Rule 16: CLI-First Architecture, MCP Stateful Boundaries & Review Bot Governance
-- MayaMCP and Antigravity workflows enforce a **CLI-first, stateful-MCP-sparing architecture**.
+### Rule 16: Agentic Developer Tooling: CLI-First Architecture & MCP Boundaries
+- **Developer Tooling Scope**: This rule governs AI coding agent workflows (how PR authors and bots develop this repository), NOT Maya's runtime application architecture (which runs as a FastAPI/Modal cloud service with Google ADK 2.0).
+- **CLI-First Tooling Architecture**: Coding agents and automation pipelines operate on a **CLI-first, stateful-MCP-sparing architecture**.
 - **MCP Reserved Tier (Stateful Integrations Only)**: MCP is strictly reserved for persistent stateful daemons, AST knowledge graphs (`codebase-memory-mcp`), and live browser sessions (`chrome-devtools`).
 - **CLI Tier (Stateless Operations)**: All Git/GitHub operations (`git`, `gh`), cloud deployments (`modal`), container management, and build tasks MUST execute via native CLI tools with output hygiene (`--json`, `--limit`, `--format`, `jq`).
 - **Prohibition of Stateless MCP**: Reviewers and agents must strictly reject any PR introducing stateless MCP servers (e.g. GitHub MCP, Git MCP, Jira/Slack MCP, Linear MCP, or sequential-thinking tools).
