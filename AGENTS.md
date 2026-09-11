@@ -1,7 +1,7 @@
 # MayaMCP Supreme Project Constitution
 
 ## Project Overview
-MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, simulated payments, and contextual suggestion chips. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio with dynamic suggestion chips, and API resilience is handled by `tenacity`.
+MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, simulated payments, and contextual suggestion chips. It uses Google Gemini (via `google-genai` and `google-adk`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio with dynamic suggestion chips, and API resilience is handled by `tenacity`.
 
 ## Repository Layout
 ```
@@ -74,7 +74,7 @@ python tests/eval/eval_crypto_payment.py
 
 ### Linting & Formatting
 ```bash
-ruff check src/ tests/    # Lint (line-length: 88, target: py38)
+ruff check src/ tests/    # Lint (line-length: 88, target: py310)
 mypy src/                 # Type checking
 ```
 

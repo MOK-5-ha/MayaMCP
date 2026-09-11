@@ -8,7 +8,7 @@ This document defines code style, linter rules, type checking, version control h
 
 - **Ruff Configuration**:
   - Max line length: `88` characters.
-  - Python target version: `py38`.
+  - Python target version: `py310`.
   - Active rules: `E` (pycodestyle errors), `W` (pycodestyle warnings), `F` (Pyflakes), `I` (isort imports), `B` (flake8-bugbear), `C4` (flake8-comprehensions), `UP` (pyupgrade).
   - Check command: `ruff check src/ tests/`
   - Auto-fix command: `ruff check --fix src/ tests/`
