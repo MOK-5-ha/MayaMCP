@@ -667,7 +667,7 @@ def step_verify_no_chips(ctx):
     session_state = get_session_state(ctx.session_id, ctx.app_state)
     chip_state = session_state.get("chip_state", {})
     current_chips = chip_state.get("current_chips")
-    assert ctx.chips is None or current_chips is None or len(getattr(current_chips, "chips", [])) == 0, "Chips were displayed"
+    assert current_chips is None or len(getattr(current_chips, "chips", [])) == 0, "Chips were displayed"
 
 
 @then("a timeout warning should be logged")
