@@ -252,12 +252,39 @@ class TestThreadSafeConcurrentAccess:
         assert final_state["generation_count"] == num_threads * updates_per_thread
         assert final_state["last_generation_time"] is not None
 
-    def test_clear_chip_state_during_active_generation(self, session_id, session_store):
+    def test_clear_chip_state_during_active_generation(self, session_id):
         """Verify that in-flight generation completing after clear_chip_state does not repopulate chips."""
         from src.conversation.chip_generator import ChipGenerator
         from src.schemas.chips import ChipGenerationContext
 
-        initialize_state(session_id, session_store)
+        valid_chip_json = (
+            '{"chips": ['
+            '{"text": "Late chips 1", "type": "dialogue"}, '
+            '{"text": "Late chips 2", "type": "dialogue"}, '
+            '{"text": "Late chips 3", "type": "dialogue"}'
+            ']}'
+        )
+
+        ctx = ChipGenerationContext(
+            conversation_turns=[{"role": "user", "content": "Hi"}],
+            payment_status="none",
+            conversation_phase="greeting",
+        )
+
+        # Baseline verification: without clearing, valid 3-chip response succeeds
+        baseline_sid = f"{session_id}_baseline"
+        initialize_state(baseline_sid)
+        try:
+            baseline_gen = ChipGenerator(session_id=baseline_sid)
+            with patch("src.conversation.chip_generator.call_gemini_api", return_value=MagicMock(text=valid_chip_json)):
+                baseline_res = baseline_gen.generate_chips_async(ctx)
+                assert baseline_res is not None
+                assert len(baseline_res.chips) == 3
+        finally:
+            cleanup_session_lock(baseline_sid)
+
+        # Now test with in-flight clearing:
+        initialize_state(session_id)
         gen = ChipGenerator(session_id=session_id)
 
         start_event = threading.Event()
@@ -267,16 +294,10 @@ class TestThreadSafeConcurrentAccess:
             start_event.set()
             finish_event.wait(timeout=5.0)
             mock_resp = MagicMock()
-            mock_resp.text = '{"chips": [{"text": "Late chips", "type": "dialogue"}]}'
+            mock_resp.text = valid_chip_json
             return mock_resp
 
         with patch("src.conversation.chip_generator.call_gemini_api", side_effect=slow_generate):
-            ctx = ChipGenerationContext(
-                conversation_turns=[{"role": "user", "content": "Hi"}],
-                payment_status="none",
-                conversation_phase="greeting",
-            )
-            # Submit generation in worker thread
             result_holder = []
             def run_gen():
                 res = gen.generate_chips_async(ctx)
@@ -289,16 +310,16 @@ class TestThreadSafeConcurrentAccess:
             assert start_event.wait(timeout=2.0)
 
             # Clear chip state while generation is in flight
-            clear_chip_state(session_id, session_store)
+            clear_chip_state(session_id)
 
             # Allow slow generation to complete
             finish_event.set()
             gen_thread.join(timeout=5.0)
 
-            # In-flight generation result must be None (discarded as stale)
+            # In-flight generation result must be None (discarded as stale, not due to validation)
             assert len(result_holder) == 1
             assert result_holder[0] is None
 
             # Current chips in store must remain None
-            chips = get_current_chips(session_id, session_store)
+            chips = get_current_chips(session_id)
             assert chips is None
