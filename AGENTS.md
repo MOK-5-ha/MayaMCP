@@ -1,3 +1,5 @@
+# MayaMCP Supreme Project Constitution
+
 ## Project Overview
 MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, simulated payments, and contextual suggestion chips. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio with dynamic suggestion chips, and API resilience is handled by `tenacity`.
 
@@ -24,165 +26,121 @@ deploy.py            # Modal Labs deployment
 run_maya.sh          # Dev runner script
 ```
 
-## Setup
+---
+
+## Core Architecture Invariants
+
+1. **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode and free-tier throttles are permanently removed.
+2. **Deprecated Environment Variable Literal Prohibition**: The exact literal string identifiers for legacy AI Studio API keys (such as `GEMINI` + `_API_KEY`, `LLM` + `_API_KEY`, and `BACKUP_LLM` + `_API_KEY`) are strictly prohibited repository-wide in all files. Use generalized descriptions in text and dynamic string concatenation in assertions.
+3. **Unified LLM Client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client()` or `call_gemini_api()`.
+4. **Thread-Safe Session & Payment Locking**: Always acquire per-session `RLock` before modifying payment state or session metadata.
+5. **Graceful Fallbacks & Fault Isolation**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments. Suggestion chip generation is parallel and non-blocking; failures must never break response streaming.
+
+---
+
+## Development Quickstart
+
+### Setup & Virtual Environment
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
-Always activate the `.venv` before running any command.
+Always activate the `.venv` before running any commands.
 
-## Running
+### Running the Application
 ```bash
-# Via console script
-mayamcp
-
-# Via runner script
-./run_maya.sh
-
-# Deployment (Modal Labs)
-modal serve deploy.py   # Dev
-modal deploy deploy.py  # Prod
+mayamcp                 # Console script
+./run_maya.sh           # Development runner
+modal serve deploy.py   # Modal Labs Dev
+modal deploy deploy.py  # Modal Labs Prod
 ```
 
-## Testing
+### Testing & Verification
 ```bash
-pytest                    # All tests
-pytest --cov              # With coverage
-pytest -m "not slow"      # Skip slow tests
+pytest                    # Full test suite
+pytest --cov              # With coverage report
 pytest -m unit            # Unit tests only
 pytest -m integration     # Integration tests only
-pytest -m bdd             # BDD tests only
+pytest -m bdd             # BDD acceptance tests only
+pytest -m "not slow"      # Skip slow property tests
 
-# Vertex AI Gen AI Evaluation Service & Cloud Trace
+# Headless Evals
 python scripts/run_evals.py
 python tests/eval/eval_crypto_payment.py
 ```
-- Tests live in `tests/` with `test_*.py` naming.
-- `tests/conftest.py` provides fixtures and SDK stubs for offline testing.
-- Markers: `slow`, `integration`, `unit`, `memvid`, `rag`, `llm`, `ui`, `bdd`.
-- Property-based tests use Hypothesis.
-- BDD tests use pytest-bdd with Gherkin scenarios in `tests/behavior/features/*.feature`.
-- Always mock external APIs (Google, Cartesia, Coinbase CDP) — never make real calls in tests.
-- **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats instead of obsolete LangChain structures.
-- **Rate Limit Testing**: Never allow global app rate limits to restrict the standard test suite, as it causes false-negative token exhaustion errors. Set rate limit environment variables to high values (e.g., `9999`) in `tests/conftest.py`. When testing the rate limiter itself, use context-manager overrides to temporarily enforce limits strictly within those specific tests.
-- **Stateful Singletons (Rate Limits)**: The application uses a global singleton for rate limiting (`RateLimiter`). When writing tests, ensure `check_rate_limits` is mocked in fixtures (e.g., returning `(True, "")`) to prevent sequential test execution from accumulating state and failing due to burst limits.
-- **Refactoring & Mocks**: When extracting logic into helper functions, do not move the calls to state managers or mocked dependencies into the helper if it bypasses existing `@patch` targets in the test suite. Instead, fetch the data in the original module and pass the data structures into the helper.
-- **Mocking Tools**: Never use "mock-sniffing" wrappers in production code to detect `unittest.mock` objects. Instead, fix the test doubles. When patching tools that used to be invoked via LangChain's `.invoke()`, set both `mock.return_value` and `mock.invoke.return_value` to the expected string to ensure compatibility with both direct calls and legacy test harnesses.
-- **Rate Limiter Initialization timing**: If overriding rate limit constraints via environment variables (e.g. setting `MAYA_SESSION_RATE_LIMIT` to `9999` for tests or evaluations), ensure those environment variables are set *before* importing any package from the application to prevent the `RateLimiter` singleton from initializing with default values.
-- **Offline Evaluations & Telemetry**: Headless evaluation suites and OpenTelemetry exporters must support running completely offline without demanding remote authentication if GCP Application Default Credentials (ADC) are absent. Provide local test doubles and fallback to standard Python logging to execute evaluations locally.
-- **Schema Invariant Parity in Stale Invalidation Test Fixtures**: When testing that stale background tasks or out-of-order responses are discarded upon session reset or state clearing, test fixtures and mocks must return schema-valid payloads (e.g. satisfying all Pydantic validators, such as >= 3 chips for `SuggestionChipSet`). Returning invalid fixtures causes validation to fail early and return `None`, producing false positives that mask regressions in sequence invalidation.
-- **Property Test Timeout Jitter Tolerance**: In Hypothesis property-based tests or concurrency tests verifying timeout boundaries (e.g. 3.0s timeout), avoid testing exact float boundary equality (`delay == timeout`). Add an explicit jitter tolerance margin (e.g. `±0.05s` or evaluating `delay = timeout + 0.5s` for timeout cases vs `delay = 0` for non-timeout cases) to prevent operating system thread scheduling jitter from causing flaky test assertions.
 
-## Linting & Type Checking
+### Linting & Formatting
 ```bash
 ruff check src/ tests/    # Lint (line-length: 88, target: py38)
 mypy src/                 # Type checking
 ```
-Ruff config is in `pyproject.toml`. Rules: E, W, F, I, B, C4, UP.
+
+---
 
 ## Environment Variables
-Copy `.env.example` to `.env`. Maya operates in 100% GCP Vertex AI Mode using Application Default Credentials (ADC) and GCP billing credits. Optional session overrides can be provided via the UI.
 
-Required:
-- `GCP_PROJECT` — Google Cloud Platform Project ID (for Vertex AI mode ADC authentication)
+Maya operates in 100% GCP Vertex AI Mode using Application Default Credentials (ADC) and GCP billing credits.
+
+### Required
+- `GCP_PROJECT` — Google Cloud Platform Project ID
 - `GCP_LOCATION` — GCP Location (defaults to `global`)
 - `GEMINI_TIER` — Locked to `paid` (high-throughput concurrency quota)
 - `CARTESIA_API_KEY` — Cartesia TTS API key
 
-Optional:
+### Optional
 - `GEMINI_MODEL_VERSION` — defaults to `gemini-3.5-flash-lite`
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `8192`
-- `MAYA_MASTER_KEY` — Fernet key for encrypting session data (ephemeral if unset)
+- `MAYA_MASTER_KEY` — Fernet key for encrypting session data
 - `CDP_API_KEY_ID` — Coinbase CDP API key ID
 - `CDP_API_KEY_SECRET` — Coinbase CDP API key secret
 - `CDP_MERCHANT_PRIVATE_KEY` — Wallet private key for Base Sepolia (optional)
-- `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional, has default)
+- `CDP_RECEIVER_ADDRESS` — Merchant wallet address (optional)
 
-## Key Architecture Rules
-- **100% GCP Vertex AI Mode Vendor Lock-in**: The application operates exclusively in GCP Vertex AI Mode using GCP billing credits (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`). Google AI Studio API Key Mode and free-tier throttles are permanently removed.
-- **Deprecated Environment Variable Literal Prohibition**: The exact literal string identifiers for legacy AI Studio API keys (such as `GEMINI` + `_API_KEY`, `LLM` + `_API_KEY`, and `BACKUP_LLM` + `_API_KEY`) are strictly prohibited repository-wide in all files (including documentation, YAML configs, docstrings, and comments). Use generalized descriptions in text (e.g., "legacy AI Studio API keys") and dynamic string concatenation (e.g., `"GEMINI" + "_API_KEY"`) in purge functions or test assertions.
-- **Unified LLM client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere (including evaluation scripts and test helpers). Always use `get_genai_client()` instead of instantiating `genai.Client` directly.
-- **UI Contract Synchronization**: When modifying backend configuration semantics (such as shifting from API keys to Vertex AI ADC), all UI form labels, placeholders, Pydantic schemas, and modal instruction markdown must be updated in lockstep.
-- **Dynamic Model Verification**: Diagnostic scripts (`verify_environment.py`) must import and inspect `get_model_config()["model_version"]` to guarantee exact parity with runtime LLM configuration.
-- **Graceful fallbacks**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments.
-- **Security scanning**: Inputs are checked for prompt injection/toxicity before processing; outputs are checked before returning to user. See `src/security/`.
-- **Payment state**: Thread-safe per-session locking with atomic updates and version checks. Always acquire the session lock before modifying payment state. See `src/utils/state_manager.py`.
-- **Vertex AI Mode Sessions**: Per-session LLM clients are lazily created via `src/llm/session_registry.py` utilizing Application Default Credentials (ADC).
-- **Lazy Streaming Pipelining**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs (e.g. streaming LLM outputs to TTS). Consume them lazily (using queue-based iterators if passing items between threads) to preserve low latency.
-- **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired, preventing payload misalignment.
-- **Intent Routing Safety**: When implementing deterministic intent routing (e.g., bypassing the LLM for hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`) as it is prone to false positives. Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to guarantee precise matching.
-- **Nested Event Loop Avoidance**: When executing synchronous entrypoint wraps of async ADK code (such as ADK `Runner` routines using `asyncio.run()`), always verify if an event loop is already running in the current thread. If a loop is active, execute the coroutine in a separate thread/executor to avoid event loop collision errors (`RuntimeError: asyncio.run() cannot be called from a running event loop`).
-- **ContextVars and Thread Boundaries**: When using `ThreadPoolExecutor` or spawning new threads within ADK workflows, thread-local `ContextVar` states (like `session_id`) are not automatically propagated. You must explicitly initialize the context inside the thread worker closure (e.g., `set_current_session(session_id)`) before invoking ADK tools or database helpers.
-- **ADK Streaming Payload Gathering**: When accumulating chunks from ADK's `Runner.run_async` SSE events, do not restrict data collection exclusively to `event.partial == True`. Final text chunks may arrive without the partial flag, leading to dropped content. Process any `text_chunk` that contains valid string data.
-- **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
-- **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and `a2a-sdk`. The `JSONRPCApplication` within the `a2a` server specifically requires `sse-starlette` to function. If test collection errors occur related to ADK routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
-- **Optimistic Payment Status Transitions**: In zero-latency optimistic payment flows, `completed → failed` transitions MUST be allowed in `VALID_STATUS_TRANSITIONS` so async background processing tasks can record failures without raising validation exceptions.
-- **Deterministic Payment Failure Testing**: Order amounts of `$99.99` trigger simulated background transaction failures in `CryptoPaymentClient._simulate_payment_lifecycle` for testing "register malfunction" apology flows in BDD and Vertex AI evaluations.
-- **Async Background Task Dispatch**: When dispatching background tasks from synchronous tool functions, attempt `asyncio.get_running_loop().create_task()` first. If no event loop is active, spawn a daemon thread (`threading.Thread(daemon=True)`) running `asyncio.run()`.
-- **FastAPI Distributed Session Store**: In FastAPI routers, always use `get_session_store(request)` to read `request.app.state.session_store` dynamically (falling back to local `_SESSION_STORE`), ensuring session and payment state are shared across multi-container Modal deployments (`max_containers > 1`).
-- **Async Event Loop Unblocking for SSE**: In `async def` SSE streaming endpoints, never iterate synchronous blocking generators directly with a `for` loop. Offload iteration using `await asyncio.to_thread(_fetch_next_stream_event, stream)` to prevent blocking FastAPI's asyncio event loop thread.
-- **EventSource Session Resolution**: Browser `EventSource` APIs cannot set custom request headers or inspect response headers. SSE streaming endpoints MUST support `session_id` via URL query parameters (`session_id=...`) and yield an initial `{"type": "session", "session_id": "..."}` SSE event upon connection.
-- **Lock Ordering & Deadlock Prevention**: Never hold `_session_locks_mutex` while acquiring a per-session `RLock`. Background cleanup routines must snapshot expired session IDs under mutex lock, release `_session_locks_mutex`, acquire `session_lock`, and re-check `_session_last_access` under `_session_locks_mutex` before evicting session resources.
-- **Phaser 3 Secondary Loader Pass**: When queuing assets dynamically from a loaded JSON manifest in `create()`, Phaser's loader queue does not automatically start unless `this.load.start()` is explicitly invoked, accompanied by a `this.load.once('complete', ...)` listener before starting downstream scenes (`BarScene`).
-- **Phaser 3 Audio Cache Verification**: In Phaser 3 audio management, `this.scene.sound.get(key)` only queries already-instantiated sound objects. To verify whether an audio asset was preloaded into cache before calling `sound.add(key)`, check `this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null`.
-- **Phaser Component & Timer Teardown Safety**: Composite GameObjects (such as `MayaCharacter`) that create internal looping scene timers (e.g. `MouthFlapController`'s viseme flap timer) must implement a `destroy()` method that explicitly cancels active timers and destroys child graphics objects upon container/scene teardown.
-- **Evaluation Fallback Isolation**: When authoring Agent-as-a-Judge or EvalTask harnesses with local heuristic fallback paths (`is_fallback: bool = True`), evaluation runners and metric aggregators MUST explicitly isolate fallback verdicts from live passing percentages and average score calculations (`isolate_fallback_benchmark_aggregates`), reporting `fallback_count` and fallback scores in a separate section to avoid inflating live pass rates.
-- **Asynchronous Lifecycle Evaluation Synchronization**: When evaluating multi-turn conversational agents with asynchronous/background operations (e.g. background blockchain transactions with simulated delays), evaluation benchmark runners must synchronize/poll for terminal state (e.g. `payment_status == 'failed'`) before executing subsequent query turns rather than immediately issuing follow-up turns across an unsettled race condition.
-- **Zero-Trust Evaluation Context Delimitation & Sanitization**: Before passing user messages or agent responses to an LLM-as-a-judge, sanitize untrusted strings (`sanitize_eval_input`) to defuse control tokens (`[INST]`, `<<SYS>>`, `<|im_start|>`), instruction override patterns, and score manipulation directives, and wrap dynamic sections in structural XML tags (`<user_turns>`, `<maya_responses>`, `<agent_trajectory>`).
-- **Prefix Invariant Caching**: To leverage GCP Context Caching in LLM judge routines, structure prompts with static evaluation rubrics and instructions at the prompt prefix (Invariant Prefix), placing dynamic test case inputs at the prompt tail.
-- **Non-Prescriptive Prompt State vs Scripted Responses**: When exposing background failures (like register malfunctions) to conversational agents via system prompt context, provide only factual state indicators (e.g. `PAYMENT STATUS: Failed (register malfunction during settlement)`) rather than prescriptive behavioral instructions (e.g. "Apologize and offer retry"), ensuring evaluation benchmarks measure authentic agent behavior rather than scripted prompt directives.
-- **Evaluation Scorer Guard Discipline**: In LLM evaluation scorers checking list outputs (like derived visemes), empty lists `[]` must NOT evaluate to `True` via fall-through guards like `... if visemes else True`. Scorers must strictly enforce non-empty lists (`bool(visemes) and len(visemes) == len(turns)`).
-- **Google GenAI Enterprise Mode Flag**: In 100% GCP Vertex AI mode, always set both `GOOGLE_GENAI_USE_VERTEXAI="true"` and `GOOGLE_GENAI_USE_ENTERPRISE="true"` to ensure compatibility with Google ADK runtime and avoid `GOOGLE_GENAI_USE_VERTEXAI is deprecated` warnings.
-- **Mocking Background Event Loop Dispatch**: When mocking `asyncio.get_running_loop().create_task` in unit tests, configure `mock_loop.create_task.side_effect = lambda coro: coro.close()` to cleanly terminate the coroutine and prevent unawaited coroutine `RuntimeWarning` exceptions during garbage collection.
-- **ADK Model Double Generator Protocol**: Test doubles implementing `Gemini.generate_content_async` must be defined as async generators yielding `LlmResponse.create(...)` rather than coroutines returning responses, matching Google ADK's runner interface.
-- **Parallel Chip Generation**: Suggestion chips are generated in parallel with Maya's response using a background `ThreadPoolExecutor` (max 10 workers, 3-second timeout). Chip generation MUST NEVER block the response stream. All failures return empty chip sets with logging, never user-visible errors.
-- **Structured Output Validation**: LLM structured outputs (e.g., suggestion chips) use Pydantic v2 schemas with field validators. Invalid outputs must log validation errors and return graceful fallback values (empty chip sets, generic greeting chips).
-- **Chip State Management**: Session state includes `chip_state` dictionary with `current_chips` (SuggestionChipSet), `last_generation_time`, `generation_count`, `failure_count`, and `pending_task` (Future). Thread-safe access via session RLock. Rate limiting: max 1 generation per 2 seconds per session. Concurrency: max 10 parallel generations across all sessions.
-- **Chip Generation Context Window**: ChipGenerator extracts last 4 conversation turns, current conversation phase (greeting, ordering, describing, payment, complete), payment status, and recent user messages (last 2) for deduplication and context-aware generation.
-- **BDD Test Coverage**: Feature-level acceptance tests use pytest-bdd with Gherkin scenarios (`tests/behavior/features/*.feature`) covering user journeys, accessibility (WCAG 2.1 AA: ARIA, keyboard nav, 44x44px touch targets, 4.5:1 contrast), error handling (timeouts, validation failures), and lifecycle (hide/show, persistence, session reset). Step definitions reuse existing fixtures and mocks.
-- **Batch State Defensive Merging**: When flushing request-scoped caches (`BatchStateCache.flush()`), never blindly overwrite persistent storage. Always check if out-of-band background workers (e.g. background suggestion chip generation, async payment settlements) updated state directly in the store, and defensively merge fresher records (using `generation_seq` or non-null checks) before writing back.
-- **Batch Cache Invalidation on Session Reset**: In `reset_session_state()`, `clear_batch_cache_for_session(session_id)` MUST be invoked at the very beginning of the session lock acquisition *before* `initialize_state(session_id, store)` or reading sequence counters. This guarantees `_get_session_data()` reads clean store defaults and any pending `flush()` from an overlapping in-flight request becomes an immediate no-op, preventing pre-reset conversation, order, or payment state from being restored.
-- **Multi-Tenant Concurrent Batch Cache Tracking**: Cross-thread batch cache registries (`_active_session_caches`) MUST track a collection (`list[BatchStateCache]`) per session rather than a single instance. When concurrent requests for the same session overlap, each registers its cache instance. `clear_batch_cache_for_session()` must atomically pop and call `.invalidate()` on ALL active caches for that session.
-- **Gradio Event Chaining for Auto-Submissions (`.then()`)**: In Gradio UI components requiring automated submission (such as action chips or quick-actions), never use arbitrary timer delays (`setTimeout`) or uncoordinated DOM clicks in JavaScript. Timers race against input textbox state updates and submit stale or empty input. Always chain auto-submission strictly after the input population callback finishes using Gradio's native `.then()` event listener (`click_ev.then(fn=None, inputs=[submit_btn], js="...")`), ensuring the textbox state is guaranteed to be updated in the client before the submit button is clicked.
-- **Downstream Background Task Synchronization in UI Callbacks**: When parallel background tasks (such as suggestion chip generation via `ThreadPoolExecutor`) execute concurrently with streaming responses, downstream UI follow-up callbacks (e.g. `.then(refresh_chips_after_response)`) must explicitly synchronize with in-flight background futures (`task.result(timeout=...)` with safety timeout fallbacks) before querying session state. Never assume background tasks complete before streaming response callbacks fire.
-- **Gradio Store and Session State Propagation**: All Gradio event wrappers, component registration helpers, and UI refresh callbacks must explicitly accept and pass `app_state` (or the injected session store) down to `get_session_state()` and `update_*()` calls. Never rely on module-level fallback singletons in UI callbacks, as this causes session isolation failures across multi-container environments.
-- **Gradio Component Input Argument Semantics**: In Gradio, passing a button component in `inputs=[btn]` passes only its displayed string `value` to callback handlers, never its HTML DOM attributes (such as `elem_id`). Action metadata, button indices, or entity IDs must be resolved via button position index closures or parsed from visible content prefixes (e.g. emoji prefixes from `ACTION_ICONS`), rather than expecting Gradio to provide DOM element attributes.
-- **WCAG 2.1 AA Color Contrast Across Gradient Endpoints**: Any CSS gradient used behind standard-sized text (<18pt regular / <14pt bold) must ensure that *all* gradient color stops independently achieve at least a 4.5:1 contrast ratio against the foreground text color to satisfy WCAG 2.1 AA compliance (e.g. using dark indigo `#4338ca`/`#312e81` or deep wine `#be185d`/`#881337` behind white `#ffffff`).
-- **State Dictionary Default Normalization**: When retrieving numerical timestamps, sequence IDs, or counters from session or state dictionaries where defaults initialize keys to `None` (e.g., `DEFAULT_CHIP_STATE = {"last_generation_time": None}`), never rely solely on `dict.get(key, default)`. Because the key exists with value `None`, `dict.get` returns `None` and ignores the fallback default. Always normalize using `dict.get(key) or default` or explicit `if value is not None` checks before performing arithmetic or comparisons.
-- **Cooldown Persistence Across Failed Attempts**: Rate limiting cooldowns for background generation (such as suggestion chips) must persist across failed, timed-out, or invalid generation attempts. When a background generation task fails or times out (and is not superseded by a newer sequence), record `last_generation_time = time.time()` to enforce the cooldown period and prevent rapid retry loops during outages.
-- **Centralized Routing with Injected LLM Clients**: When supporting dependency-injected `genai.Client` instances (e.g. for testing or isolated session clients), never invoke `client.models.generate_content` directly outside `src/llm/client.py`. Always pass the injected client through `call_gemini_api(..., client=injected_client)` to ensure centralized configuration building (`response_schema`, `response_mime_type`), tracing, and retry resilience are consistently applied.
-- **State Clearing Task & Cache Invalidation**: Any state-clearing helper (such as `clear_chip_state`) must mirror the full invalidation lifecycle of `reset_session_state`: (1) cancel active futures and background tasks, (2) invalidate active batch state caches via `clear_batch_cache_for_session(session_id)`, and (3) advance the monotonic sequence counter (`_session_chip_seq[session_id] += 1`) so late-arriving results from in-flight workers are cleanly discarded.
-- **Token Budget Dynamic Field Partitioning**: When constructing prompts with strict token ceilings (e.g. 512 tokens for suggestion chips), never right-truncate the assembled prompt string (`prompt[:budget*4]`), as this drops critical suffix directives (phase constraints, payment indicators, schema formatting rules). Instead, allocate proportional token budgets to dynamic fields (e.g., 75% conversation turns, 25% recent user messages) and truncate dynamic sections *before* appending invariant static prompt templates. Any remaining token trim must strictly reduce dynamic history while preserving the complete static suffix.
-- **Component-Level Accessibility Inspection**: When testing accessible UI components (such as ARIA live regions, focus indicators, and screen reader announcements), tests must never assert ARIA attributes against static CSS declarations or style sheets. Component constructors must attach generated HTML sub-components directly to the container object (e.g., `chip_row.live_region_html = live_html`) so unit, integration, and BDD assertions verify the exact rendered DOM attributes and initial markup structure.
-- **State-Direct Negative Verification in BDD Scenarios**: In BDD step definitions asserting negative or cleared states (e.g., verifying no suggestion chips are displayed on timeouts, errors, or phase resets), never use short-circuiting disjunctions on local step context handles (e.g., `assert ctx.chips is None or len(current_chips) == 0`). A `None` context handle upon timeout masks whether stale or default state persisted in storage. Step assertions must verify directly against the canonical session state dictionary (`current_chips = session_state.get("chip_state", {}).get("current_chips"); assert current_chips is None or len(current_chips) == 0`).
-- **Thread Synchronization in Test Injection Hooks**: Programmatic injection helpers and test validation hooks (e.g., `inject_chips_programmatically`) must always acquire the session `RLock` or delegate to thread-safe state mutators (`update_chip_state`) before modifying session dictionaries. This prevents race conditions with concurrent background workers (e.g., `ThreadPoolExecutor` chip generation or async payment lifecycles) during multi-turn test sequences.
-- **Production Invalidation Pathway Testing**: In BDD and acceptance test suites verifying lifecycle events (such as cancellation of in-flight background tasks, cooldown rate limits, or session sequence invalidation), test steps must invoke real production entrypoints (e.g., `process_order_stream`, `_trigger_chip_generation`, or `reset_session_state`) rather than manually manipulating mock states or directly calling `.cancel()` on test doubles in the test step.
-- **Non-Blocking Streaming Stream-to-Background Isolation Verification**: When testing background tasks that run parallel to streaming conversational responses (such as suggestion chips or optimistic background transactions), integration test suites must include end-to-end streaming tests asserting that the streaming response generator (`process_order_stream`) completes prompt delivery without delay (e.g., `duration < 0.5s` well below background timeout ceilings) and yields all expected tokens (`'text_chunk'`, `'complete'`) regardless of background task latency, timeouts, or simulated failures.
-- **ADK Stream Mock Event Contracts**: When mocking Google ADK runner streams (`Runner.run_async`) for `process_order_stream`, test event doubles must set `event.author = 'model'` and `event.content.parts = [Mock(text="...")]` to trigger token accumulation. Event type assertions must verify the application's actual yielded stream event types (`'text_chunk'`, `'sentence'`, `'complete'`) rather than generic names like `'content'`.
+---
+
+## Constitution & Rule Maintenance Protocol
+
+This section governs how AI agents must interpret, maintain, and update repository rules:
+
+1. **Root `AGENTS.md` Scope**: Reserved strictly for core project identity, primary architectural invariants, environment quickstarts, and rule navigation pointers. **Do not add granular function, component, or test rules directly to this file.**
+2. **`.agents/rules/` Scope**: Detailed implementation guardrails, DB transaction guidelines, logging privacy, BDD/test patterns, UI event chaining, and hygiene MUST be added to or updated within modular files under `.agents/rules/`.
+3. **Proposal Workflow**: Before modifying project rules (e.g., via `/learn`, slash commands, or code review resolutions), AI agents MUST:
+   - Check existing workspace rules under `.agents/rules/`.
+   - Create or update an `implementation_plan.md` or `learning_proposal.md` artifact outlining the rule classification, rationale, and precise text diffs.
+   - Set `request_feedback: true` on the artifact and obtain explicit user approval before writing rule changes to disk.
+
+---
+
+## Modular Rule Index & Navigation
+
+Detailed engineering rules are organized modularly in the [`.agents/rules/`](.agents/rules/) directory:
+
+- [**Architecture & Security Rules**](.agents/rules/architecture_and_security.md): Concurrency locking, distributed session store, optimistic payments, async SSE unblocking, security scanning, batch caching, and token budgeting.
+- [**UI, Suggestion Chips & Voice Rules**](.agents/rules/ui_and_voice.md): Parallel suggestion chip generation, Gradio state propagation, event chaining (`.then()`), Phaser 3 asset lifecycle, Cartesia TTS streaming, and WCAG accessibility.
+- [**Testing, BDD & Evaluation Rules**](.agents/rules/testing_and_hygiene.md): Native SDK mocking, BDD Gherkin patterns, rate limit test safety, ADK stream mock event contracts, production invalidation testing, non-blocking streaming assertions, and Vertex AI evals.
+- [**Style, Linting & Formatting Rules**](.agents/rules/style_and_formatting.md): Ruff rules, Mypy typing standards, conventional commits, pre-commit hygiene, and shell command preferences.
+
+---
 
 ## Adding a New Tool
 1. Define tool schema in `src/llm/tools.py`
 2. Implement handler in `src/conversation/processor.py`
 3. Add tests in `tests/`
 
-## Don't
-- Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client` for all model interactions, including evals)
+---
+
+## Don't (Supreme Behavioral Deny List)
+- Call Google SDK directly outside `src/llm/client.py` (use `get_genai_client` or `call_gemini_api`)
 - Use Google AI Studio API key mode or free-tier rate limits
-- Hardcode API keys or secrets
-- Skip error handling for external API calls
-- Break the graceful fallback chain
-- Add tests that require real API calls without mocking
+- Hardcode API keys, credentials, or secrets in any file
+- Skip error handling for external API calls or break the graceful fallback chain
+- Add tests that require real external API calls without mocking
 - Use Coinbase CDP mainnet keys in development (Base Sepolia testnet only)
-- Modify payment state without acquiring the session lock
-- Commit changes — only stage them for owner review
-- Eagerly materialize streaming generators using `list()` or list comprehensions.
-- Call Google SDK directly on injected `genai.Client` instances outside `src/llm/client.py` (use `call_gemini_api(..., client=...)`)
-- Rely on `dict.get(k, default)` to provide a non-`None` fallback when the dictionary explicitly maps `k` to `None`.
-- Right-truncate assembled prompts containing static instruction suffixes when enforcing token limits (truncate dynamic history fields individually before assembling).
-- Assert ARIA attributes or screen-reader markup against CSS strings rather than rendered HTML component properties.
-- Short-circuit negative BDD assertions with `ctx.var is None or ...` when verifying state clearing or timeout fallbacks.
-- Mutate session state from test hooks or programmatic injection utilities without acquiring the session `RLock`.
-- Manually cancel mock futures or manipulate internal task states in test steps when verifying cancellation or invalidation behaviors (always exercise the production trigger path).
-- Test background task timeout or failure handling solely through direct helper calls without also asserting that the primary user response stream generator completes promptly and non-blockingly.
+- Modify payment or session state without acquiring the session `RLock`
+- Directly commit or push changes to `main` or `master` (feature branches and PRs only)
+- Autonomously merge pull requests
+- Eagerly materialize streaming generators using `list()` or list comprehensions
+- Manually cancel mock futures or manipulate internal task states in test steps (always exercise the production trigger path)
+- Test background task timeout/failure handling solely through direct helper calls without also asserting that the primary response stream generator completes promptly (< 0.5s)
