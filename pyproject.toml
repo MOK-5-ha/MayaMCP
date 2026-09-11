@@ -62,7 +62,8 @@ markers = [
     "memvid: marks tests related to Memvid functionality",
     "rag: marks tests related to RAG functionality",
     "llm: marks tests related to LLM functionality",
-    "ui: marks tests related to UI functionality"
+    "ui: marks tests related to UI functionality",
+    "bdd: marks tests as BDD acceptance tests"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:websockets.*:",

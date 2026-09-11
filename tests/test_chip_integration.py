@@ -51,6 +51,14 @@ def cleanup_test_sessions():
         "test_concurrent_claims_session",
         "test_reset_cancel_session",
         "test_reset_monotonic_session",
+        "test_journey_session",
+        "test_action_routing_session",
+        "test_unrecognized_action_session",
+        "test_timeout_failure_session",
+        "test_validation_failure_session",
+        "test_llm_failure_session",
+        "test_lifecycle_reset_session",
+        "test_submission_hide_session",
     ]
     for s_id in test_ids:
         cleanup_session_lock(s_id)
@@ -975,9 +983,413 @@ class TestChipIntegration:
         clear_session_chip_seq(session_id)
 
 
+class TestFullConversationFlow:
+    """End-to-end integration tests for full conversation journey and action chip routing."""
+
+    @patch("src.utils.state_manager.get_session_lock")
+    @patch("src.utils.state_manager._save_session_data")
+    @patch("src.utils.state_manager._get_session_data")
+    @patch("src.conversation.chip_generator.ChipGenerator")
+    def test_complete_user_journey_greeting_ordering_description_payment(
+        self,
+        mock_chip_generator_class,
+        mock_get_session,
+        mock_save_session,
+        mock_get_lock,
+    ):
+        """Test complete user journey: greeting → ordering → description → payment with chips at each phase."""
+        from src.utils.state_manager import clear_session_chip_seq
+
+        session_id = "test_journey_session"
+        clear_session_chip_seq(session_id)
+        mock_get_lock.return_value = RLock()
+
+        # Phase 1: Greeting Phase
+        greeting_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Show me the menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+                SuggestionChip(text="Surprise me", type=ChipType.DIALOGUE),
+                SuggestionChip(text="What's popular?", type=ChipType.DIALOGUE),
+            ]
+        )
+        generator_greeting = Mock()
+        generator_greeting.generate_fallback_chips.return_value = greeting_chips
+        generator_greeting.generate_chips_async.return_value = greeting_chips
+        mock_chip_generator_class.return_value = generator_greeting
+
+        session_data = {
+            "conversation_history": [],
+            "payment": {"status": "none"},
+            "current_order": {"order": [], "finished": False},
+            "chip_state": {"generation_seq": 0},
+        }
+        mock_get_session.return_value = session_data
+
+        _trigger_chip_generation(
+            session_id=session_id,
+            app_state=None,
+            user_message="Hello",
+            maya_response="Welcome to Maya's Bar! What can I get for you?",
+            truncated_history=[],
+        )
+
+        assert mock_save_session.call_count >= 1
+        saved = mock_save_session.call_args[0][2]
+        assert saved["chip_state"]["current_chips"] == greeting_chips
+
+        # Phase 2: Ordering Phase
+        ordering_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Complete payment", type=ChipType.ACTION, action_id=ActionID.PAYMENT),
+                SuggestionChip(text="Order another drink", type=ChipType.ACTION, action_id=ActionID.ORDER_ANOTHER),
+                SuggestionChip(text="Make it a double", type=ChipType.DIALOGUE),
+            ]
+        )
+        generator_ordering = Mock()
+        generator_ordering.generate_chips_async.return_value = ordering_chips
+        mock_chip_generator_class.return_value = generator_ordering
+
+        session_data["conversation_history"] = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Welcome to Maya's Bar! What can I get for you?"},
+            {"role": "user", "content": "I'll have an Old Fashioned."},
+            {"role": "assistant", "content": "One Old Fashioned coming up! That will be $12.00."},
+        ]
+        session_data["current_order"] = {"order": [{"name": "Old Fashioned", "price": 12.0}], "finished": False}
+
+        _trigger_chip_generation(
+            session_id=session_id,
+            app_state=None,
+            user_message="I'll have an Old Fashioned.",
+            maya_response="One Old Fashioned coming up! That will be $12.00.",
+            truncated_history=session_data["conversation_history"],
+        )
+
+        call_ctx = generator_ordering.generate_chips_async.call_args[0][0]
+        assert call_ctx.conversation_phase == "ordering"
+        saved = mock_save_session.call_args[0][2]
+        assert saved["chip_state"]["current_chips"] == ordering_chips
+        assert any(c.action_id == ActionID.PAYMENT for c in saved["chip_state"]["current_chips"].chips)
+
+        # Phase 3: Describing Phase
+        describing_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="What bourbon do you use?", type=ChipType.DIALOGUE),
+                SuggestionChip(text="Can you make it sweeter?", type=ChipType.DIALOGUE),
+                SuggestionChip(text="Sounds great, I'll take it", type=ChipType.DIALOGUE),
+            ]
+        )
+        generator_describing = Mock()
+        generator_describing.generate_chips_async.return_value = describing_chips
+        mock_chip_generator_class.return_value = generator_describing
+
+        session_data["conversation_history"].extend([
+            {"role": "user", "content": "What's in an Old Fashioned?"},
+            {"role": "assistant", "content": "The Old Fashioned recipe is made with bourbon, Angostura bitters, simple syrup, and an orange twist."},
+        ])
+
+        _trigger_chip_generation(
+            session_id=session_id,
+            app_state=None,
+            user_message="What's in an Old Fashioned?",
+            maya_response="The Old Fashioned recipe is made with bourbon, Angostura bitters, simple syrup, and an orange twist.",
+            truncated_history=session_data["conversation_history"],
+        )
+
+        call_ctx = generator_describing.generate_chips_async.call_args[0][0]
+        assert call_ctx.conversation_phase == "describing"
+        saved = mock_save_session.call_args[0][2]
+        assert saved["chip_state"]["current_chips"] == describing_chips
+        assert all(c.type == ChipType.DIALOGUE for c in saved["chip_state"]["current_chips"].chips)
+
+        # Phase 4: Payment Phase
+        payment_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Complete payment", type=ChipType.ACTION, action_id=ActionID.PAYMENT),
+                SuggestionChip(text="Cancel order", type=ChipType.ACTION, action_id=ActionID.CANCEL),
+                SuggestionChip(text="Add a tip", type=ChipType.ACTION, action_id=ActionID.TIP),
+            ]
+        )
+        generator_payment = Mock()
+        generator_payment.generate_chips_async.return_value = payment_chips
+        mock_chip_generator_class.return_value = generator_payment
+
+        session_data["payment"] = {"status": "pending", "amount": 12.0}
+        session_data["conversation_history"].extend([
+            {"role": "user", "content": "Ready to pay."},
+            {"role": "assistant", "content": "Your total is $12.00. Ready when you are!"},
+        ])
+
+        _trigger_chip_generation(
+            session_id=session_id,
+            app_state=None,
+            user_message="Ready to pay.",
+            maya_response="Your total is $12.00. Ready when you are!",
+            truncated_history=session_data["conversation_history"],
+        )
+
+        call_ctx = generator_payment.generate_chips_async.call_args[0][0]
+        assert call_ctx.conversation_phase == "payment"
+        assert call_ctx.payment_status == "pending"
+        saved = mock_save_session.call_args[0][2]
+        assert saved["chip_state"]["current_chips"] == payment_chips
+        assert saved["chip_state"]["current_chips"].chips[0].action_id == ActionID.PAYMENT
+        clear_session_chip_seq(session_id)
+
+    @pytest.mark.parametrize(
+        "action_id,raw_chip_text,expected_clean_text",
+        [
+            (ActionID.PAYMENT, "💳 Complete payment", "Complete payment"),
+            (ActionID.TIP, "💰 Add a tip", "Add a tip"),
+            (ActionID.MENU, "📋 Show me the menu", "Show me the menu"),
+            (ActionID.CANCEL, "❌ Cancel order", "Cancel order"),
+            (ActionID.ORDER_ANOTHER, "🍹 Order another drink", "Order another drink"),
+        ],
+    )
+    def test_action_chip_routing_all_actions(self, action_id, raw_chip_text, expected_clean_text):
+        """Test action chip routing for payment, tip, menu, cancel, and order_another."""
+        from src.ui.chips import handle_chip_click
+
+        populated_text, submit_trigger = handle_chip_click(
+            chip_text=raw_chip_text,
+            chip_type=ChipType.ACTION,
+            action_id=action_id,
+            session_id="test_action_routing_session",
+            textbox=MagicMock(),
+        )
+
+        assert populated_text == expected_clean_text
+        assert submit_trigger == "submit"
+
+    def test_action_chip_routing_unrecognized_id_fallback(self, caplog):
+        """Test unrecognized action_id falls back to dialogue behavior without auto-submit."""
+        from src.ui.chips import handle_chip_click
+
+        with caplog.at_level("WARNING"):
+            populated_text, submit_trigger = handle_chip_click(
+                chip_text="Unrecognized button",
+                chip_type=ChipType.ACTION,
+                action_id="nonexistent_action_xyz",
+                session_id="test_unrecognized_action_session",
+                textbox=MagicMock(),
+            )
+
+        assert populated_text == "Unrecognized button"
+        assert submit_trigger is None
+        assert any("Unrecognized action_id" in record.message for record in caplog.records)
 
 
+class TestFailureScenarios:
+    """End-to-end integration tests for suggestion chip failure scenarios."""
 
+    def test_chip_generation_timeout_scenario(self, caplog):
+        """Test timeout scenarios: LLM delay >3.0s returns None, logs timeout warning, tracks failure."""
+        import concurrent.futures
+
+        from src.conversation.chip_generator import ChipGenerator
+        from src.utils.state_manager import _get_session_data, clear_session_chip_seq
+
+        session_id = "test_timeout_failure_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                }
+            }
+        }
+
+        with patch("src.utils.state_manager._global_store", store):
+            generator = ChipGenerator(session_id)
+            context = ChipGenerationContext(
+                conversation_turns=[{"role": "user", "content": "hi"}],
+                payment_status="none",
+                conversation_phase="greeting",
+                recent_user_messages=["hi"],
+            )
+
+            mock_future = Mock(spec=concurrent.futures.Future)
+            mock_future.done.return_value = False
+            mock_future.result.side_effect = concurrent.futures.TimeoutError("LLM call timed out")
+
+            with patch("src.conversation.chip_generator._chip_executor.submit", return_value=mock_future):
+                with caplog.at_level("WARNING"):
+                    result = generator.generate_chips_async(context)
+
+            assert result is None
+            assert mock_future.cancel.called
+            data = _get_session_data(session_id, store)
+            assert data["chip_state"]["failure_count"] == 1
+            assert any("Chip generation timeout" in r.message for r in caplog.records)
+
+        clear_session_chip_seq(session_id)
+
+    def test_chip_generation_validation_error_scenario(self, caplog):
+        """Test validation error scenarios: malformed JSON or invalid schema returns None, logs error, tracks failure."""
+        from src.conversation.chip_generator import ChipGenerator
+        from src.utils.state_manager import _get_session_data, clear_session_chip_seq
+
+        session_id = "test_validation_failure_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                }
+            }
+        }
+
+        with patch("src.utils.state_manager._global_store", store):
+            generator = ChipGenerator(session_id)
+            context = ChipGenerationContext(
+                conversation_turns=[{"role": "user", "content": "hi"}],
+                payment_status="none",
+                conversation_phase="greeting",
+                recent_user_messages=["hi"],
+            )
+
+            mock_llm_response = MagicMock()
+            mock_llm_response.text = '{"chips": []}'
+
+            with patch("src.conversation.chip_generator.call_gemini_api", return_value=mock_llm_response):
+                with caplog.at_level("WARNING"):
+                    result = generator.generate_chips_async(context)
+
+            assert result is None
+            data = _get_session_data(session_id, store)
+            assert data["chip_state"]["failure_count"] == 1
+            assert any("Chip validation failed" in r.message for r in caplog.records)
+
+        clear_session_chip_seq(session_id)
+
+    def test_chip_generation_llm_error_scenario(self, caplog):
+        """Test LLM error scenarios: client API exception returns None, logs error, proceeds gracefully."""
+        from src.conversation.chip_generator import ChipGenerator
+        from src.utils.state_manager import _get_session_data, clear_session_chip_seq
+
+        session_id = "test_llm_failure_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                }
+            }
+        }
+
+        with patch("src.utils.state_manager._global_store", store):
+            generator = ChipGenerator(session_id)
+            context = ChipGenerationContext(
+                conversation_turns=[{"role": "user", "content": "hi"}],
+                payment_status="none",
+                conversation_phase="greeting",
+                recent_user_messages=["hi"],
+            )
+
+            with patch("src.conversation.chip_generator.call_gemini_api", side_effect=RuntimeError("GCP Vertex API Unavailable")):
+                with caplog.at_level("ERROR"):
+                    result = generator.generate_chips_async(context)
+
+            assert result is None
+            data = _get_session_data(session_id, store)
+            assert data["chip_state"]["failure_count"] == 1
+            assert any("LLM call failed for chip generation" in r.message for r in caplog.records)
+
+        clear_session_chip_seq(session_id)
+
+
+class TestSessionLifecycleIntegration:
+    """End-to-end integration tests for session lifecycle and suggestion chips."""
+
+    def test_session_reset_clears_chips_and_hides_ui(self):
+        """Test session reset clears chip state and hides all chip buttons."""
+        from src.ui.chips import create_chip_row, update_chips
+        from src.utils.state_manager import (
+            clear_session_chip_seq,
+            get_session_state,
+            reset_session_state,
+        )
+
+        session_id = "test_lifecycle_reset_session"
+        clear_session_chip_seq(session_id)
+        app_state = {}
+        _, buttons = create_chip_row(session_id)
+
+        session_state = get_session_state(session_id, app_state)
+        sample_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Show menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+                SuggestionChip(text="Old Fashioned", type=ChipType.DIALOGUE),
+                SuggestionChip(text="Surprise me", type=ChipType.DIALOGUE),
+            ]
+        )
+        session_state["chip_state"] = {"current_chips": sample_chips}
+
+        updated = update_chips(session_id, buttons, app_state=app_state)
+        assert updated[0].visible is True
+        assert updated[1].visible is True
+        assert updated[2].visible is True
+
+        reset_session_state(session_id, app_state)
+
+        clean_state = get_session_state(session_id, app_state)
+        assert clean_state.get("chip_state", {}).get("current_chips") is None
+
+        hidden = update_chips(session_id, buttons, app_state=app_state)
+        assert all(b.visible is False for b in hidden)
+        clear_session_chip_seq(session_id)
+
+    def test_user_message_submission_hides_chips_and_restores_on_complete(self):
+        """Test user message submission hides chips until Maya completes her response."""
+        import gradio as gr
+
+        from src.ui.chips import create_chip_row, update_chips
+        from src.utils.state_manager import clear_session_chip_seq, get_session_state
+
+        session_id = "test_submission_hide_session"
+        clear_session_chip_seq(session_id)
+        app_state = {}
+        chip_row, buttons = create_chip_row(session_id)
+
+        # 1. User submits a message: chips row is hidden
+        hide_update = gr.Row(visible=False)
+        assert hide_update.visible is False
+
+        # 2. Response completes and chips are stored
+        session_state = get_session_state(session_id, app_state)
+        new_chips = SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Yes please", type=ChipType.DIALOGUE),
+                SuggestionChip(text="No thank you", type=ChipType.DIALOGUE),
+                SuggestionChip(text="Tell me more", type=ChipType.DIALOGUE),
+            ]
+        )
+        session_state["chip_state"] = {"current_chips": new_chips}
+
+        # 3. Chips become visible again after response finishes
+        refreshed = update_chips(session_id, buttons, app_state=app_state)
+        assert refreshed[0].visible is True
+        assert refreshed[0].value == "Yes please"
+        assert refreshed[1].visible is True
+        assert refreshed[1].value == "No thank you"
+        assert refreshed[2].visible is True
+        assert refreshed[2].value == "Tell me more"
+        clear_session_chip_seq(session_id)
 
 
 # Mark integration tests

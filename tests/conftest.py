@@ -266,3 +266,11 @@ def force_rebuild_flag(request):
 
     # Default to False for CI efficiency
     return False
+
+
+def pytest_collection_modifyitems(config, items):
+    """Automatically mark all tests in tests/behavior with the bdd marker."""
+    for item in items:
+        if "tests/behavior" in str(item.fspath):
+            item.add_marker(pytest.mark.bdd)
+

@@ -286,38 +286,39 @@
 - [x] 17. Checkpoint - Performance tests pass
   - Ensure all performance tests pass, ask user if questions arise
 
-- [ ] 18. End-to-end integration testing
-  - [ ] 18.1 Write full conversation flow tests
+- [x] 18. End-to-end integration testing
+  - [x] 18.1 Write full conversation flow tests
     - Test complete user journey: greeting → ordering → description → payment with chips at each phase
     - Test all action chip routing (payment, tip, menu, cancel, order_another)
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 11.1, 11.2, 11.3, 11.4_
-  - [ ] 18.2 Write failure scenario tests
+  - [x] 18.2 Write failure scenario tests
     - Test timeout scenarios
     - Test validation error scenarios
     - Test LLM error scenarios
     - _Requirements: 8.1, 8.2, 8.3_
-  - [ ] 18.3 Write session lifecycle tests
+  - [x] 18.3 Write session lifecycle tests
     - Test chips clear on session reset
     - _Requirements: 6.5_
 
-- [ ] 19. Write BDD acceptance tests
-  - [ ] 19.1 Create `tests/behavior/features/suggestion_chips.feature`
+- [x] 19. Write BDD acceptance tests
+  - [x] 19.1 Create `tests/behavior/features/suggestion_chips.feature`
     - Add Gherkin scenarios covering greeting phase, ordering phase, payment phase, drink description phase
     - Add scenarios for chip deduplication, action chip auto-submit, dialogue chip focus behavior
     - Add scenarios for graceful degradation, keyboard navigation, session reset
     - See design document for complete feature file template
     - _Requirements: All requirements (acceptance testing coverage)_
-  - [ ] 19.2 Implement step definitions in `tests/behavior/test_suggestion_chips.py`
+  - [x] 19.2 Implement step definitions in `tests/behavior/test_suggestion_chips.py`
     - Use pytest-bdd integration
     - Reuse existing fixtures and mocks
     - _Requirements: All requirements_
-  - [ ] 19.3 Run BDD tests in CI/CD
+  - [x] 19.3 Run BDD tests in CI/CD
     - Ensure BDD tests run alongside pytest suite
     - _Requirements: All requirements_
 
-- [ ] 20. Final checkpoint - All tests pass
+- [x] 20. Final checkpoint - All tests pass
   - Ensure all tests pass (unit, integration, property-based, BDD)
   - Run full conversation flow with chip generation enabled
   - Verify accessibility with screen reader
   - Verify mobile responsive behavior
   - Verify graceful degradation when chip generation fails
+

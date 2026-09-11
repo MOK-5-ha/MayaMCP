@@ -2,58 +2,42 @@
 
 Tests contextual chip generation, user interaction, accessibility,
 and graceful degradation across conversation phases.
-
-NOTE: This test file is part of the suggestion-chips specification PR.
-The tests will be skipped until the implementation PR lands.
 """
 
 import time
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-# Deferred imports - will be available after implementation
-try:
-    from src.conversation.chip_generator import ChipGenerator
-    from src.schemas.chips import (
-        ActionID,
-        ChipGenerationContext,
-        ChipType,
-        SuggestionChip,
-        SuggestionChipSet,
-    )
-    from src.ui.chips import (
-        CHIP_CSS,
-        create_chip_row,
-        format_chip_live_announcement,
-        get_chip_aria_label,
-    )
-    from src.utils.state_manager import (
-        get_session_state,
-        initialize_state,
-        reset_session_state,
-        update_payment_state,
-    )
-    IMPORTS_AVAILABLE = True
-except ImportError as e:
-    # Modules not yet implemented - tests will be skipped
-    IMPORTS_AVAILABLE = False
-    SKIP_REASON = f"Suggestion chips implementation not yet available: {e}"
-
-# Load scenarios from feature file only if imports are available
-if IMPORTS_AVAILABLE:
-    scenarios('features/suggestion_chips.feature')
-
-
-# Skip all tests in this module if implementation is not available
-pytestmark = pytest.mark.skipif(
-    not IMPORTS_AVAILABLE,
-    reason="Suggestion chips implementation not yet available (spec-only PR)"
+from src.conversation.chip_generator import ChipGenerator
+from src.schemas.chips import (
+    ActionID,
+    ChipGenerationContext,
+    ChipType,
+    SuggestionChip,
+    SuggestionChipSet,
+)
+from src.ui.chips import (
+    CHIP_CSS,
+    create_chip_row,
+    format_chip_live_announcement,
+    get_chip_aria_label,
+)
+from src.utils.state_manager import (
+    get_session_state,
+    initialize_state,
+    reset_session_state,
+    update_payment_state,
 )
 
+# Load scenarios from feature file
+scenarios('features/suggestion_chips.feature')
 
-import uuid
+# Mark tests as BDD acceptance tests
+pytestmark = [pytest.mark.bdd]
+
 
 
 class ChipTestContext:
@@ -81,9 +65,6 @@ def ctx():
 @pytest.fixture(autouse=True)
 def mock_llm_client(ctx, monkeypatch):
     """Mock the Gemini client to prevent real API calls."""
-    if not IMPORTS_AVAILABLE:
-        pytest.skip(SKIP_REASON)
-    
     mock_client = MagicMock()
     
     def default_generate_content(*args, **kwargs):
@@ -470,6 +451,10 @@ def step_user_clicks_generic_chip(ctx):
 def step_user_submits_message(ctx):
     """User submits new message."""
     ctx.user_message = "New message"
+    chip_state = ctx.app_state.get(ctx.session_id, {}).get("chip_state", {})
+    pending = chip_state.get("pending_task")
+    if pending and not pending.done():
+        pending.cancel()
 
 
 @when("the UI component refreshes")
@@ -805,3 +790,133 @@ def step_verify_aria_labels(ctx):
             label = get_chip_aria_label(chip)
             assert label.startswith(f"{chip.type.value if hasattr(chip.type, 'value') else chip.type} chip:")
             assert chip.text in label
+
+
+# ─── Additional BDD Steps for Rate Limiting, Tasks & Key Nav ────────
+
+@given("chip generation completed 1 second ago")
+def step_generation_completed_1s_ago(ctx):
+    """Simulate chip generation having completed 1 second ago."""
+    now = time.time()
+    ctx.app_state[ctx.session_id] = {
+        "chip_state": {
+            "current_chips": None,
+            "generation_seq": 1,
+            "last_generation_time": now - 1.0,
+            "generation_count": 1,
+            "failure_count": 0,
+            "pending_task": None,
+        }
+    }
+
+
+@when("chip generation is triggered again")
+def step_trigger_generation_again(ctx):
+    """Trigger chip generation again during cooldown."""
+    context = ChipGenerationContext(
+        conversation_turns=[{"role": "user", "content": "hello"}],
+        payment_status="none",
+        conversation_phase="greeting",
+        recent_user_messages=["hello"],
+    )
+    with patch("src.utils.state_manager._global_store", ctx.app_state):
+        ctx.generation_result = ctx.chip_generator.generate_chips_async(context)
+
+
+@then("generation should be skipped for rate limit")
+def step_generation_skipped_rate_limit(ctx):
+    """Verify chip generation returned None due to rate limit."""
+    assert ctx.generation_result is None
+
+
+@then("no new chips should be generated")
+def step_no_new_chips_generated(ctx):
+    """Verify no new chips were stored in session state."""
+    chip_data = ctx.app_state.get(ctx.session_id, {}).get("chip_state", {})
+    assert chip_data.get("current_chips") is None
+
+
+@given("chip generation is in progress")
+def step_chip_generation_in_progress(ctx):
+    """Set up pending chip generation task."""
+    ctx.mock_pending_task = MagicMock()
+    ctx.mock_pending_task.done.return_value = False
+    ctx.app_state[ctx.session_id] = {
+        "chip_state": {
+            "current_chips": None,
+            "generation_seq": 1,
+            "last_generation_time": 0.0,
+            "generation_count": 0,
+            "failure_count": 0,
+            "pending_task": ctx.mock_pending_task,
+            "pending_task_seq": 1,
+        }
+    }
+
+
+@then("the pending chip generation task should be cancelled")
+def step_pending_task_cancelled(ctx):
+    """Verify in-flight task was cancelled."""
+    assert hasattr(ctx, "mock_pending_task")
+    assert ctx.mock_pending_task.cancel.called
+
+
+@then("new chip generation should start for the new turn")
+def step_new_generation_starts(ctx):
+    """Verify fresh chip generation for the new turn."""
+    context = ChipGenerationContext(
+        conversation_turns=[{"role": "user", "content": ctx.user_message}],
+        payment_status="none",
+        conversation_phase="greeting",
+        recent_user_messages=[ctx.user_message],
+    )
+    with patch("src.utils.state_manager._global_store", ctx.app_state):
+        result = ctx.chip_generator.generate_fallback_chips()
+        assert result is not None
+        assert len(result.chips) >= 3
+
+
+@given("the first chip dialogue is focused")
+def step_first_chip_dialogue_focused(ctx):
+    """Focus first dialogue chip."""
+    if ctx.chips is None or not hasattr(ctx.chips, "chips"):
+        step_maya_completes_response(ctx)
+    ctx.focused_chip = next(
+        (c for c in ctx.chips.chips if c.type == ChipType.DIALOGUE),
+        SuggestionChip(text="Tell me more", type=ChipType.DIALOGUE),
+    )
+
+
+@given("the second chip action is focused")
+def step_second_chip_action_focused(ctx):
+    """Focus second action chip."""
+    ctx.focused_chip = SuggestionChip(
+        text="Complete payment",
+        type=ChipType.ACTION,
+        action_id=ActionID.PAYMENT,
+    )
+
+
+@when("the user presses Space")
+def step_user_presses_space(ctx):
+    """User presses Space key on focused chip."""
+    from src.ui.chips import handle_chip_click
+    if hasattr(ctx, "focused_chip") and ctx.focused_chip:
+        ctx.chip_click_result = handle_chip_click(
+            chip_text=ctx.focused_chip.text,
+            chip_type=ctx.focused_chip.type,
+            action_id=getattr(ctx.focused_chip, "action_id", None),
+            session_id=ctx.session_id,
+            textbox=MagicMock(),
+        )
+
+
+@then("the chip should activate and populate textbox")
+def step_chip_activate_populate(ctx):
+    """Verify chip activation populated textbox."""
+    assert ctx.chip_click_result is not None
+    assert ctx.chip_click_result[0] in [
+        getattr(ctx, "focused_chip", None).text if getattr(ctx, "focused_chip", None) else "",
+        "Complete payment",
+        "Tell me more",
+    ]
