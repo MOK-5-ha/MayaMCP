@@ -28,6 +28,7 @@ from google import genai
 from pydantic import ValidationError
 
 from ..config.logging_config import get_logger
+from ..config.model_config import get_model_config
 from ..llm.client import call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
@@ -62,6 +63,7 @@ class ChipGenerator:
             llm_client: Optional LLM client for dependency injection (testing)
         """
         self.session_id = session_id
+        self._custom_client = llm_client is not None
         self.llm_client = llm_client or get_genai_client()
         self._cache: dict[str, Any] = {}  # Context representation cache
 
@@ -144,9 +146,12 @@ class ChipGenerator:
             data["chip_state"] = chip_state
             _save_session_data(session_id, store, data)
 
+        start_time = time.time()
         # Wait with timeout
         try:
             result = future.result(timeout=self.TIMEOUT_SECONDS)
+            end_time = time.time()
+            duration = end_time - start_time
 
             # Update metadata
             with lock:
@@ -160,10 +165,23 @@ class ChipGenerator:
 
                 data = _get_session_data(session_id, store)
                 chip_state = data.get("chip_state", {})
-                chip_state["last_generation_time"] = current_time
-                chip_state["generation_count"] = (
-                    chip_state.get("generation_count", 0) + 1
-                )
+                if result is not None:
+                    chip_state["last_generation_time"] = current_time
+                    chip_state["generation_count"] = (
+                        chip_state.get("generation_count", 0) + 1
+                    )
+                    logger.info(
+                        f"Chip generation succeeded for session {self.session_id} in {duration:.3f}s "
+                        f"(start={start_time:.3f}, end={end_time:.3f}, chips={len(result.chips)})"
+                    )
+                else:
+                    chip_state["failure_count"] = (
+                        chip_state.get("failure_count", 0) + 1
+                    )
+                    logger.warning(
+                        f"Chip generation returned empty/None for session {self.session_id} in {duration:.3f}s "
+                        f"(start={start_time:.3f}, end={end_time:.3f})"
+                    )
                 chip_state["pending_task"] = None
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
@@ -171,6 +189,8 @@ class ChipGenerator:
             return result
 
         except FutureTimeoutError:
+            end_time = time.time()
+            duration = end_time - start_time
             # Note: Future.cancel() only prevents awaiting the result; it cannot
             # stop a running thread. The background thread continues executing until
             # the LLM call completes or the retry logic exhausts (up to ~30s with
@@ -185,7 +205,8 @@ class ChipGenerator:
 
             logger.warning(
                 f"Chip generation timeout ({self.TIMEOUT_SECONDS}s) "
-                f"for session {self.session_id}"
+                f"for session {self.session_id} in {duration:.3f}s "
+                f"(start={start_time:.3f}, end={end_time:.3f})"
             )
             with lock:
                 latest_seq = get_chip_generation_seq(session_id, store)
@@ -205,8 +226,11 @@ class ChipGenerator:
             return None
 
         except Exception as e:
+            end_time = time.time()
+            duration = end_time - start_time
             logger.error(
-                f"Chip generation failed for session {self.session_id}: {e}",
+                f"Chip generation failed for session {self.session_id} in {duration:.3f}s "
+                f"(start={start_time:.3f}, end={end_time:.3f}): {e}",
                 exc_info=True,
             )
             with lock:
@@ -225,7 +249,6 @@ class ChipGenerator:
                 data["chip_state"] = chip_state
                 _save_session_data(session_id, store, data)
             return None
-
 
     def _generate_chips_sync(
         self, context: ChipGenerationContext
@@ -251,27 +274,51 @@ class ChipGenerator:
                 "response_schema": SuggestionChipSet.model_json_schema(),
             }
 
-            # Call LLM with retry logic via centralized client
-            response = call_gemini_api(
-                prompt_content=[{"role": "user", "parts": [{"text": prompt}]}],
-                config=generation_config,
-            )
+            # Call LLM with retry logic via centralized client, or injected client
+            if self._custom_client:
+                model_version = get_model_config()["model_version"]
+                response = self.llm_client.models.generate_content(
+                    model=model_version,
+                    contents=prompt,
+                    config=generation_config,
+                )
+            else:
+                response = call_gemini_api(
+                    prompt_content=[{"role": "user", "parts": [{"text": prompt}]}],
+                    config=generation_config,
+                )
 
             # Parse and validate response
-            response_text = response.text
-            chip_set = SuggestionChipSet.model_validate_json(response_text)
+            response_text = getattr(response, "text", "")
+            try:
+                chip_set = SuggestionChipSet.model_validate_json(response_text)
+            except ValidationError as val_err:
+                is_json_parse_err = any(
+                    "json_invalid" in str(err.get("type", ""))
+                    for err in val_err.errors()
+                )
+                if is_json_parse_err:
+                    logger.error(
+                        f"Chip JSON parsing error for session {self.session_id}: {val_err}",
+                        exc_info=True,
+                    )
+                else:
+                    logger.error(
+                        f"Chip validation failed for session {self.session_id}: {val_err}",
+                        exc_info=True,
+                    )
+                return None
+            except Exception as parse_err:
+                logger.error(
+                    f"Chip JSON parsing error for session {self.session_id}: {parse_err}",
+                    exc_info=True,
+                )
+                return None
 
             logger.info(
                 f"Generated {len(chip_set.chips)} chips for session {self.session_id}"
             )
             return chip_set
-
-        except ValidationError as e:
-            logger.error(
-                f"Chip validation failed for session {self.session_id}: {e}",
-                exc_info=True,
-            )
-            return None
 
         except Exception as e:
             logger.error(

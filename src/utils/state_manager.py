@@ -568,6 +568,16 @@ DEFAULT_API_KEY_STATE = {
     'keys_validated': False,
 }
 
+DEFAULT_CHIP_STATE = {
+    'current_chips': None,
+    'last_generation_time': None,
+    'generation_count': 0,
+    'failure_count': 0,
+    'pending_task': None,
+    'generation_seq': 0,
+    'pending_task_seq': None,
+}
+
 # =============================================================================
 # Backward Compatibility: Global Store and Default Session
 # =============================================================================
@@ -604,6 +614,7 @@ def _deep_copy_defaults() -> dict[str, Any]:
         'current_order': copy.deepcopy(DEFAULT_CURRENT_ORDER),
         'payment': copy.deepcopy(DEFAULT_PAYMENT_STATE),
         'api_keys': copy.deepcopy(DEFAULT_API_KEY_STATE),
+        'chip_state': copy.deepcopy(DEFAULT_CHIP_STATE),
     }
 
 
@@ -675,6 +686,12 @@ def _get_session_data(session_id: str, store: MutableMapping | None = None) -> d
         if payment_needs_update:
             logger.info(f"Updated payment fields for session {session_id}")
             needs_update = True
+
+    # 4. Ensure 'chip_state' exists
+    if 'chip_state' not in session_data:
+        logger.info(f"Adding chip_state to existing session {session_id}")
+        session_data['chip_state'] = copy.deepcopy(DEFAULT_CHIP_STATE)
+        needs_update = True
 
     if needs_update:
         store[session_id] = session_data
@@ -1263,3 +1280,125 @@ def has_valid_keys(session_id: str, store: MutableMapping) -> bool:
         data = _get_session_data(session_id, store)
         api_keys = data.get('api_keys', {})
         return bool(api_keys.get('keys_validated') and api_keys.get('gemini_key'))
+
+
+# =============================================================================
+# Suggestion Chip State Functions (Tasks 11.1, 11.2, 11.3)
+# =============================================================================
+
+try:
+    from ..schemas.chips import ChipState, SuggestionChipSet
+except ImportError:
+    ChipState = None  # type: ignore
+    SuggestionChipSet = None  # type: ignore
+
+
+def get_chip_state(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> dict[str, Any]:
+    """
+    Get chip state dictionary for session.
+
+    Args:
+        session_id: Session ID or None for default.
+        store: Store or None for global store.
+
+    Returns:
+        Copy of the chip state dictionary.
+    """
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        return data.get("chip_state", copy.deepcopy(DEFAULT_CHIP_STATE)).copy()
+
+
+def update_chip_state(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+    updates: dict[str, Any] | None = None,
+) -> None:
+    """
+    Update chip state with thread safety.
+
+    Args:
+        session_id: Session ID or None for default.
+        store: Store or None for global store.
+        updates: Dictionary of fields to update.
+    """
+    if updates is None:
+        return
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        chip_state = data.setdefault("chip_state", copy.deepcopy(DEFAULT_CHIP_STATE))
+        chip_state.update(updates)
+        _save_session_data(session_id, store, data)
+    logger.debug(f"Chip state updated for {session_id}: {updates}")
+
+
+def get_current_chips(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> Any | None:
+    """
+    Get current suggestion chip set for session.
+
+    Args:
+        session_id: Session ID or None for default.
+        store: Store or None for global store.
+
+    Returns:
+        SuggestionChipSet or None.
+    """
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        return data.get("chip_state", {}).get("current_chips")
+
+
+def set_current_chips(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+    chips: Any | None = None,
+) -> None:
+    """
+    Set current suggestion chip set for session with thread safety.
+
+    Args:
+        session_id: Session ID or None for default.
+        store: Store or None for global store.
+        chips: SuggestionChipSet to store or None to clear.
+    """
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        chip_state = data.setdefault("chip_state", copy.deepcopy(DEFAULT_CHIP_STATE))
+        chip_state["current_chips"] = chips
+        _save_session_data(session_id, store, data)
+    logger.debug(f"Current chips updated for {session_id}")
+
+
+def clear_chip_state(
+    session_id: str | None = None,
+    store: MutableMapping | None = None,
+) -> None:
+    """
+    Clear chip state for session (reset to defaults).
+
+    Args:
+        session_id: Session ID or None for default.
+        store: Store or None for global store.
+    """
+    session_id, store = _get_store_and_session(session_id, store)
+    lock = get_session_lock(session_id)
+    with lock:
+        data = _get_session_data(session_id, store)
+        data["chip_state"] = copy.deepcopy(DEFAULT_CHIP_STATE)
+        _save_session_data(session_id, store, data)
+    logger.debug(f"Chip state cleared for {session_id}")
+

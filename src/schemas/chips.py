@@ -1,6 +1,8 @@
 """Pydantic v2 models for suggestion chips."""
 
+from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -77,3 +79,62 @@ class ChipGenerationContext(BaseModel):
         max_length=2,
         description="Last 2 user messages for deduplication",
     )
+
+
+@dataclass
+class ChipState:
+    """Per-session chip state stored in session manager."""
+
+    current_chips: SuggestionChipSet | None = None
+    last_generation_time: float | None = None
+    generation_count: int = 0
+    failure_count: int = 0
+    pending_task: Any | None = None
+    generation_seq: int = 0
+    pending_task_seq: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for session storage."""
+        return {
+            "chips": (
+                [chip.model_dump() for chip in self.current_chips.chips]
+                if self.current_chips and hasattr(self.current_chips, "chips")
+                else []
+            ),
+            "last_generation_time": self.last_generation_time,
+            "generation_count": self.generation_count,
+            "failure_count": self.failure_count,
+            "generation_seq": self.generation_seq,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ChipState":
+        """Deserialize from dictionary."""
+        current_chips = None
+        if "chips" in data and data["chips"]:
+            current_chips = SuggestionChipSet(
+                chips=[SuggestionChip(**c) for c in data["chips"]]
+            )
+        elif "current_chips" in data and data["current_chips"]:
+            val = data["current_chips"]
+            if isinstance(val, SuggestionChipSet):
+                current_chips = val
+            elif isinstance(val, dict):
+                current_chips = SuggestionChipSet(**val)
+
+        return cls(
+            current_chips=current_chips,
+            last_generation_time=data.get("last_generation_time"),
+            generation_count=data.get("generation_count", 0),
+            failure_count=data.get("failure_count", 0),
+            pending_task=data.get("pending_task"),
+            generation_seq=data.get("generation_seq", 0),
+            pending_task_seq=data.get("pending_task_seq"),
+        )
+
+    @property
+    def failure_rate(self) -> float:
+        """Calculate chip generation failure rate (Requirement 8.6)."""
+        total = self.generation_count + self.failure_count
+        return (self.failure_count / total) if total > 0 else 0.0
+
