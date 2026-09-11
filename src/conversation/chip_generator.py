@@ -27,7 +27,7 @@ from typing import Any
 from google import genai
 from pydantic import ValidationError
 
-from ..config.logging_config import get_logger
+from ..config.logging_config import get_logger, should_log_sensitive
 from ..llm.client import call_gemini_api, get_genai_client
 from ..schemas.chips import (
     ActionID,
@@ -43,6 +43,40 @@ logger = get_logger(__name__)
 _chip_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="chip_gen")
 
 
+def create_mock_chip_context(
+    phase: str = "greeting",
+    payment_status: str | None = None,
+    turns: list[dict[str, str]] | None = None,
+    recent_user_messages: list[str] | None = None,
+) -> ChipGenerationContext:
+    """
+    Factory creating a valid ChipGenerationContext for testing and validation (Requirement 12.1, 12.5).
+
+    Args:
+        phase: Current conversation phase
+        payment_status: Optional payment status
+        turns: Optional list of turn dictionaries (max 4)
+        recent_user_messages: Optional list of recent user message strings (max 2)
+
+    Returns:
+        Validated ChipGenerationContext instance
+    """
+    if turns is None:
+        turns = [
+            {"role": "user", "content": "Hello Maya!"},
+            {"role": "assistant", "content": "Welcome to the bar! What can I get for you?"},
+        ]
+    if recent_user_messages is None:
+        recent_user_messages = ["Hello Maya!"]
+
+    return ChipGenerationContext(
+        conversation_turns=turns[:4],
+        payment_status=payment_status,
+        conversation_phase=phase,
+        recent_user_messages=recent_user_messages[:2],
+    )
+
+
 class ChipGenerator:
     """Generates contextual suggestion chips using LLM structured output."""
 
@@ -52,7 +86,10 @@ class ChipGenerator:
     MAX_OUTPUT_TOKENS = 200
 
     def __init__(
-        self, session_id: str, llm_client: genai.Client | None = None
+        self,
+        session_id: str,
+        llm_client: genai.Client | None = None,
+        test_mode: bool = False,
     ):
         """
         Initialize chip generator.
@@ -60,10 +97,12 @@ class ChipGenerator:
         Args:
             session_id: Current session identifier
             llm_client: Optional LLM client for dependency injection (testing)
+            test_mode: Optional boolean flag to enable deterministic test generation
         """
         self.session_id = session_id
         self.llm_client = llm_client or get_genai_client()
-        self._cache: dict[str, Any] = {}  # Context representation cache
+        self.test_mode = test_mode
+        self._cache: dict[Any, Any] = {}  # Context representation cache
 
     def generate_chips_async(
         self,
@@ -251,6 +290,77 @@ class ChipGenerator:
                 _save_session_data(session_id, store, data)
             return None
 
+    def _generate_deterministic_chips(
+        self, context: ChipGenerationContext
+    ) -> SuggestionChipSet:
+        """
+        Generate deterministic chips for test mode (Requirement 12.3, Property 45).
+
+        Args:
+            context: Generation context
+
+        Returns:
+            Deterministic SuggestionChipSet tailored to phase and status
+        """
+        phase = context.conversation_phase
+        status = context.payment_status
+
+        if status == "pending" or phase == "payment":
+            if status == "pending":
+                return SuggestionChipSet(
+                    chips=[
+                        SuggestionChip(text="Complete payment", type=ChipType.ACTION, action_id=ActionID.PAYMENT),
+                        SuggestionChip(text="Cancel order", type=ChipType.ACTION, action_id=ActionID.CANCEL),
+                        SuggestionChip(text="Add a tip", type=ChipType.ACTION, action_id=ActionID.TIP),
+                    ]
+                )
+            return SuggestionChipSet(
+                chips=[
+                    SuggestionChip(text="Add a tip", type=ChipType.ACTION, action_id=ActionID.TIP),
+                    SuggestionChip(text="Order another drink", type=ChipType.ACTION, action_id=ActionID.ORDER_ANOTHER),
+                    SuggestionChip(text="Show me the menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+                ]
+            )
+
+        if phase == "ordering":
+            return SuggestionChipSet(
+                chips=[
+                    SuggestionChip(text="Complete payment", type=ChipType.ACTION, action_id=ActionID.PAYMENT),
+                    SuggestionChip(text="Order another drink", type=ChipType.ACTION, action_id=ActionID.ORDER_ANOTHER),
+                    SuggestionChip(text="Make it stronger", type=ChipType.DIALOGUE, action_id=None),
+                    SuggestionChip(text="Extra ice please", type=ChipType.DIALOGUE, action_id=None),
+                ]
+            )
+
+        if phase == "describing":
+            return SuggestionChipSet(
+                chips=[
+                    SuggestionChip(text="What's in it?", type=ChipType.DIALOGUE, action_id=None),
+                    SuggestionChip(text="Can I substitute bourbon?", type=ChipType.DIALOGUE, action_id=None),
+                    SuggestionChip(text="How sweet is it?", type=ChipType.DIALOGUE, action_id=None),
+                    SuggestionChip(text="I'll take one", type=ChipType.DIALOGUE, action_id=None),
+                ]
+            )
+
+        if phase == "complete":
+            return SuggestionChipSet(
+                chips=[
+                    SuggestionChip(text="Order another drink", type=ChipType.ACTION, action_id=ActionID.ORDER_ANOTHER),
+                    SuggestionChip(text="Thank you!", type=ChipType.DIALOGUE, action_id=None),
+                    SuggestionChip(text="Show me the menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+                ]
+            )
+
+        # Default / greeting phase
+        return SuggestionChipSet(
+            chips=[
+                SuggestionChip(text="Show me the menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+                SuggestionChip(text="Surprise me", type=ChipType.DIALOGUE, action_id=None),
+                SuggestionChip(text="What's popular?", type=ChipType.DIALOGUE, action_id=None),
+                SuggestionChip(text="Something refreshing", type=ChipType.DIALOGUE, action_id=None),
+            ]
+        )
+
     def _generate_chips_sync(
         self, context: ChipGenerationContext
     ) -> SuggestionChipSet | None:
@@ -264,6 +374,33 @@ class ChipGenerator:
             SuggestionChipSet or None on failure
         """
         try:
+            if should_log_sensitive():
+                logger.debug(
+                    f"Chip generation starting for session {self.session_id}: "
+                    f"phase={context.conversation_phase}, payment_status={context.payment_status}, "
+                    f"turns={len(context.conversation_turns)}, recent_msgs={len(context.recent_user_messages)}"
+                )
+                logger.debug(f"Chip generation context: {context.model_dump()}")
+            else:
+                logger.debug(
+                    f"Chip generation starting for session {self.session_id}: "
+                    f"phase={context.conversation_phase}, payment_status={context.payment_status}, "
+                    f"turns_count={len(context.conversation_turns)}, recent_msgs_count={len(context.recent_user_messages)}"
+                )
+
+            if self.test_mode:
+                deterministic_chips = self._generate_deterministic_chips(context)
+                if should_log_sensitive():
+                    logger.debug(
+                        f"[TEST MODE] Generated deterministic chips for session {self.session_id}: "
+                        f"{deterministic_chips.model_dump()}"
+                    )
+                else:
+                    logger.debug(
+                        f"[TEST MODE] Generated {len(deterministic_chips.chips)} deterministic chips for session {self.session_id}"
+                    )
+                return deterministic_chips
+
             # Build prompt
             prompt = self._build_chip_prompt(context)
 
@@ -309,6 +446,16 @@ class ChipGenerator:
                 )
                 return None
 
+            if should_log_sensitive():
+                logger.debug(
+                    f"Chip generation result for session {self.session_id}: "
+                    f"{chip_set.model_dump() if chip_set else None}"
+                )
+            else:
+                logger.debug(
+                    f"Chip generation result for session {self.session_id}: "
+                    f"chips_count={len(chip_set.chips) if chip_set else 0}"
+                )
             logger.info(
                 f"Generated {len(chip_set.chips)} chips for session {self.session_id}"
             )
@@ -338,7 +485,21 @@ class ChipGenerator:
         Returns:
             Formatted prompt string
         """
-        # Static instruction prefix (cacheable) - approximately 350 tokens
+        # Context representation caching (Requirement 10.3)
+        cache_key = (
+            context.conversation_phase,
+            context.payment_status,
+            tuple(
+                (t.get("role", ""), t.get("content", ""))
+                for t in context.conversation_turns
+            ),
+            tuple(context.recent_user_messages),
+        )
+        if cache_key in self._cache:
+            logger.debug(f"Context cache hit for session {self.session_id}")
+            return self._cache[cache_key]
+
+        # Static instruction prefix (cacheable) - approximately 270 tokens
         system_instructions = """You are a suggestion chip generator for Maya, an AI bartending agent.
 
 Your task is to generate 3-6 contextual suggestion chips that help users continue the conversation naturally.
@@ -362,28 +523,6 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 - cancel: Cancel current order
 - order_another: Order another drink
 
-**Phase-Specific Priorities:**
-
-**Greeting Phase:**
-- Include menu-related dialogue chips (e.g., "Show me the menu", "What's popular?")
-- Focus on drink preferences and exploration questions
-- Keep conversation welcoming and open-ended
-
-**Ordering Phase:**
-- After order completion, prioritize payment and order_another action chips
-- Include modification dialogue chips (e.g., "Make it stronger", "Extra ice")
-- Offer confirmation or clarification options
-
-**Describing Phase:**
-- Generate follow-up dialogue chips for drink details
-- Include questions about ingredients, taste, or preparation
-- Offer customization suggestions
-
-**Payment Phase:**
-- When payment is pending, prioritize payment action chip as first option
-- Include cancel action chip
-- Add tip-related options after payment completion
-
 **Example Output:**
 {
   "chips": [
@@ -395,57 +534,70 @@ Your task is to generate 3-6 contextual suggestion chips that help users continu
 }
 """
 
-        # Estimate remaining token budget (MAX_PROMPT_TOKENS - static prefix)
-        # Using rough estimate: 1 token ≈ 4 characters
-        static_prefix_chars = len(system_instructions)
-        static_prefix_tokens = static_prefix_chars // 4
-        remaining_tokens = max(0, self.MAX_PROMPT_TOKENS - static_prefix_tokens)
-        remaining_chars = remaining_tokens * 4
-
-        # Build dynamic context with budget enforcement
-        conversation_lines = []
-        for turn in context.conversation_turns:
-            line = f"{turn['role']}: {turn['content']}"
-            conversation_lines.append(line)
-
-        conversation_context = "\n".join(conversation_lines)
-
-        # Truncate conversation context if needed
-        if len(conversation_context) > remaining_chars * 0.7:  # Reserve 30% for other fields
-            max_conv_chars = int(remaining_chars * 0.7)
-            conversation_context = conversation_context[:max_conv_chars] + "..."
-
-        recent_messages = (
-            "\n".join(context.recent_user_messages)
-            if context.recent_user_messages
-            else "None"
-        )
-
-        # Truncate recent messages if needed
-        max_recent_chars = int(remaining_chars * 0.2)
-        if len(recent_messages) > max_recent_chars:
-            recent_messages = recent_messages[:max_recent_chars] + "..."
-
-        # Add phase-specific guidance to dynamic context
+        # Static suffix with phase guidance and generation directive (never truncated)
         phase_guidance = self._get_phase_specific_guidance(
             context.conversation_phase, context.payment_status
         )
-
-        context_section = f"""
-**Current Conversation:**
-{conversation_context}
-
+        suffix_section = f"""
 **Conversation Phase:** {context.conversation_phase}
 **Payment Status:** {context.payment_status or "none"}
-**Recent User Messages (do not repeat):**
-{recent_messages}
 
 **Current Phase Guidance:**
 {phase_guidance}
 
 Generate 3-6 suggestion chips now:"""
 
-        return system_instructions + context_section
+        # Calculate exact remaining character budget for dynamic conversation turns and recent messages
+        max_total_chars = self.MAX_PROMPT_TOKENS * 4
+        framing_chars = (
+            len(system_instructions)
+            + len(suffix_section)
+            + len("\n**Current Conversation:**\n\n**Recent User Messages (do not repeat):**\n\n")
+        )
+        available_dynamic_chars = max(0, max_total_chars - framing_chars)
+
+        # Allocate budget: 75% for conversation turns, 25% for recent messages
+        max_conv_chars = int(available_dynamic_chars * 0.75)
+        max_recent_chars = int(available_dynamic_chars * 0.25)
+
+        # Build and truncate conversation context
+        conversation_lines = [
+            f"{turn['role']}: {turn['content']}"
+            for turn in context.conversation_turns
+        ]
+        conversation_context = "\n".join(conversation_lines)
+        if len(conversation_context) > max_conv_chars:
+            conversation_context = conversation_context[:max_conv_chars] + "..."
+
+        # Build and truncate recent user messages
+        recent_messages = (
+            "\n".join(context.recent_user_messages)
+            if context.recent_user_messages
+            else "None"
+        )
+        if len(recent_messages) > max_recent_chars:
+            recent_messages = recent_messages[:max_recent_chars] + "..."
+
+        dynamic_section = f"""
+**Current Conversation:**
+{conversation_context}
+
+**Recent User Messages (do not repeat):**
+{recent_messages}
+"""
+
+        full_prompt = system_instructions + dynamic_section + suffix_section
+        if len(full_prompt) > max_total_chars:
+            excess = len(full_prompt) - max_total_chars
+            # Trim excess from dynamic section right before suffix_section to keep instructions intact
+            dynamic_section = dynamic_section[:-excess]
+            full_prompt = system_instructions + dynamic_section + suffix_section
+
+        if len(self._cache) >= 50:
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[cache_key] = full_prompt
+
+        return full_prompt
 
     def _get_phase_specific_guidance(
         self, phase: str, payment_status: str | None

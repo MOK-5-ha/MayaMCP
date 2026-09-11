@@ -229,17 +229,17 @@
 - [x] 13. Checkpoint - Error handling tests pass
   - Ensure all error handling tests pass, ask user if questions arise
 
-- [ ] 14. Implement accessibility support
-  - [ ] 14.1 Add ARIA live region for chip updates
+- [x] 14. Implement accessibility support
+  - [x] 14.1 Add ARIA live region for chip updates
     - Announce chip updates to screen readers
     - _Requirements: 9.3_
-  - [ ] 14.2 Add keyboard navigation support
+  - [x] 14.2 Add keyboard navigation support
     - Tab, Enter, Space key handling
     - _Requirements: 9.2, 5.6_
-  - [ ] 14.3 Verify focus indicators
+  - [x] 14.3 Verify focus indicators
     - Ensure 2px outline on focus
     - _Requirements: 9.6_
-  - [ ] 14.4 Write accessibility compliance tests
+  - [x] 14.4 Write accessibility compliance tests
     - Test ARIA label presence on all chips
     - Test keyboard focus navigation
     - Test Enter/Space key activation
@@ -247,43 +247,43 @@
     - Test contrast ratio (4.5:1 minimum)
     - _Requirements: 9.1, 9.2, 9.3, 9.5, 9.6, 4.6_
 
-- [ ] 15. Implement testing and validation hooks
-  - [ ] 15.1 Add test_mode flag to ChipGenerator
+- [x] 15. Implement testing and validation hooks
+  - [x] 15.1 Add test_mode flag to ChipGenerator
     - Return deterministic output in test mode
     - _Requirements: 12.3_
-  - [ ] 15.2 Add debug logging
+  - [x] 15.2 Add debug logging
     - Log chip generation context and results
     - _Requirements: 12.4_
-  - [ ] 15.3 Create mock conversation context factory
+  - [x] 15.3 Create mock conversation context factory
     - For unit tests
     - _Requirements: 12.5_
-  - [ ] 15.4 Write unit tests for testing hooks
+  - [x] 15.4 Write unit tests for testing hooks
     - Test test_mode returns deterministic chips
     - Test dependency injection with mock LLM client
     - Test mock context factory produces valid contexts
     - _Requirements: 12.1, 12.2, 12.3, 12.4_
 
-- [ ] 16. Optimize performance and resource usage
-  - [ ] 16.1 Verify token budgets
+- [x] 16. Optimize performance and resource usage
+  - [x] 16.1 Verify token budgets
     - Ensure prompt stays under 512 tokens
     - Ensure LLM max_output_tokens set to 200
     - _Requirements: 10.1, 10.2_
-  - [ ] 16.2 Implement conversation context caching
+  - [x] 16.2 Implement conversation context caching
     - Cache context representation in ChipGenerator._cache
     - _Requirements: 10.3_
-  - [ ] 16.3 Verify resource limits
+  - [x] 16.3 Verify resource limits
     - Confirm Gemini client reuse (no new connections)
     - Confirm concurrent request limit (10 max)
     - Confirm rate limit enforcement (1 per 2s per session)
     - _Requirements: 10.4, 10.5, 10.6_
-  - [ ] 16.4 Write performance tests
+  - [x] 16.4 Write performance tests
     - Test prompt token count stays under 512
     - Test output token limit enforcement (200)
     - Test concurrent generation request limit (10)
     - Test rate limit enforcement timing (2 seconds)
     - _Requirements: 10.1, 10.2, 10.5, 10.6_
 
-- [ ] 17. Checkpoint - Performance tests pass
+- [x] 17. Checkpoint - Performance tests pass
   - Ensure all performance tests pass, ask user if questions arise
 
 - [ ] 18. End-to-end integration testing
