@@ -44,16 +44,17 @@ This document defines code style, linter rules, type checking, version control h
   - Use `tee` for writing or appending file contents from shell pipelines (`command | tee FILE` or `command | tee -a FILE`).
   - Disallowed command families: Avoid `mv`, `cp`, and raw shell redirection operators (`>`, `>>`) as default file manipulation methods.
 - **CLI Output Hygiene & Token Conservation Protocol**:
-  - **Mandatory Projection Flags**: On tools with structured output support (`gh`, `gcloud`, `aws`, `docker`), always specify output projections:
+  - **Mandatory Projection Flags on Structured Queries**: For query, list, and inspection subcommands that support structured output (e.g., `gh pr/issue/run list`, `gcloud ... list/describe`, `docker ps/inspect`), always specify output projections:
     - `gh`: Use `--json <field1,field2>` and `--limit <N>` (or `--template`)
     - `gcloud`: Use `--format="value(field)"` or `--format="table(field1,field2)"`
     - `docker`: Use `--format "{{.ID}}: {{.Names}} ({{.Status}})"`
+    *Note: For build, deployment, or auth operations where structured projection flags are inapplicable (e.g. `docker build`, `gcloud auth login`), rely on Unix pipeline filtering or scratch file buffering instead.*
   - **Unix Pipeline Filtering**: Filter raw text streams before they reach model context. Pipe through `jq`, `head -n <N>`, `grep`, `awk`, or `cut` (e.g., `gh run view <id> --log-failed | head -n 50`).
   - **Scratch File Buffering for Large Outputs**: If a diagnostic command or test run generates more than 100 lines of logs, redirect or tee it to the conversation scratch directory and inspect targeted segments with `grep` or `head` rather than dumping the full trace into context.
   - **Atomic Pipelines Over Chatty Turns**: Prefer chaining commands in a single shell invocation using `&&` or pipelines (`|`) rather than executing separate single-command tool calls across multiple conversational turns.
 - **Rust Toolchain Configuration**:
-  - When building Rust extensions (e.g. PyO3, Maturin) in local virtual environments, prepend the local toolchain binary directory:
+  - When building Rust extensions (e.g. PyO3, Maturin) in local virtual environments, dynamically prepend the active Rust toolchain binary directory (portable across Intel macOS, Apple Silicon, and Linux):
     ```bash
-    export PATH="$HOME/.rustup/toolchains/stable-x86_64-apple-darwin/bin:$PATH"
+    export PATH="$(rustup which rustc 2>/dev/null | xargs dirname || echo "$HOME/.cargo/bin"):$PATH"
     pip install -e .
     ```
