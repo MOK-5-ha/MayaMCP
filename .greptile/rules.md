@@ -4,6 +4,8 @@ include:
   - "tests/**/*"
   - "scripts/**/*"
   - ".kiro/specs/**/*"
+  - ".agents/**/*"
+  - "AGENTS.md"
 ---
 # MayaMCP Greptile Review Agent Rules
 
@@ -17,6 +19,7 @@ When reviewing code, pull requests, and commits:
 2. **Focus on Quality & Security over Dogma:** Prioritize clean, readable Python, robust error handling, non-blocking async execution, and secure integrations over pedantic style nitpicks.
 3. **Encourage Experimentation:** Recognize that this project serves as a testbed for integrating LLMs (Gemini), Voice (Cartesia), RAG (Memvid/FAISS), Web3 payments (Coinbase CDP AgentKit), and Google Cloud Gen AI evaluation & observability.
 4. **Respect Spec-First Phasing:** This repository strictly separates technical specification drafting (`.kiro/specs/`) from feature implementation tracks. Never demand immediate full code implementation of newly specified architectures on PRs whose primary scope is specification, deprecation cleanup, or environment modernization.
+5. **Modular Constitution Hierarchy:** The project constitution is defined in `AGENTS.md`, and granular implementation, testing, UI, and style rules are modularized under `.agents/rules/` (`architecture_and_security.md`, `ui_and_voice.md`, `testing_and_hygiene.md`, `style_and_formatting.md`). Review pull requests against both `AGENTS.md` and the appropriate modular `.agents/rules/` files.
 
 ---
 
@@ -74,6 +77,7 @@ When reviewing code, pull requests, and commits:
 - **Explicit Test Review**: You must explicitly review all changes in test files (`tests/**/*`) alongside implementation changes.
 - **No Real Network Calls**: External APIs (Google, Cartesia, Coinbase CDP) must be mocked in tests using native SDK test doubles (see `tests/conftest.py`). Flag any test making live network calls.
 - **Rate Limit Isolation**: Tests must bypass global rate limits (`MAYA_SESSION_RATE_LIMIT=9999`) to prevent false-negative token exhaustion errors during test runs.
+- **ADK Stream Mock Event Contracts**: Test doubles for Google ADK runner streams (`Runner.run_async`) must set `event.author = 'model'` and populate `event.content.parts = [Mock(text="...")]`. Stream assertions must verify yielded event types (`'text_chunk'`, `'sentence'`, `'complete'`) rather than generic names like `'content'` to ensure fidelity with `process_order_stream` event mapping.
 
 ### Rule 10: FastAPI & Decoupled Architecture
 - FastAPI is served at the application root (`/`), with native REST/SSE routers mounted at `/api/v1/*` (`session`, `payments`, `chat`), Agent-to-Agent protocol routes at `/a2a/*`, and the Gradio UI mounted under `/ui`.
@@ -90,6 +94,7 @@ When reviewing code, pull requests, and commits:
 - Flag any parallel execution pattern that fails to use `Future.result(timeout=...)` or lacks graceful degradation on timeout/failure.
 - Ensure background task cancellation when new user input arrives (e.g., canceling pending chip generation tasks).
 - All parallel execution components must use dedicated thread pools with explicit worker limits (max 10 for chip generation).
+- **Non-Blocking Streaming Delay Verification**: Tests for parallel background tasks (such as suggestion chips) must verify that the primary streaming response generator (`process_order_stream`) completes promptly (`duration < 0.5s`) without being blocked or delayed by background task latency, timeouts, or simulated failures.
 
 ### Rule 13: Structured Output & Pydantic v2 Validation
 - LLM structured outputs (JSON schemas) must use Pydantic v2 models with field validators (`@field_validator`).
@@ -107,6 +112,7 @@ When reviewing code, pull requests, and commits:
   - State lifecycle (hide/show, persistence, session reset)
 - Flag BDD tests that make real network calls or fail to mock external APIs.
 - BDD step definitions should follow the pattern: `@given`, `@when`, `@then` decorators with parsers for parameterized scenarios.
+- **Production Invalidation Pathway Testing**: BDD acceptance step definitions verifying lifecycle events (cancellation of in-flight tasks, rate limit cooldowns, session resets) must invoke real production entrypoints (such as `process_order_stream` or `_trigger_chip_generation`) rather than manually manipulating mock states or calling `.cancel()` directly on test doubles within test steps.
 
 ### Rule 15: Session State Chip Management
 - Session state dictionary must include `chip_state` with keys:

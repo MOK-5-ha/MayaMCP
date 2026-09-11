@@ -5,6 +5,7 @@
     "tests/**",
     "scripts/**",
     ".kiro/specs/**",
+    ".agents/**",
     "docs/**",
     "pyproject.toml",
     "requirements.txt",

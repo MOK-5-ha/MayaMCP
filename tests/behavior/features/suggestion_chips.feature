@@ -141,3 +141,30 @@ Feature: Contextual Suggestion Chips
     When new chips are generated after Maya's response
     Then the ARIA live region should announce the chip update
     And each chip should have an ARIA label indicating type and text
+
+  Scenario: Rate limit prevents rapid chip generation
+    Given chip generation completed 1 second ago
+    When chip generation is triggered again
+    Then generation should be skipped for rate limit
+    And no new chips should be generated
+
+  Scenario: Pending task cancellation when new message arrives
+    Given chip generation is in progress
+    When the user submits a new message
+    Then the pending chip generation task should be cancelled
+    And new chip generation should start for the new turn
+
+  Scenario: Enter key activates focused chip
+    Given suggestion chips are displayed
+    And the first chip dialogue is focused
+    When the user presses Enter
+    Then the chip should activate and populate textbox
+    And the message should NOT auto-submit
+
+  Scenario: Space key activates focused chip
+    Given suggestion chips are displayed
+    And the second chip action is focused
+    When the user presses Space
+    Then the chip should activate and populate textbox
+    And the message should auto-submit without manual confirmation
+
