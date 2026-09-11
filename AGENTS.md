@@ -1,7 +1,7 @@
 # MayaMCP Supreme Project Constitution
 
 ## Project Overview
-MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, simulated payments, and contextual suggestion chips. It uses Google Gemini (via `google-generativeai` and `langchain-google-genai`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio with dynamic suggestion chips, and API resilience is handled by `tenacity`.
+MayaMCP is an AI bartending agent (v2.0.0) with conversational drink ordering, voice synthesis, simulated payments, and contextual suggestion chips. It uses Google Gemini (via `google-genai` and `google-adk`) for LLM, Cartesia for TTS, FAISS/Memvid for RAG, and Coinbase CDP AgentKit for crypto payments. The UI is built with Gradio with dynamic suggestion chips, and API resilience is handled by `tenacity`.
 
 ## Repository Layout
 ```
@@ -35,6 +35,8 @@ run_maya.sh          # Dev runner script
 3. **Unified LLM Client**: All GenAI calls go through `src/llm/client.py`. Never call the Google SDK directly elsewhere. Always use `get_genai_client()` or `call_gemini_api()`.
 4. **Thread-Safe Session & Payment Locking**: Always acquire per-session `RLock` before modifying payment state or session metadata.
 5. **Graceful Fallbacks & Fault Isolation**: Memvid → FAISS → no-RAG; Cartesia → text-only; Coinbase CDP → mock crypto payments. Suggestion chip generation is parallel and non-blocking; failures must never break response streaming.
+6. **CLI-First Agentic Developer Workflow & MCP Scope Boundaries (Development Environment)**: This invariant strictly governs developer tooling and AI coding assistant workflows (how Antigravity, subagents, and bots build and maintain this repository), NOT the runtime architecture of Maya herself (which runs as a FastAPI/Modal cloud service). Coding agents must operate on a CLI-first, stateful-MCP-sparing architecture: MCP servers are strictly reserved for persistent stateful daemons, AST knowledge graphs (`codebase-memory-mcp`), live browser sessions (`chrome-devtools`), and approved developer gateways (`context7`, `greptile`). All version control, PR management, cloud deployments (`modal`), and build tasks MUST execute through native CLI tools (`gh`, `git`, `modal`) paired with lightweight companion skills rather than stateless MCP servers.
+7. **Architectural Perpetuation & Downstream Agent Invariant**: Child agents, subagents, and automated workflows MUST perpetuate this developer CLI-first pattern. Strictly reject adding stateless MCP servers (e.g. for GitHub, Git, Jira, Slack, Linear) whenever a mature CLI or scriptable API exists. Future workflows must defend these boundaries and propagate this discipline across all project rules.
 
 ---
 
@@ -72,7 +74,7 @@ python tests/eval/eval_crypto_payment.py
 
 ### Linting & Formatting
 ```bash
-ruff check src/ tests/    # Lint (line-length: 88, target: py38)
+ruff check src/ tests/    # Lint (line-length: 88, target: py310)
 mypy src/                 # Type checking
 ```
 
@@ -108,7 +110,7 @@ This section governs how AI agents must interpret, maintain, and update reposito
 2. **`.agents/rules/` Scope**: Detailed implementation guardrails, DB transaction guidelines, logging privacy, BDD/test patterns, UI event chaining, and hygiene MUST be added to or updated within modular files under `.agents/rules/`.
 3. **Proposal Workflow**: Before modifying project rules (e.g., via `/learn`, slash commands, or code review resolutions), AI agents MUST:
    - Check existing workspace rules under `.agents/rules/`.
-   - Create or update an `implementation_plan.md` or `learning_proposal.md` artifact outlining the rule classification, rationale, and precise text diffs.
+   - Create or update an implementation plan or learning proposal artifact (within the conversation artifact directory) outlining the rule classification, rationale, and precise text diffs.
    - Set `request_feedback: true` on the artifact and obtain explicit user approval before writing rule changes to disk.
 
 ---
@@ -117,10 +119,10 @@ This section governs how AI agents must interpret, maintain, and update reposito
 
 Detailed engineering rules are organized modularly in the [`.agents/rules/`](.agents/rules/) directory:
 
-- [**Architecture & Security Rules**](.agents/rules/architecture_and_security.md): Concurrency locking, distributed session store, optimistic payments, async SSE unblocking, security scanning, batch caching, and token budgeting.
+- [**Architecture & Security Rules**](.agents/rules/architecture_and_security.md): Concurrency locking, distributed session store, optimistic payments, async SSE unblocking, security scanning, batch caching, token budgeting, and developer tooling governance (CLI-first workflow & stateful MCP boundaries).
 - [**UI, Suggestion Chips & Voice Rules**](.agents/rules/ui_and_voice.md): Parallel suggestion chip generation, Gradio state propagation, event chaining (`.then()`), Phaser 3 asset lifecycle, Cartesia TTS streaming, and WCAG accessibility.
 - [**Testing, BDD & Evaluation Rules**](.agents/rules/testing_and_hygiene.md): Native SDK mocking, BDD Gherkin patterns, rate limit test safety, ADK stream mock event contracts, production invalidation testing, non-blocking streaming assertions, and Vertex AI evals.
-- [**Style, Linting & Formatting Rules**](.agents/rules/style_and_formatting.md): Ruff rules, Mypy typing standards, conventional commits, pre-commit hygiene, and shell command preferences.
+- [**Style, Linting & Formatting Rules**](.agents/rules/style_and_formatting.md): Ruff rules, Mypy typing standards, conventional commits, pre-commit hygiene, GitHub CLI (`gh`) operational guardrails, and CLI output hygiene & token conservation protocol.
 
 ---
 
@@ -141,6 +143,9 @@ Detailed engineering rules are organized modularly in the [`.agents/rules/`](.ag
 - Modify payment or session state without acquiring the session `RLock`
 - Directly commit or push changes to `main` or `master` (feature branches and PRs only)
 - Autonomously merge pull requests
+- Introduce or configure stateless MCP servers for Git, GitHub, Jira, Slack, Linear, or cloud management (use native CLI binaries: `gh`, `git`, `modal`, `gcloud`)
+- Execute unprojected or unbounded CLI commands without output limits (`--json`, `--limit`, `--format`, or `head`/`jq` filtering)
+- Tamper with git remotes (`git remote add/set-url/remove`) or add untrusted submodules (`git submodule add/update`)
 - Eagerly materialize streaming generators using `list()` or list comprehensions
 - Manually cancel mock futures or manipulate internal task states in test steps (always exercise the production trigger path)
 - Test background task timeout/failure handling solely through direct helper calls without also asserting that the primary response stream generator completes promptly (< 0.5s)
