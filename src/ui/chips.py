@@ -9,7 +9,7 @@ from typing import Any
 import gradio as gr
 
 from ..config.logging_config import get_logger
-from ..schemas.chips import ActionID, ChipType, SuggestionChip
+from ..schemas.chips import ActionID, ChipType, SuggestionChip, SuggestionChipSet
 from ..utils.state_manager import get_session_state
 
 logger = get_logger(__name__)
@@ -140,7 +140,8 @@ CHIP_CSS = """
     box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
 }
 
-.suggestion-chip:focus {
+.suggestion-chip:focus,
+.suggestion-chip:focus-visible {
     outline: 2px solid #4299e1 !important;
     outline-offset: 2px;
 }
@@ -215,7 +216,33 @@ def create_chip_row(session_id: str = "default") -> tuple[gr.Row, list[gr.Button
     ) as chip_row:
         # ARIA live region for screen readers to announce chip updates (Requirement 9.3)
         gr.HTML(
-            '<div class="chip-updates" aria-live="polite" aria-atomic="true" id="chip-live-region"></div>',
+            '<div class="chip-updates" aria-live="polite" aria-atomic="true" id="chip-live-region"></div>'
+            '<script>'
+            '(function() {'
+            '  function setupChipLiveRegion() {'
+            '    const container = document.querySelector("#suggestion-chips-row");'
+            '    const liveRegion = document.querySelector("#chip-live-region");'
+            '    if (!container || !liveRegion) return;'
+            '    const observer = new MutationObserver(() => {'
+            '      const visibleButtons = Array.from(container.querySelectorAll(".suggestion-chip"))'
+            '        .filter(b => b.offsetParent !== null && b.innerText && b.innerText.trim() !== "");'
+            '      if (visibleButtons.length > 0) {'
+            '        const texts = visibleButtons.map(b => b.innerText.trim()).join(", ");'
+            '        const count = visibleButtons.length;'
+            '        liveRegion.textContent = `${count} suggestion${count > 1 ? "s" : ""} available: ${texts}`;'
+            '      } else {'
+            '        liveRegion.textContent = "";'
+            '      }'
+            '    });'
+            '    observer.observe(container, { childList: true, subtree: true, characterData: true, attributes: true });'
+            '  }'
+            '  if (document.readyState === "loading") {'
+            '    document.addEventListener("DOMContentLoaded", setupChipLiveRegion);'
+            '  } else {'
+            '    setupChipLiveRegion();'
+            '  }'
+            '})();'
+            '</script>',
             visible=True,
             elem_id="chip-live-region-html",
         )
@@ -245,6 +272,38 @@ def get_chip_aria_label(chip: SuggestionChip) -> str:
     """
     chip_type_str = chip.type.value if hasattr(chip.type, "value") else str(chip.type)
     return f"{chip_type_str} chip: {chip.text}"
+
+
+def format_chip_live_announcement(
+    chips: list[SuggestionChip] | SuggestionChipSet | None,
+) -> str:
+    """
+    Format announcement text for screen readers via ARIA live region (Requirement 9.3).
+
+    Args:
+        chips: SuggestionChipSet, list of SuggestionChip, or None
+
+    Returns:
+        Formatted announcement string for screen readers
+    """
+    if not chips:
+        return "No suggestions available"
+
+    chip_list = chips.chips if hasattr(chips, "chips") else chips
+    if not chip_list:
+        return "No suggestions available"
+
+    chip_texts = [
+        getattr(c, "text", str(c))
+        for c in chip_list
+        if getattr(c, "text", None)
+    ]
+    if not chip_texts:
+        return "No suggestions available"
+
+    count = len(chip_texts)
+    unit = "suggestion" if count == 1 else "suggestions"
+    return f"{count} {unit} available: {', '.join(chip_texts)}"
 
 
 def update_chips(
@@ -306,6 +365,34 @@ def update_chips(
             updates.append(gr.Button(value="", visible=False))
 
     return updates
+
+
+def inject_chips_programmatically(
+    session_id: str,
+    chip_set: SuggestionChipSet,
+    chip_buttons: list[gr.Button] | None = None,
+    app_state: MutableMapping | None = None,
+) -> list[gr.Button]:
+    """
+    Programmatically inject chips for visual regression and integration testing (Requirement 12.5).
+
+    Args:
+        session_id: Session identifier
+        chip_set: SuggestionChipSet to inject
+        chip_buttons: Optional list of button components to update
+        app_state: Optional application state dict
+
+    Returns:
+        List of updated button components
+    """
+    session_state = get_session_state(session_id, app_state)
+    chip_state = session_state.get("chip_state", {})
+    chip_state["current_chips"] = chip_set
+    session_state["chip_state"] = chip_state
+
+    if chip_buttons is not None:
+        return update_chips(session_id, chip_buttons, app_state=app_state)
+    return []
 
 
 def handle_chip_click(
