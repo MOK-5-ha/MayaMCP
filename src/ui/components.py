@@ -107,10 +107,11 @@ def create_streaming_components(
         visible=False
     )
 
-    # Message input
+    # Message input (render=False so launcher can place chip_row above it)
     msg_input = gr.Textbox(
         label="Your Order / Message",
-        placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')"
+        placeholder="What can I get for you? (e.g., 'I'd like a Margarita', 'Show my order')",
+        render=False,
     )
 
     return (

@@ -78,9 +78,10 @@ def _setup_launcher_mocks(
     mock_chatbot.return_value = ui_mocks['chatbot_instance']
     mock_audio.return_value = ui_mocks['audio_instance']
     mock_textbox.return_value = ui_mocks['textbox_instance']
-    # 3 buttons now: "Start Chatting", "Clear Conversation", "Send"
+    # Buttons: "Start Chatting", 6 suggestion chips, "Clear Conversation", "Send"
     mock_button.side_effect = [
         ui_mocks['start_chatting_button_instance'],
+        *[Mock() for _ in range(6)],
         ui_mocks['clear_button_instance'],
         ui_mocks['submit_button_instance'],
     ]

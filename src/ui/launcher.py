@@ -5,8 +5,15 @@ from collections.abc import Callable, MutableMapping
 import gradio as gr
 
 from ..config.logging_config import get_logger
-from ..utils.state_manager import DEFAULT_PAYMENT_STATE
+from ..utils.helpers import extract_session_id
+from ..utils.state_manager import DEFAULT_PAYMENT_STATE, get_session_state
 from .api_key_modal import create_help_instructions_md, handle_key_submission
+from .chips import (
+    CHIP_CSS,
+    create_chip_row,
+    register_chip_handlers,
+    update_chips,
+)
 from .components import (
     create_streaming_components,
     create_streaming_toggle,
@@ -103,6 +110,8 @@ def launch_bartender_interface(
 
     # Create Blocks with theme
     with gr.Blocks(theme=ui_theme) as demo:
+        # Inject suggestion chips stylesheet
+        gr.HTML(f"<style>{CHIP_CSS}</style>", visible=False)
 
         # Hidden state to track key validation across renders
         keys_validated_state = gr.State(False)
@@ -189,6 +198,10 @@ def launch_bartender_interface(
                     (chatbot_display, agent_audio_output, msg_input,
                      streaming_text_display, streaming_audio_player) = create_streaming_components()
 
+                    # Suggestion chips row positioned below chat display and above input textbox
+                    chip_row, chip_buttons = create_chip_row(session_id="default")
+                    msg_input.render()
+
                     # Hidden textbox to receive tip button clicks from JavaScript
                     tip_click_input = gr.Textbox(
                         value="",
@@ -248,8 +261,32 @@ def launch_bartender_interface(
                     request, tools, rag_retriever, rag_api_key, app_state, avatar
                 )
 
-        msg_input.submit(handle_input_wrapper, submit_inputs, submit_outputs)
-        submit_btn.click(handle_input_wrapper, submit_inputs, submit_outputs)
+        # Register suggestion chip click handlers
+        register_chip_handlers(
+            chip_buttons=chip_buttons,
+            textbox=msg_input,
+            submit_btn=submit_btn,
+            session_id="default",
+        )
+
+        def refresh_chips_after_response(request: gr.Request):
+            """Refresh and reveal suggestion chips after Maya's response completes."""
+            sid = extract_session_id(request) if request else "default"
+            session_state = get_session_state(sid)
+            chip_state = session_state.get("chip_state", {})
+            chip_set = chip_state.get("current_chips")
+            has_chips = bool(chip_set and getattr(chip_set, "chips", None))
+            row_update = gr.Row(visible=has_chips)
+            button_updates = update_chips(sid, chip_buttons)
+            return [row_update] + button_updates
+
+        submit_event = msg_input.submit(handle_input_wrapper, submit_inputs, submit_outputs)
+        if hasattr(submit_event, "then"):
+            submit_event.then(refresh_chips_after_response, [], [chip_row] + chip_buttons)
+
+        click_event = submit_btn.click(handle_input_wrapper, submit_inputs, submit_outputs)
+        if hasattr(click_event, "then"):
+            click_event.then(refresh_chips_after_response, [], [chip_row] + chip_buttons)
 
         # --- Tip Button JavaScript Callback ---
         tip_button_js = """
@@ -273,7 +310,7 @@ def launch_bartender_interface(
             avatar_overlay, tab_state, balance_state, prev_tab_state,
             prev_balance_state, tip_percentage_state, tip_amount_state,
             avatar_state, streaming_text_display, streaming_audio_player,
-            quota_error_display
+            quota_error_display, chip_row, *chip_buttons
         ]
 
         def clear_with_overlay(request: gr.Request):
@@ -302,7 +339,9 @@ def launch_bartender_interface(
                 effective_avatar_path,
                 "",  # streaming_text_display (empty)
                 None,  # streaming_audio_player (empty)
-                ""   # quota_error_display (empty)
+                "",  # quota_error_display (empty)
+                gr.Row(visible=False),  # chip_row
+                *[gr.Button(value="", visible=False) for _ in chip_buttons]  # chip_buttons
             )
 
         clear_btn.click(clear_with_overlay, [], clear_outputs)
