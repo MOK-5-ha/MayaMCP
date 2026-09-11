@@ -53,3 +53,20 @@ This document specifies the backend architectural patterns, concurrency invarian
 
 - **Security Scanning**: Inputs are checked for prompt injection and toxicity before processing; outputs are checked before returning to the user. See `src/security/`.
 - **Token Budget Dynamic Field Partitioning**: When constructing prompts with strict token ceilings (e.g. 512 tokens for suggestion chips), never right-truncate the assembled prompt string (`prompt[:budget*4]`), as this drops critical suffix directives (phase constraints, payment indicators, schema formatting rules). Instead, allocate proportional token budgets to dynamic fields (e.g., 75% conversation turns, 25% recent user messages) and truncate dynamic sections *before* appending invariant static prompt templates. Any remaining token trim must strictly reduce dynamic history while preserving the complete static suffix.
+
+---
+
+## 6. MCP Scope, Stateful Boundaries & CLI-First Architecture
+
+- **MCP Scope & Stateful Boundaries**: Antigravity operates on a **CLI-first, stateful-MCP-sparing architecture**:
+  - **MCP Reserved Tier (Stateful & Daemon Integrations Only)**:
+    - AST Knowledge Graph: `codebase-memory-mcp` maintains the persistent SQLite Abstract Syntax Tree graph for codebase navigation and call-graph tracing.
+    - External Library Documentation: `context7` resolves third-party package syntax and API definitions.
+    - Live Browser Sessions: `chrome-devtools` and `axe-core` manage interactive Chrome DevTools Protocol (CDP) sessions and accessibility validation.
+    - Automated Review Agent Gateways: `greptile` triggers and manages PR code reviews.
+  - **CLI Tier (Stateless Operations)**:
+    - All version control, pull requests, issues, cloud infrastructure, container management, and build tasks MUST execute through native CLI tools (`gh`, `git`, `gcloud`, `modal`, `docker`, `cargo`, `npm`, etc.) paired with lightweight companion skills.
+- **Architectural Perpetuation & Downstream Agent Invariant**: This CLI-first, MCP-sparing doctrine is a permanent, indefinite architectural standard. All future agents, subagents, and automated workflows governed by this constitution must:
+  1. **Perpetuate the Pattern**: When recommending, designing, or scaffolding new tools, integrations, or workflows, agents must prioritize CLI binaries paired with lightweight skills rather than introducing new MCP servers.
+  2. **Defend the Boundaries**: Strictly reject the addition of stateless MCP servers (e.g. for Jira, Slack, Linear, Stripe, GitHub, or Git) whenever a mature CLI tool or scriptable API exists. Reserve MCP exclusively for persistent stateful daemons, database connections, and AST memory graphs.
+  3. **Propagate to Project Invariants**: When authoring repository-level `AGENTS.md`, `.cursor/rules/`, or subagent system prompts, agents must explicitly codify this CLI-first discipline to ensure child agents and subagents inherit identical token hygiene.

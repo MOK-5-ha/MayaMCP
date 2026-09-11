@@ -19,7 +19,7 @@ When reviewing code, pull requests, and commits:
 2. **Focus on Quality & Security over Dogma:** Prioritize clean, readable Python, robust error handling, non-blocking async execution, and secure integrations over pedantic style nitpicks.
 3. **Encourage Experimentation:** Recognize that this project serves as a testbed for integrating LLMs (Gemini), Voice (Cartesia), RAG (Memvid/FAISS), Web3 payments (Coinbase CDP AgentKit), and Google Cloud Gen AI evaluation & observability.
 4. **Respect Spec-First Phasing:** This repository strictly separates technical specification drafting (`.kiro/specs/`) from feature implementation tracks. Never demand immediate full code implementation of newly specified architectures on PRs whose primary scope is specification, deprecation cleanup, or environment modernization.
-5. **Modular Constitution Hierarchy:** The project constitution is defined in `AGENTS.md`, and granular implementation, testing, UI, and style rules are modularized under `.agents/rules/` (`architecture_and_security.md`, `ui_and_voice.md`, `testing_and_hygiene.md`, `style_and_formatting.md`). Review pull requests against both `AGENTS.md` and the appropriate modular `.agents/rules/` files.
+5. **Modular Constitution Hierarchy & CLI-First Architecture:** The project constitution is defined in `AGENTS.md`, and granular implementation, testing, UI, and style rules are modularized under `.agents/rules/` (`architecture_and_security.md`, `ui_and_voice.md`, `testing_and_hygiene.md`, `style_and_formatting.md`). Review pull requests against both `AGENTS.md` and the appropriate modular `.agents/rules/` files, enforcing the CLI-first operational guardrails and stateful MCP boundaries.
 
 ---
 
@@ -125,6 +125,15 @@ When reviewing code, pull requests, and commits:
 - Rate limiting: max 1 chip generation per 2 seconds per session.
 - Concurrency limit: max 10 parallel chip generations across all sessions (enforced via `ThreadPoolExecutor` with `max_workers=10`).
 - Flag any chip state modification that bypasses the session lock or violates rate/concurrency limits.
+
+### Rule 16: CLI-First Architecture, MCP Stateful Boundaries & Review Bot Governance
+- MayaMCP and Antigravity workflows enforce a **CLI-first, stateful-MCP-sparing architecture**.
+- **MCP Reserved Tier (Stateful Integrations Only)**: MCP is strictly reserved for persistent stateful daemons, AST knowledge graphs (`codebase-memory-mcp`), and live browser sessions (`chrome-devtools`).
+- **CLI Tier (Stateless Operations)**: All Git/GitHub operations (`git`, `gh`), cloud deployments (`modal`), container management, and build tasks MUST execute via native CLI tools with output hygiene (`--json`, `--limit`, `--format`, `jq`).
+- **Prohibition of Stateless MCP**: Reviewers and agents must strictly reject any PR introducing stateless MCP servers (e.g. GitHub MCP, Git MCP, Jira/Slack MCP, Linear MCP, or sequential-thinking tools).
+- **GitHub CLI & Git Operational Guardrails**: Feature branches only (`feature/*`, `fix/*`, `chore/*`), pre-commit secret hygiene, zero autonomous merges (`gh pr merge` is prohibited; human review required), and remote tamper protection (`git remote add/set-url` prohibited).
+- **CLI Output Hygiene**: Mandate structured projections (`--json`, `--limit`, `--format`) and stream filtering (`jq`, `head`) to prevent context window saturation.
+- **Architectural Perpetuation Invariant**: Future agents, child workflows, and pull requests must defend these boundaries and preserve token hygiene indefinitely.
 
 ---
 
