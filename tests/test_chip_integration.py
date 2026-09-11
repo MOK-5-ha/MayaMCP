@@ -1312,6 +1312,167 @@ class TestFailureScenarios:
 
         clear_session_chip_seq(session_id)
 
+    @patch("src.conversation.processor.ConversationPhaseManager")
+    @patch("src.conversation.processor.get_combined_prompt", return_value="sys prompt")
+    @patch("src.llm.tools.get_menu", return_value="menu")
+    @patch("src.conversation.processor._build_order_context", return_value="")
+    @patch("src.conversation.processor.scan_input")
+    @patch("src.conversation.processor.scan_output")
+    def test_process_order_stream_not_delayed_by_slow_chip_generation(
+        self,
+        mock_scan_output,
+        mock_scan_input,
+        mock_order_ctx,
+        mock_get_menu,
+        mock_combined_prompt,
+        mock_phase_manager_class,
+    ):
+        """Verify process_order_stream finishes streaming without delay even if chip generation is slow."""
+        import time
+
+        from src.conversation.processor import process_order_stream
+        from src.utils.state_manager import clear_session_chip_seq
+
+        mock_scan_input.return_value = Mock(is_valid=True, sanitized_text="hello")
+        mock_scan_output.return_value = Mock(is_valid=True, sanitized_text="Hello back!")
+        mock_phase_manager = Mock()
+        mock_phase_manager.get_current_phase.return_value = "greeting"
+        mock_phase_manager_class.return_value = mock_phase_manager
+
+        session_id = "test_stream_delay_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                }
+            }
+        }
+
+        async def mock_run_async(*args, **kwargs):
+            mock_event = MagicMock()
+            mock_event.author = "model"
+            mock_part = MagicMock()
+            mock_part.text = "Hello back!"
+            mock_event.content.parts = [mock_part]
+            yield mock_event
+
+        def slow_trigger(*args, **kwargs):
+            time.sleep(1.0)
+
+        with patch("src.utils.state_manager._global_store", store), \
+             patch("google.adk.runners.Runner.run_async", side_effect=mock_run_async), \
+             patch("src.conversation.processor._trigger_chip_generation", side_effect=slow_trigger):
+
+            start_time = time.time()
+            events = list(process_order_stream(
+                user_input_text="hello",
+                current_session_history=[],
+                llm="gemini-2.5-flash",
+                session_id=session_id,
+                app_state=store,
+            ))
+            duration = time.time() - start_time
+
+        assert duration < 0.5, f"process_order_stream took {duration:.2f}s, expected < 0.5s"
+        assert any(e.get("type") == "text_chunk" for e in events)
+        assert any(e.get("type") == "complete" for e in events)
+        clear_session_chip_seq(session_id)
+
+    @patch("src.conversation.processor.ConversationPhaseManager")
+    @patch("src.conversation.processor.get_combined_prompt", return_value="sys prompt")
+    @patch("src.llm.tools.get_menu", return_value="menu")
+    @patch("src.conversation.processor._build_order_context", return_value="")
+    @patch("src.conversation.processor.scan_input")
+    @patch("src.conversation.processor.scan_output")
+    def test_process_order_stream_with_background_chip_generation_timeout(
+        self,
+        mock_scan_output,
+        mock_scan_input,
+        mock_order_ctx,
+        mock_get_menu,
+        mock_combined_prompt,
+        mock_phase_manager_class,
+    ):
+        """Verify process_order_stream streams tokens without delay when background chip generation times out."""
+        import concurrent.futures
+        import time
+
+        from src.conversation.processor import (
+            _session_trigger_tasks,
+            process_order_stream,
+        )
+        from src.utils.state_manager import _get_session_data, clear_session_chip_seq
+
+        mock_scan_input.return_value = Mock(is_valid=True, sanitized_text="hello")
+        mock_scan_output.return_value = Mock(is_valid=True, sanitized_text="Hello back!")
+        mock_phase_manager = Mock()
+        mock_phase_manager.get_current_phase.return_value = "greeting"
+        mock_phase_manager_class.return_value = mock_phase_manager
+
+        session_id = "test_stream_timeout_scenario_session"
+        clear_session_chip_seq(session_id)
+        store = {
+            session_id: {
+                "chip_state": {
+                    "current_chips": None,
+                    "generation_seq": 0,
+                    "last_generation_time": 0,
+                    "generation_count": 0,
+                    "failure_count": 0,
+                    "pending_task": None,
+                }
+            }
+        }
+
+        async def mock_run_async(*args, **kwargs):
+            mock_event = MagicMock()
+            mock_event.author = "model"
+            mock_part = MagicMock()
+            mock_part.text = "Hello back!"
+            mock_event.content.parts = [mock_part]
+            yield mock_event
+
+        mock_future = Mock(spec=concurrent.futures.Future)
+        mock_future.done.return_value = False
+        mock_future.result.side_effect = concurrent.futures.TimeoutError("LLM call timed out")
+
+        with patch("src.utils.state_manager._global_store", store), \
+             patch("google.adk.runners.Runner.run_async", side_effect=mock_run_async), \
+             patch("src.conversation.chip_generator._chip_executor.submit", return_value=mock_future):
+
+            start_time = time.time()
+            events = list(process_order_stream(
+                user_input_text="hello",
+                current_session_history=[{"role": "user", "content": "hi"}],
+                llm="gemini-2.5-flash",
+                session_id=session_id,
+                app_state=store,
+            ))
+            duration = time.time() - start_time
+
+            # The response stream returns immediately without being blocked
+            assert duration < 0.5, f"process_order_stream was delayed: took {duration:.2f}s"
+            assert any(e.get("type") == "text_chunk" for e in events)
+            assert any(e.get("type") == "complete" for e in events)
+
+            # Wait for background trigger task to finish its execution
+            trigger_future = _session_trigger_tasks.get(session_id)
+            if trigger_future:
+                trigger_future.result(timeout=2.0)
+
+            # State records timeout failure gracefully without crashing the response
+            data = _get_session_data(session_id, store)
+            assert data["chip_state"]["failure_count"] >= 1
+            assert data["chip_state"]["current_chips"] is None
+
+        clear_session_chip_seq(session_id)
+
 
 class TestSessionLifecycleIntegration:
     """End-to-end integration tests for session lifecycle and suggestion chips."""

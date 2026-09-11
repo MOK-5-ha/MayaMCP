@@ -449,12 +449,22 @@ def step_user_clicks_generic_chip(ctx):
 
 @when("the user submits a new message")
 def step_user_submits_message(ctx):
-    """User submits new message."""
+    """User submits new message through production trigger path."""
     ctx.user_message = "New message"
-    chip_state = ctx.app_state.get(ctx.session_id, {}).get("chip_state", {})
-    pending = chip_state.get("pending_task")
-    if pending and not pending.done():
-        pending.cancel()
+    from src.conversation.processor import _trigger_chip_generation
+
+    history = [
+        {"role": "user", "content": "I would like a drink"},
+        {"role": "assistant", "content": "Sure, what kind?"},
+    ]
+    with patch("src.utils.state_manager._global_store", ctx.app_state):
+        _trigger_chip_generation(
+            session_id=ctx.session_id,
+            app_state=ctx.app_state,
+            user_message=ctx.user_message,
+            maya_response="Here is your drink!",
+            truncated_history=history,
+        )
 
 
 @when("the UI component refreshes")
@@ -856,24 +866,18 @@ def step_chip_generation_in_progress(ctx):
 
 @then("the pending chip generation task should be cancelled")
 def step_pending_task_cancelled(ctx):
-    """Verify in-flight task was cancelled."""
+    """Verify in-flight task was cancelled by production logic."""
     assert hasattr(ctx, "mock_pending_task")
     assert ctx.mock_pending_task.cancel.called
 
 
 @then("new chip generation should start for the new turn")
 def step_new_generation_starts(ctx):
-    """Verify fresh chip generation for the new turn."""
-    context = ChipGenerationContext(
-        conversation_turns=[{"role": "user", "content": ctx.user_message}],
-        payment_status="none",
-        conversation_phase="greeting",
-        recent_user_messages=[ctx.user_message],
-    )
-    with patch("src.utils.state_manager._global_store", ctx.app_state):
-        result = ctx.chip_generator.generate_fallback_chips()
-        assert result is not None
-        assert len(result.chips) >= 3
+    """Verify fresh chip generation was executed and stored for the new turn."""
+    chip_data = ctx.app_state.get(ctx.session_id, {}).get("chip_state", {})
+    chips = chip_data.get("current_chips")
+    assert chips is not None
+    assert len(chips.chips) >= 3
 
 
 @given("the first chip dialogue is focused")
