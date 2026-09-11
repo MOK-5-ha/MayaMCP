@@ -134,41 +134,41 @@
 - [x] 7. Checkpoint - Conversation integration tests pass
   - Ensure all processor integration tests pass, ask user if questions arise
 
-- [ ] 8. Create Gradio chip UI components
-  - [ ] 8.1 Create `src/ui/chips.py` with styling constants
+- [x] 8. Create Gradio chip UI components
+  - [x] 8.1 Create `src/ui/chips.py` with styling constants
     - Define DIALOGUE_CHIP_STYLE (neutral gradient)
     - Define ACTION_CHIP_STYLE (accent gradient)
     - Define ACTION_ICONS dictionary (emoji prefixes)
     - Add responsive CSS for mobile (44x44px touch targets)
     - Add accessibility CSS (focus indicators, high contrast, reduced motion)
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 9.1, 9.4, 9.5, 9.6_
-  - [ ] 8.2 Implement `create_chip_row()` function
+  - [x] 8.2 Implement `create_chip_row()` function
     - Create Row with 6 placeholder Button components
     - Set elem_id and elem_classes for styling
     - _Requirements: 4.1_
-  - [ ] 8.3 Write visual regression tests for chip styling
+  - [x] 8.3 Write visual regression tests for chip styling
     - Test dialogue chip gradient rendering
     - Test action chip gradient and icon prefix
     - Test mobile responsive scaling
     - Test focus indicator visibility
     - _Requirements: 4.1, 4.2, 4.3, 4.5, 9.5, 9.6_
 
-- [ ] 9. Implement chip update and click handlers
-  - [ ] 9.1 Implement `update_chips()` function
+- [x] 9. Implement chip update and click handlers
+  - [x] 9.1 Implement `update_chips()` function
     - Read chip_state from session state
     - Update button visibility and content
     - Add icon prefixes for action chips
     - Set ARIA labels for accessibility
     - _Requirements: 5.1, 9.1_
-  - [ ] 9.2 Implement `handle_chip_click()` function
+  - [x] 9.2 Implement `handle_chip_click()` function
     - For dialogue chips: populate textbox, focus input (no auto-submit)
     - For action chips: validate action_id, populate textbox, auto-submit
     - For unrecognized action_id: fallback to dialogue behavior
     - _Requirements: 5.2, 5.3, 5.4, 11.5, 11.6_
-  - [ ] 9.3 Implement `register_chip_handlers()` function
+  - [x] 9.3 Implement `register_chip_handlers()` function
     - Wire button click events to handle_chip_click
     - _Requirements: 5.6_
-  - [ ] 9.4 Write unit tests for chip handlers
+  - [x] 9.4 Write unit tests for chip handlers
     - Test dialogue chip click populates textbox without submit
     - Test action chip click populates and auto-submits
     - Test unrecognized action_id falls back to dialogue behavior
@@ -176,15 +176,15 @@
     - Test ARIA label generation
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 11.5, 11.6_
 
-- [ ] 10. Wire chip components into main Gradio UI
-  - [ ] 10.1 Integrate chip row into `src/ui/main.py`
+- [x] 10. Wire chip components into main Gradio UI
+  - [x] 10.1 Integrate chip row into `src/ui/main.py`
     - Position chip row below chat display and above input textbox
     - Call update_chips() after each Maya response completes
     - Call register_chip_handlers() during UI initialization
     - Hide chip row when user submits message
     - Show chip row after Maya response and chips generated
     - _Requirements: 6.1, 6.2, 6.6_
-  - [ ] 10.2 Write integration test for chip lifecycle
+  - [x] 10.2 Write integration test for chip lifecycle
     - Test chips hide on user message submission
     - Test chips update after Maya response
     - Test chips persist across UI refreshes within same turn
