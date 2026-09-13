@@ -182,7 +182,14 @@ def mock_google_genai_client(monkeypatch):
         class MockResponse:
             def __init__(self, text):
                 self.candidates = [MockCandidate(text)]
-                self.usage_metadata = NS(prompt_token_count=10, candidates_token_count=10, total_token_count=20)
+                self.usage_metadata = NS(
+                    prompt_token_count=10,
+                    candidates_token_count=10,
+                    total_token_count=20,
+                    tool_use_prompt_token_count=0,
+                    thoughts_token_count=0,
+                    cached_content_token_count=0,
+                )
                 self.grounding_metadata = None
                 self.citation_metadata = None
 
