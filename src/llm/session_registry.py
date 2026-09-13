@@ -1,6 +1,7 @@
 """Thread-safe per-session cache for LLM and TTS client instances."""
 
 import hashlib
+import hmac
 import os
 import secrets
 import threading
@@ -60,14 +61,12 @@ class SessionLimitExceededError(RuntimeError):
 
 
 def _key_hash(raw_value: str) -> str:
-    """Return a short deterministic fingerprint of sensitive strings for in-memory comparison (never log raw keys)."""
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        raw_value.encode("utf-8"),
+    """Return a short keyed hash of a string for in-memory comparison (never log raw keys)."""
+    return hmac.new(
         _KEY_HASH_SECRET,
-        210_000,
-    )
-    return derived.hex()[:16]
+        raw_value.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
 
 
 def _get_admission_lock(session_id: str) -> threading.Lock:
