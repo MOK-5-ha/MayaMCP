@@ -62,10 +62,10 @@ class TokenBucket:
 class RateLimiter:
     """Multi-level rate limiting for session and application-wide protection."""
 
-    # Default rate limits (configurable via environment)
-    DEFAULT_SESSION_LIMIT = 10  # requests per minute per session
-    DEFAULT_APP_LIMIT = 100    # requests per minute globally
-    DEFAULT_BURST_LIMIT = 5     # burst requests allowed
+    # Default rate limits for GCP Vertex AI Paid Tier (configurable via environment)
+    DEFAULT_SESSION_LIMIT = 60  # requests per minute per session
+    DEFAULT_APP_LIMIT = 500  # requests per minute globally
+    DEFAULT_BURST_LIMIT = 15  # burst requests allowed within 10-second window
 
     def __init__(self):
         """Initialize rate limiter with default limits."""

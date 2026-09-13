@@ -74,12 +74,12 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 
 ## Security
 
-Maya features a built-in security layer powered by `llm-guard` that protects against:
+Maya features a built-in security layer that protects against:
 
-- **Prompt Injection**: Detects and blocks malicious inputs attempting to manipulate the agent.
-- **Input/Output Toxicity**: Filters toxic content in both user inputs and agent responses.
+- **Prompt Injection & Toxicity**: Filters malicious instructions and toxic content in both user inputs and agent responses (powered by regex scanners with optional `llm-guard` fallback).
+- **Application-Level Rate Limiting**: Multi-level token-bucket protection against Denial-of-Wallet (DoW), automated request floods, and Cartesia TTS credit exhaustion. Defaults are calibrated for GCP Vertex AI Paid Tier throughput (`MAYA_SESSION_RATE_LIMIT=60/min`, `MAYA_APP_RATE_LIMIT=500/min`, `MAYA_BURST_LIMIT=15/10s`).
 
-The security features fail open to ensure availability if the scanning engine encounters errors.
+The security features fail open to ensure availability if scanning encounters unexpected errors.
 
 To enable security features, ensure the optional dependencies are installed:
 
@@ -118,6 +118,11 @@ CARTESIA_API_KEY=your_cartesia_api_key_here
 GEMINI_MODEL_VERSION=gemini-3.5-flash-lite
 TEMPERATURE=1.0
 MAX_OUTPUT_TOKENS=8192
+
+# Rate Limiting & DoS Protection (optional — GCP Vertex AI Paid Tier defaults shown)
+MAYA_SESSION_RATE_LIMIT=60      # requests per minute per session
+MAYA_APP_RATE_LIMIT=500        # requests per minute globally
+MAYA_BURST_LIMIT=15             # burst requests allowed in 10-second window
 
 ### Environment Configuration (optional)
 PYTHON_ENV=development

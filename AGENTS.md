@@ -95,6 +95,9 @@ Maya operates in 100% GCP Vertex AI Mode using Application Default Credentials (
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `8192`
 - `MAYA_MASTER_KEY` — Fernet key for encrypting session data
+- `MAYA_SESSION_RATE_LIMIT` — requests per minute per session (defaults to `60`)
+- `MAYA_APP_RATE_LIMIT` — requests per minute globally (defaults to `500`)
+- `MAYA_BURST_LIMIT` — burst requests allowed in 10s window (defaults to `15`)
 - `CDP_API_KEY_ID` — Coinbase CDP API key ID
 - `CDP_API_KEY_SECRET` — Coinbase CDP API key secret
 - `CDP_MERCHANT_PRIVATE_KEY` — Wallet private key for Base Sepolia (optional)

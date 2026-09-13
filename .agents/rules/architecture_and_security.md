@@ -49,10 +49,11 @@ This document specifies the backend architectural patterns, concurrency invarian
 
 ---
 
-## 5. Security Scanning & Token Hygiene
+## 5. Security Scanning, Token Hygiene & Rate Limiting
 
 - **Security Scanning**: Inputs are checked for prompt injection and toxicity before processing; outputs are checked before returning to the user. See `src/security/`.
 - **Token Budget Dynamic Field Partitioning**: When constructing prompts with strict token ceilings (e.g. 512 tokens for suggestion chips), never right-truncate the assembled prompt string (`prompt[:budget*4]`), as this drops critical suffix directives (phase constraints, payment indicators, schema formatting rules). Instead, allocate proportional token budgets to dynamic fields (e.g., 75% conversation turns, 25% recent user messages) and truncate dynamic sections *before* appending invariant static prompt templates. Any remaining token trim must strictly reduce dynamic history while preserving the complete static suffix.
+- **Application Rate Limiting & Paid Tier Calibration**: Multi-level token-bucket rate limiting (`RateLimiter` in `src/utils/rate_limiter.py`) guards against Denial-of-Wallet (DoW), automated request floods, and Cartesia TTS credit exhaustion. Defaults are calibrated for GCP Vertex AI Paid Tier throughput: `MAYA_SESSION_RATE_LIMIT=60` req/min (1 req/s sustained), `MAYA_APP_RATE_LIMIT=500` req/min, and `MAYA_BURST_LIMIT=15` requests per 10-second sliding window.
 
 ---
 
