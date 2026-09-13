@@ -43,7 +43,10 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Architecture Updates
 
-- **FastAPI 0.141.1 & Decoupled Gradio UI**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, exposing root `/` for native REST (`/api/v1/*`) and Agent-to-Agent (`/a2a/*`) interfaces.
+- **Phaser 4 HTML5 Canvas Game Engine & Vite 8**: Integrated interactive 2D retro canvas frontend (`phaser@4.2.1`) served at root `/`, with Vite 8 Rolldown bundling, headless browser runtime smoke testing (`npm test`), and graceful asset fallbacks.
+- **Cartesia 4.x Unified TTS SDK**: Migrated voice synthesis to `cartesia>=4.2.0,<5.0.0`, using modern `cartesia_client.tts.generate()` binary response handling, non-blocking audio streaming, and sub-millisecond session cache key derivation.
+- **FastAPI 0.141.1 & Decoupled Architecture**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, mounting the Phaser 4 SPA at root `/` after dynamic Agent-to-Agent (`/a2a/*`) routes.
+- **Python 3.11+ Baseline**: Modernized project configuration (`pyproject.toml`, `setup.py`) to require Python `>=3.11`, enabling `enum.StrEnum` models and compatibility with `scikit-learn>=1.9.1`.
 - **Google ADK 2.0 Integration**: Completely migrated the conversational orchestrator to Google's Agent Development Kit (ADK) using `google-adk`. Replaced legacy `langchain` and native `google-genai` wrappers with ADK's `Agent`, `Runner`, and `Gemini` models.
 - **Unified GenAI Client & 100% GCP Vertex AI Mode**: Centralized provider authentication and session registry management using GCP Vertex AI mode (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`), removing Google AI Studio API key dependencies.
 - **Distributed State Management**: Thread-safe per-session synchronization (`RLock`) supporting Modal's distributed `modal.Dict` sharing across multi-container deployments (`max_containers > 1`).
@@ -319,7 +322,12 @@ This project includes comprehensive tests for all major components. Tests are or
 - Install in editable mode: `pip install -e .`
 - Run tests: `pytest`
 
-Prerequisites: Python 3.12+ and pip installed; activate your virtual environment if using one.
+#### Option 3: Frontend Browser Smoke Testing
+
+- Build frontend: `cd frontend && npm install && npm run build`
+- Run headless browser runtime test: `npm test`
+
+Prerequisites: Python 3.11+ and Node.js 20+; activate your virtual environment if using one.
 
 ### Test Organization
 
