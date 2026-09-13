@@ -95,6 +95,9 @@ Maya operates in 100% GCP Vertex AI Mode using Application Default Credentials (
 - `TEMPERATURE` — defaults to `1.0`
 - `MAX_OUTPUT_TOKENS` — defaults to `8192`
 - `MAYA_MASTER_KEY` — Fernet key for encrypting session data
+- `MAYA_SESSION_RATE_LIMIT` — requests per minute per session (defaults to `60`)
+- `MAYA_APP_RATE_LIMIT` — requests per minute globally (defaults to `500`)
+- `MAYA_BURST_LIMIT` — burst requests allowed in 10s window (defaults to `15`)
 - `CDP_API_KEY_ID` — Coinbase CDP API key ID
 - `CDP_API_KEY_SECRET` — Coinbase CDP API key secret
 - `CDP_MERCHANT_PRIVATE_KEY` — Wallet private key for Base Sepolia (optional)
@@ -120,7 +123,7 @@ This section governs how AI agents must interpret, maintain, and update reposito
 Detailed engineering rules are organized modularly in the [`.agents/rules/`](.agents/rules/) directory:
 
 - [**Architecture & Security Rules**](.agents/rules/architecture_and_security.md): Concurrency locking, distributed session store, optimistic payments, async SSE unblocking, security scanning, batch caching, token budgeting, and developer tooling governance (CLI-first workflow & stateful MCP boundaries).
-- [**UI, Suggestion Chips & Voice Rules**](.agents/rules/ui_and_voice.md): Parallel suggestion chip generation, Gradio state propagation, event chaining (`.then()`), Phaser 3 asset lifecycle, Cartesia TTS streaming, and WCAG accessibility.
+- [**UI, Suggestion Chips & Voice Rules**](.agents/rules/ui_and_voice.md): Parallel suggestion chip generation, Gradio state propagation, event chaining (`.then()`), Phaser 4 asset lifecycle, Cartesia 4.x TTS streaming, and WCAG accessibility.
 - [**Testing, BDD & Evaluation Rules**](.agents/rules/testing_and_hygiene.md): Native SDK mocking, BDD Gherkin patterns, rate limit test safety, ADK stream mock event contracts, production invalidation testing, non-blocking streaming assertions, and Vertex AI evals.
 - [**Style, Linting & Formatting Rules**](.agents/rules/style_and_formatting.md): Ruff rules, Mypy typing standards, conventional commits, pre-commit hygiene, GitHub CLI (`gh`) operational guardrails, and CLI output hygiene & token conservation protocol.
 

@@ -21,3 +21,8 @@ export const config: Phaser.Types.Core.GameConfig = {
 };
 
 export const game = new Phaser.Game(config);
+
+// Expose game instance for runtime smoke tests and accessibility tree inspection
+if (typeof window !== 'undefined') {
+  (window as unknown as { __MAYA_GAME__?: Phaser.Game }).__MAYA_GAME__ = game;
+}

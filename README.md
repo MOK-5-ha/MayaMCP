@@ -43,7 +43,10 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Architecture Updates
 
-- **FastAPI 0.141.1 & Decoupled Gradio UI**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, exposing root `/` for native REST (`/api/v1/*`) and Agent-to-Agent (`/a2a/*`) interfaces.
+- **Phaser 4 HTML5 Canvas Game Engine & Vite 8**: Integrated interactive 2D retro canvas frontend (`phaser@4.2.1`) served at root `/`, with Vite 8 Rolldown bundling, headless browser runtime smoke testing (`npm test`), and graceful asset fallbacks.
+- **Cartesia 4.x Unified TTS SDK**: Migrated voice synthesis to `cartesia>=4.2.0,<5.0.0`, using modern `cartesia_client.tts.generate()` binary response handling, non-blocking audio streaming, and sub-millisecond session cache key derivation.
+- **FastAPI 0.141.1 & Decoupled Architecture**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, mounting the Phaser 4 SPA at root `/` alongside native REST (`/api/v1/*`) and SSE interfaces.
+- **Python 3.11+ Baseline**: Modernized project configuration (`pyproject.toml`, `setup.py`) to require Python `>=3.11`, enabling `enum.StrEnum` models and compatibility with `scikit-learn>=1.9.1`.
 - **Google ADK 2.0 Integration**: Completely migrated the conversational orchestrator to Google's Agent Development Kit (ADK) using `google-adk`. Replaced legacy `langchain` and native `google-genai` wrappers with ADK's `Agent`, `Runner`, and `Gemini` models.
 - **Unified GenAI Client & 100% GCP Vertex AI Mode**: Centralized provider authentication and session registry management using GCP Vertex AI mode (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`), removing Google AI Studio API key dependencies.
 - **Distributed State Management**: Thread-safe per-session synchronization (`RLock`) supporting Modal's distributed `modal.Dict` sharing across multi-container deployments (`max_containers > 1`).
@@ -71,12 +74,12 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 
 ## Security
 
-Maya features a built-in security layer powered by `llm-guard` that protects against:
+Maya features a built-in security layer that protects against:
 
-- **Prompt Injection**: Detects and blocks malicious inputs attempting to manipulate the agent.
-- **Input/Output Toxicity**: Filters toxic content in both user inputs and agent responses.
+- **Prompt Injection & Toxicity**: When the optional `llm-guard` dependency is installed, scans inputs for prompt injection and toxicity and outputs for toxicity. Without it, fallback regex checks cover only basic input-injection patterns; toxicity filtering and output scanning are unavailable.
+- **Application-Level Rate Limiting**: Multi-level token-bucket protection against Denial-of-Wallet (DoW), automated request floods, and Cartesia TTS credit exhaustion. Defaults are calibrated for GCP Vertex AI Paid Tier throughput (`MAYA_SESSION_RATE_LIMIT=60/min`, `MAYA_APP_RATE_LIMIT=500/min`, `MAYA_BURST_LIMIT=15/10s`).
 
-The security features fail open to ensure availability if the scanning engine encounters errors.
+The security features fail open to ensure availability if scanning encounters unexpected errors.
 
 To enable security features, ensure the optional dependencies are installed:
 
@@ -115,6 +118,11 @@ CARTESIA_API_KEY=your_cartesia_api_key_here
 GEMINI_MODEL_VERSION=gemini-3.5-flash-lite
 TEMPERATURE=1.0
 MAX_OUTPUT_TOKENS=8192
+
+# Rate Limiting & DoS Protection (optional — GCP Vertex AI Paid Tier defaults shown)
+MAYA_SESSION_RATE_LIMIT=60      # requests per minute per session
+MAYA_APP_RATE_LIMIT=500        # requests per minute globally
+MAYA_BURST_LIMIT=15             # burst requests allowed in 10-second window
 
 ### Environment Configuration (optional)
 PYTHON_ENV=development
@@ -319,7 +327,12 @@ This project includes comprehensive tests for all major components. Tests are or
 - Install in editable mode: `pip install -e .`
 - Run tests: `pytest`
 
-Prerequisites: Python 3.12+ and pip installed; activate your virtual environment if using one.
+#### Option 3: Frontend Browser Smoke Testing
+
+- Build frontend: `cd frontend && npm install && npm run build`
+- Run headless browser runtime test: `npm test`
+
+Prerequisites: Python 3.11+ and Node.js 22.12.0+; activate your virtual environment if using one. Frontend browser smoke tests also require Chrome or Chromium installed at a recognized path, or `CHROME_BIN` set to its executable path.
 
 ### Test Organization
 

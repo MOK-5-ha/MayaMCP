@@ -25,17 +25,18 @@ This document outlines frontend architecture, Gradio components, Cartesia voice 
 
 ---
 
-## 3. Cartesia Voice Synthesis & Audio Streaming
+## 3. Cartesia 4.x Voice Synthesis & Audio Streaming
 
+- **Cartesia 4.x Generation API**: Use `cartesia_client.tts.generate` (returning `BinaryAPIResponse`) rather than deprecated `.bytes()`, reading binary content via `.read()` or streaming via `.iter_bytes()`. Pass voice parameters as `{"id": voice_id}` or raw voice ID string.
 - **Lazy Streaming Pipelining**: Never materialize generators eagerly (such as `list(generator)`) when pipelining stream inputs (e.g. streaming LLM outputs to TTS). Consume them lazily (using queue-based iterators if passing items between threads) to preserve low latency.
 - **Heartbeat Safety**: When reading streaming iterators that yield heartbeat/keep-alive events, ensure you yield the heartbeats immediately but continue draining the iterator in a loop until the matching content chunk is acquired, preventing payload misalignment.
 
 ---
 
-## 4. Phaser 3 Game Canvas & Component Lifecycle
+## 4. Phaser 4 Game Canvas & Component Lifecycle
 
-- **Phaser 3 Secondary Loader Pass**: When queuing assets dynamically from a loaded JSON manifest in `create()`, Phaser's loader queue does not automatically start unless `this.load.start()` is explicitly invoked, accompanied by a `this.load.once('complete', ...)` listener before starting downstream scenes (`BarScene`).
-- **Phaser 3 Audio Cache Verification**: In Phaser 3 audio management, `this.scene.sound.get(key)` only queries already-instantiated sound objects. To verify whether an audio asset was preloaded into cache before calling `sound.add(key)`, check `this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null`.
+- **Phaser 4 Secondary Loader Pass**: When queuing assets dynamically from a loaded JSON manifest in `create()`, Phaser's loader queue does not automatically start unless `this.load.start()` is explicitly invoked, accompanied by a `this.load.once('complete', ...)` listener before starting downstream scenes (`BarScene`).
+- **Phaser 4 Audio Cache Verification**: In Phaser 4 audio management, `this.scene.sound.get(key)` only queries already-instantiated sound objects. To verify whether an audio asset was preloaded into cache before calling `sound.add(key)`, check `this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null`.
 - **Phaser Component & Timer Teardown Safety**: Composite GameObjects (such as `MayaCharacter`) that create internal looping scene timers (e.g. `MouthFlapController`'s viseme flap timer) must implement a `destroy()` method that explicitly cancels active timers and destroys child graphics objects upon container/scene teardown.
 
 ---

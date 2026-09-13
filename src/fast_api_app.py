@@ -17,7 +17,6 @@ import os
 from collections.abc import AsyncIterator
 
 import google.auth
-from a2a.server.tasks import InMemoryTaskStore
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,7 +30,6 @@ except ImportError:
     google_cloud_logging = None
 
 from src.app_utils import services
-from src.app_utils.a2a import attach_a2a_routes
 from src.app_utils.telemetry import setup_telemetry
 from src.app_utils.typing import Feedback
 from src.routers import chat_router, payments_router, session_router
@@ -65,7 +63,6 @@ AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from src.agent import app as adk_app
-    from src.agent import root_agent
 
     runner = Runner(
         app=adk_app,
@@ -75,13 +72,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.runner = runner
     app.state.agent_app_name = adk_app.name
-    await attach_a2a_routes(
-        app,
-        agent=root_agent,
-        runner=runner,
-        task_store=InMemoryTaskStore(),
-        rpc_path=f"/a2a/{adk_app.name}",
-    )
+    # Mount static frontend bundle directory if available (must be mounted after all API routes)
+    frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+    if os.path.exists(frontend_dist) and not any(
+        getattr(r, "name", "") == "static" for r in app.routes
+    ):
+        from fastapi.staticfiles import StaticFiles
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
     yield
 
 
@@ -95,7 +92,7 @@ app: FastAPI = get_fast_api_app(
     lifespan=lifespan,
 )
 app.title = "MayaMCP Backend API"
-app.description = "FastAPI backend for MayaMCP AI Bartender (REST, SSE, and ADK A2A)"
+app.description = "FastAPI backend for MayaMCP AI Bartender (REST and SSE)"
 
 # Add CORS Middleware
 app.add_middleware(
@@ -132,13 +129,6 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """
     logger.log_struct(feedback.model_dump(), severity="INFO")
     return {"status": "success"}
-
-
-# Mount static frontend bundle directory if available (must be mounted after all API routes)
-frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
-if os.path.exists(frontend_dist):
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
 
 
 # Mount Gradio sub-app under /ui for backward compatibility / legacy interface access

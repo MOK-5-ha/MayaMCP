@@ -292,20 +292,21 @@ class TestGetVoiceAudio:
         mock_get_config.return_value = self.mock_config
         mock_clean_text.return_value = "cleaned text"
 
-        # Mock audio generator
+        # Mock audio generator / response
         audio_chunks = [b"chunk1", b"chunk2", b"chunk3"]
-        mock_audio_generator = iter(audio_chunks)
-        self.mock_client.tts.bytes.return_value = mock_audio_generator
+        expected_audio = b"".join(audio_chunks)
+        mock_response = MagicMock()
+        mock_response.read.return_value = expected_audio
+        self.mock_client.tts.generate.return_value = mock_response
 
         result = get_voice_audio("test text", self.mock_client)
 
         # Verify function calls
         mock_clean_text.assert_called_once_with("test text")
-        self.mock_client.tts.bytes.assert_called_once_with(
+        self.mock_client.tts.generate.assert_called_once_with(
             model_id="test_model_id",
             transcript="cleaned text",
             voice={
-                "mode": "id",
                 "id": "test_voice_id",
             },
             language="en-US",
@@ -313,7 +314,6 @@ class TestGetVoiceAudio:
         )
 
         # Verify result
-        expected_audio = b"".join(audio_chunks)
         assert result == expected_audio
         mock_logger.info.assert_called()
 
@@ -325,13 +325,14 @@ class TestGetVoiceAudio:
         mock_get_config.return_value = self.mock_config
         mock_clean_text.return_value = "cleaned text"
 
-        audio_chunks = [b"audio_data"]
-        self.mock_client.tts.bytes.return_value = iter(audio_chunks)
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"audio_data"
+        self.mock_client.tts.generate.return_value = mock_response
 
         result = get_voice_audio("test text", self.mock_client, voice_id="custom_voice")
 
         # Should use custom voice ID
-        call_args = self.mock_client.tts.bytes.call_args
+        call_args = self.mock_client.tts.generate.call_args
         assert call_args.kwargs["voice"]["id"] == "custom_voice"
         assert result == b"audio_data"
 
@@ -342,7 +343,7 @@ class TestGetVoiceAudio:
 
         assert result is None
         mock_logger.warning.assert_called_once_with("get_voice_audio received empty text.")
-        self.mock_client.tts.bytes.assert_not_called()
+        self.mock_client.tts.generate.assert_not_called()
 
     @patch('src.voice.tts.logger')
     def test_get_voice_audio_whitespace_only_text(self, mock_logger):
@@ -351,7 +352,7 @@ class TestGetVoiceAudio:
 
         assert result is None
         mock_logger.warning.assert_called_once_with("get_voice_audio received empty text.")
-        self.mock_client.tts.bytes.assert_not_called()
+        self.mock_client.tts.generate.assert_not_called()
 
     @patch('src.voice.tts.logger')
     def test_get_voice_audio_no_client(self, mock_logger):
@@ -369,8 +370,10 @@ class TestGetVoiceAudio:
         mock_get_config.return_value = self.mock_config
         mock_clean_text.return_value = "cleaned text"
 
-        # Mock empty audio generator
-        self.mock_client.tts.bytes.return_value = iter([])
+        # Mock empty audio response
+        mock_response = MagicMock()
+        mock_response.read.return_value = b""
+        self.mock_client.tts.generate.return_value = mock_response
 
         result = get_voice_audio("test text", self.mock_client)
 
@@ -386,7 +389,7 @@ class TestGetVoiceAudio:
         mock_clean_text.return_value = "cleaned text"
 
         # Mock API exception
-        self.mock_client.tts.bytes.side_effect = Exception("API Error")
+        self.mock_client.tts.generate.side_effect = Exception("API Error")
 
         result = get_voice_audio("test text", self.mock_client)
 
@@ -404,7 +407,7 @@ class TestGetVoiceAudio:
         mock_clean_text.return_value = "cleaned text"
 
         # Mock retryable exception
-        self.mock_client.tts.bytes.side_effect = ConnectionError("Connection failed")
+        self.mock_client.tts.generate.side_effect = ConnectionError("Connection failed")
 
         result = get_voice_audio("test text", self.mock_client)
 
@@ -420,8 +423,9 @@ class TestGetVoiceAudio:
         long_text = "This is a very long text that should be truncated in the log message " * 10
         mock_clean_text.return_value = long_text
 
-        audio_chunks = [b"audio_data"]
-        self.mock_client.tts.bytes.return_value = iter(audio_chunks)
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"audio_data"
+        self.mock_client.tts.generate.return_value = mock_response
 
         with patch('src.voice.tts.logger') as mock_logger:
             result = get_voice_audio(long_text, self.mock_client)
@@ -445,7 +449,9 @@ class TestGetVoiceAudio:
         mock_clean_text.return_value = "test"
 
         audio_data = b"x" * 1024  # 1KB of audio data
-        self.mock_client.tts.bytes.return_value = iter([audio_data])
+        mock_response = MagicMock()
+        mock_response.read.return_value = audio_data
+        self.mock_client.tts.generate.return_value = mock_response
 
         result = get_voice_audio("test", self.mock_client)
 
@@ -470,16 +476,16 @@ class TestGetVoiceAudio:
         mock_get_config.return_value = self.mock_config
         mock_clean_text.return_value = "test"
 
-        audio_chunks = [b"audio"]
-        self.mock_client.tts.bytes.return_value = iter(audio_chunks)
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"audio"
+        self.mock_client.tts.generate.return_value = mock_response
 
         get_voice_audio("test", self.mock_client)
 
         # Verify voice configuration structure
-        call_args = self.mock_client.tts.bytes.call_args
+        call_args = self.mock_client.tts.generate.call_args
         voice_config = call_args.kwargs["voice"]
         assert voice_config == {
-            "mode": "id",
             "id": "test_voice_id"
         }
 
@@ -490,14 +496,153 @@ class TestGetVoiceAudio:
         mock_get_config.return_value = self.mock_config
         mock_clean_text.return_value = "test text"
 
-        audio_chunks = [b"audio"]
-        self.mock_client.tts.bytes.return_value = iter(audio_chunks)
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"audio"
+        self.mock_client.tts.generate.return_value = mock_response
 
         get_voice_audio("test", self.mock_client)
 
         # Verify all config parameters are passed
-        call_args = self.mock_client.tts.bytes.call_args
+        call_args = self.mock_client.tts.generate.call_args
         assert call_args.kwargs["model_id"] == "test_model_id"
         assert call_args.kwargs["transcript"] == "test text"
         assert call_args.kwargs["language"] == "en-US"
         assert call_args.kwargs["output_format"] == self.mock_config["output_format"]
+
+
+class _ReadOnlyDouble:
+    """Minimal double exposing only .read() and explicitly disallowing other methods."""
+
+    def __init__(self, data: bytes):
+        self._data = data
+
+    def read(self) -> bytes:
+        return self._data
+
+
+class _FailingReadDouble:
+    """Minimal double where .read() raises an exception."""
+
+    def read(self) -> bytes:
+        raise OSError("Connection reset during read")
+
+
+class _IterBytesOnlyDouble:
+    """Minimal double exposing only .iter_bytes() without .read()."""
+
+    def __init__(self, chunks: list[bytes]):
+        self._chunks = chunks
+
+    def iter_bytes(self):
+        yield from self._chunks
+
+
+class _FailingIterBytesDouble:
+    """Minimal double where .iter_bytes() raises an error midway."""
+
+    def iter_bytes(self):
+        yield b"header"
+        raise OSError("Chunk streaming broke")
+
+
+class _IterableOnlyDouble:
+    """Minimal double exposing only __iter__() without .read() or .iter_bytes()."""
+
+    def __init__(self, chunks: list[bytes]):
+        self._chunks = chunks
+
+    def __iter__(self):
+        return iter(self._chunks)
+
+
+class _FailingIterableDouble:
+    """Minimal double where __iter__() raises an error during iteration."""
+
+    def __iter__(self):
+        yield b"chunk_1"
+        raise RuntimeError("Stream broken")
+
+
+class _UnrecognizedDouble:
+    """Object without read, iter_bytes, bytes, or iter."""
+
+    pass
+
+
+class TestGetVoiceAudioInterfaceCompatibility:
+    """Parameterized tests verifying duck-typing compatibility across Cartesia response interfaces."""
+
+    @pytest.mark.parametrize(
+        ("response_fixture", "expected_audio"),
+        [
+            (_ReadOnlyDouble(b"read_bytes_payload"), b"read_bytes_payload"),
+            (_ReadOnlyDouble(b""), None),
+            (_IterBytesOnlyDouble([b"chunk_", b"1", b"2"]), b"chunk_12"),
+            (_IterBytesOnlyDouble([]), None),
+            (b"raw_bytes_payload", b"raw_bytes_payload"),
+            (bytearray(b"raw_bytearray_payload"), b"raw_bytearray_payload"),
+            (b"", None),
+            (bytearray(), None),
+            (_IterableOnlyDouble([b"iter_", b"data"]), b"iter_data"),
+            (_IterableOnlyDouble([]), None),
+            ([b"list_", b"chunks"], b"list_chunks"),
+            (_UnrecognizedDouble(), None),
+        ],
+    )
+    @patch("src.voice.tts.get_cartesia_config")
+    @patch("src.voice.tts.clean_text_for_tts")
+    def test_response_interface_compatibility(
+        self,
+        mock_clean_text,
+        mock_get_config,
+        response_fixture,
+        expected_audio,
+    ):
+        """Verify each interface variant extracts audio bytes without selecting fallback branches."""
+        mock_get_config.return_value = {
+            "voice_id": "v_test",
+            "model_id": "m_test",
+            "language": "en",
+            "output_format": {"container": "wav"},
+        }
+        mock_clean_text.return_value = "hello"
+
+        mock_client = MagicMock()
+        mock_client.tts.generate.return_value = response_fixture
+
+        result = get_voice_audio("hello", mock_client)
+        assert result == expected_audio
+
+    @pytest.mark.parametrize(
+        "failing_double",
+        [
+            _FailingReadDouble(),
+            _FailingIterBytesDouble(),
+            _FailingIterableDouble(),
+        ],
+    )
+    @patch("src.voice.tts.get_cartesia_config")
+    @patch("src.voice.tts.clean_text_for_tts")
+    @patch("src.voice.tts.logger")
+    def test_response_interface_failure_handling(
+        self,
+        mock_logger,
+        mock_clean_text,
+        mock_get_config,
+        failing_double,
+    ):
+        """Verify read and iteration exceptions are safely caught and return None."""
+        mock_get_config.return_value = {
+            "voice_id": "v_test",
+            "model_id": "m_test",
+            "language": "en",
+            "output_format": {"container": "wav"},
+        }
+        mock_clean_text.return_value = "hello"
+
+        mock_client = MagicMock()
+        mock_client.tts.generate.return_value = failing_double
+
+        result = get_voice_audio("hello", mock_client)
+        assert result is None
+        mock_logger.exception.assert_called_once()

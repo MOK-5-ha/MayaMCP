@@ -101,8 +101,3 @@ def get_api_keys() -> dict[str, str | None]:
             "gcp_location": get_gcp_location(),
             "cartesia_api_key": cartesia_key.strip() if cartesia_key else None,
         }
-
-
-def get_google_api_key() -> str | None:
-    """Get Google API key (None in 100% GCP Vertex AI mode)."""
-    return None

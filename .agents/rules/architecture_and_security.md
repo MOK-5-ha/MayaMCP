@@ -37,7 +37,7 @@ This document specifies the backend architectural patterns, concurrency invarian
 - **Nested Event Loop Avoidance**: When executing synchronous entrypoint wraps of async ADK code (such as ADK `Runner` routines using `asyncio.run()`), always verify if an event loop is already running in the current thread. If a loop is active, execute the coroutine in a separate thread/executor to avoid event loop collision errors (`RuntimeError: asyncio.run() cannot be called from a running event loop`).
 - **ADK Streaming Payload Gathering**: When accumulating chunks from ADK's `Runner.run_async` SSE events, do not restrict data collection exclusively to `event.partial == True`. Final text chunks may arrive without the partial flag, leading to dropped content. Process any `text_chunk` that contains valid string data.
 - **Streaming Generator Exit Protocol**: When breaking out of a streaming generator queue loop (e.g., due to timeouts or errors), use early `return` instead of `break` if the generator has a fall-through logic block that yields a `'complete'` event. This prevents the consumer from receiving conflicting duplicate terminal events (both `'error'` and `'complete'`).
-- **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and `a2a-sdk`. The `JSONRPCApplication` within the `a2a` server specifically requires `sse-starlette` to function. If test collection errors occur related to ADK routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
+- **Server Dependencies**: The application uses a FastAPI-based server on Modal relying on `google-adk` and native SSE routers (`src/routers/chat.py`). Server-Sent Events require `sse-starlette` to function. If test collection errors occur related to SSE routing (e.g. `ModuleNotFoundError: No module named 'sse-starlette'`), ensure `sse-starlette` is included in dependencies.
 
 ---
 
@@ -49,10 +49,11 @@ This document specifies the backend architectural patterns, concurrency invarian
 
 ---
 
-## 5. Security Scanning & Token Hygiene
+## 5. Security Scanning, Token Hygiene & Rate Limiting
 
 - **Security Scanning**: Inputs are checked for prompt injection and toxicity before processing; outputs are checked before returning to the user. See `src/security/`.
 - **Token Budget Dynamic Field Partitioning**: When constructing prompts with strict token ceilings (e.g. 512 tokens for suggestion chips), never right-truncate the assembled prompt string (`prompt[:budget*4]`), as this drops critical suffix directives (phase constraints, payment indicators, schema formatting rules). Instead, allocate proportional token budgets to dynamic fields (e.g., 75% conversation turns, 25% recent user messages) and truncate dynamic sections *before* appending invariant static prompt templates. Any remaining token trim must strictly reduce dynamic history while preserving the complete static suffix.
+- **Application Rate Limiting & Paid Tier Calibration**: Multi-level token-bucket rate limiting (`RateLimiter` in `src/utils/rate_limiter.py`) guards against Denial-of-Wallet (DoW), automated request floods, and Cartesia TTS credit exhaustion. Defaults are calibrated for GCP Vertex AI Paid Tier throughput: `MAYA_SESSION_RATE_LIMIT=60` req/min (1 req/s sustained), `MAYA_APP_RATE_LIMIT=500` req/min, and `MAYA_BURST_LIMIT=15` requests per 10-second sliding window.
 
 ---
 

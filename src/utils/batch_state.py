@@ -109,30 +109,6 @@ class BatchStateCache:
             self._dirty = dirty
             logger.debug(f"Set cached data for {self.session_id}, dirty={dirty}")
 
-    def set_dirty(self, dirty: bool = True) -> None:
-        """
-        Mark the cache as having unsaved changes.
-
-        Args:
-            dirty: Whether the cache has unsaved changes
-        """
-        with self._lock:
-            if self._invalidated:
-                return
-            self._dirty = dirty
-            logger.debug(f"Marked cache for {self.session_id} as dirty={dirty}")
-
-    def is_dirty(self) -> bool:
-        """
-        Check if the cache has unsaved changes.
-
-        Returns:
-            True if cache has unsaved changes and is not invalidated, False otherwise
-        """
-        with self._lock:
-            return self._dirty and not self._invalidated
-
-
     def get_section(self, section_name: str) -> dict[str, Any]:
         """
         Get a specific section of session data.

@@ -22,12 +22,14 @@ Our test suite aims to be fast, reliable, and decoupled from external services.
 
 - **No Real API Calls**: Always mock external APIs (Google, Cartesia, Coinbase CDP). Never make real calls in tests.
 - **Native SDK Mocking**: When testing Gemini functionality, mock the native `google.genai.Client` and stub its `models.generate_content` / `models.generate_content_stream` returns using standard native formats. Do not use legacy LangChain structures.
+- **Cartesia 4.x Mocking**: When testing Cartesia TTS, mock `client.tts.generate` returning an object implementing `.read()` or `.iter_bytes()`. Parameterized response interface tests should use minimal doubles without `MagicMock` fall-through to verify exact duck-typing paths.
 - **Stateful Singletons**: The application uses a global singleton for rate limiting (`RateLimiter`). When writing tests, ensure `check_rate_limits` is mocked in fixtures (e.g., returning `(True, "")`) to prevent sequential test execution from accumulating state and failing due to burst limits. Never allow global app rate limits to restrict the standard test suite.
 - **Patch Preservation during Refactoring**: When extracting logic into helper functions, do not move the calls to state managers or mocked dependencies into the helper if it bypasses existing `@patch` targets in the test suite. Instead, fetch the data in the original module and pass the data structures into the helper.
 
 ## Running Tests and Evaluations
 
-- **Standard Test Suite**: `pytest` or `pytest -m "not slow"`.
+- **Standard Python Test Suite**: `pytest` or `pytest -m "not slow"`. Requires Python 3.11+.
+- **Frontend Browser Smoke Tests**: `cd frontend && npm test`. Runs headless Chrome smoke tests verifying canvas boot, manifest parsing, and scene transitions (`BootScene` → `PreloadScene` → `BarScene` + `HUDOverlayScene`). Requires Node.js 22.12.0+ and Chrome/Chromium installed locally or configured via `CHROME_BIN`.
 - **Vertex AI Gen AI Evaluation Pipeline**: `python scripts/run_evals.py` (or `agents-cli eval grade`). Authenticate via `gcloud auth application-default login`.
 - **Deterministic Payment Failure & Malfunction Recovery**: `python tests/eval/eval_crypto_payment.py`.
 - **Telemetry & Tracing**: All evaluation and conversational runs export OpenTelemetry spans directly to Google Cloud Trace (`CloudTraceSpanExporter`) using Application Default Credentials (ADC) with non-blocking local fallbacks.
