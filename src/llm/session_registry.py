@@ -65,7 +65,7 @@ def _key_hash(raw_value: str) -> str:
         "sha256",
         raw_value.encode("utf-8"),
         _KEY_HASH_SECRET,
-        210_000,
+        1_000,
     )
     return derived.hex()[:16]
 

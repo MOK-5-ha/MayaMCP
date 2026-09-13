@@ -1,7 +1,7 @@
 """Helper functions for conversation management."""
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..config.logging_config import get_logger
@@ -101,7 +101,7 @@ def build_response_dict(
         "status": "success" if success else "error",
         "success": success,
         "message": message,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if data is not None:
         res["data"] = data
