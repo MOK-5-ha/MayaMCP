@@ -169,6 +169,12 @@ def build_generate_config(config_dict: dict[str, Any]) -> types.GenerateContentC
         gen_kwargs["response_mime_type"] = config_dict["response_mime_type"]
     if "response_schema" in config_dict:
         gen_kwargs["response_schema"] = config_dict["response_schema"]
+    if "thinking_config" in config_dict:
+        gen_kwargs["thinking_config"] = config_dict["thinking_config"]
+    elif "thinking_budget" in config_dict and hasattr(types, "ThinkingConfig"):
+        gen_kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_budget=config_dict["thinking_budget"]
+        )
     return types.GenerateContentConfig(**gen_kwargs)
 
 

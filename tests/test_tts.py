@@ -306,9 +306,7 @@ class TestGetVoiceAudio:
         self.mock_client.tts.generate.assert_called_once_with(
             model_id="test_model_id",
             transcript="cleaned text",
-            voice={
-                "id": "test_voice_id",
-            },
+            voice="test_voice_id",
             language="en-US",
             output_format=self.mock_config["output_format"]
         )
@@ -333,7 +331,7 @@ class TestGetVoiceAudio:
 
         # Should use custom voice ID
         call_args = self.mock_client.tts.generate.call_args
-        assert call_args.kwargs["voice"]["id"] == "custom_voice"
+        assert call_args.kwargs["voice"] == "custom_voice"
         assert result == b"audio_data"
 
     @patch('src.voice.tts.logger')
@@ -485,9 +483,7 @@ class TestGetVoiceAudio:
         # Verify voice configuration structure
         call_args = self.mock_client.tts.generate.call_args
         voice_config = call_args.kwargs["voice"]
-        assert voice_config == {
-            "id": "test_voice_id"
-        }
+        assert voice_config == "test_voice_id"
 
     @patch('src.voice.tts.get_cartesia_config')
     @patch('src.voice.tts.clean_text_for_tts')
@@ -508,6 +504,13 @@ class TestGetVoiceAudio:
         assert call_args.kwargs["transcript"] == "test text"
         assert call_args.kwargs["language"] == "en-US"
         assert call_args.kwargs["output_format"] == self.mock_config["output_format"]
+
+
+class _ContentOnlyDouble:
+    """Minimal double exposing canonical Cartesia 4.x .content bytes attribute."""
+
+    def __init__(self, data: bytes):
+        self.content = data
 
 
 class _ReadOnlyDouble:
@@ -575,6 +578,8 @@ class TestGetVoiceAudioInterfaceCompatibility:
     @pytest.mark.parametrize(
         ("response_fixture", "expected_audio"),
         [
+            (_ContentOnlyDouble(b"content_bytes_payload"), b"content_bytes_payload"),
+            (_ContentOnlyDouble(b""), None),
             (_ReadOnlyDouble(b"read_bytes_payload"), b"read_bytes_payload"),
             (_ReadOnlyDouble(b""), None),
             (_IterBytesOnlyDouble([b"chunk_", b"1", b"2"]), b"chunk_12"),

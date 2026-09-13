@@ -182,12 +182,15 @@ def get_voice_audio(
         audio_response = cartesia_client.tts.generate(
             model_id=config["model_id"],
             transcript=text_for_tts,
-            voice={"id": voice_id},
+            voice=voice_id,
             language=config["language"],
             output_format=config["output_format"],
         )
 
-        if hasattr(audio_response, "read") and callable(audio_response.read):
+        # Access audio bytes (canonical Cartesia 4.x .content with defensive duck-typing fallbacks)
+        if hasattr(audio_response, "content") and isinstance(audio_response.content, (bytes, bytearray)):
+            audio_data = bytes(audio_response.content)
+        elif hasattr(audio_response, "read") and callable(audio_response.read):
             audio_data = audio_response.read()
         elif hasattr(audio_response, "iter_bytes") and callable(audio_response.iter_bytes):
             audio_data = b"".join(chunk for chunk in audio_response.iter_bytes())

@@ -114,6 +114,39 @@ class TestLLMClient:
         assert result.top_k is None
         assert result.max_output_tokens is None
 
+    def test_build_generate_config_thinking_budget(self):
+        """Test build_generate_config maps thinking_budget to ThinkingConfig."""
+        config_dict = {
+            "temperature": 0.7,
+            "thinking_budget": 0,
+        }
+        result = build_generate_config(config_dict)
+        assert result.thinking_config is not None
+        assert result.thinking_config.thinking_budget == 0
+
+    def test_build_generate_config_direct_thinking_config(self):
+        """Test build_generate_config forwards direct thinking_config object."""
+        from google.genai import types
+
+        custom_thinking = types.ThinkingConfig(thinking_budget=1024, thinking_level="HIGH")
+        config_dict = {
+            "thinking_config": custom_thinking,
+        }
+        result = build_generate_config(config_dict)
+        assert result.thinking_config == custom_thinking
+        assert result.thinking_config.thinking_budget == 1024
+        assert result.thinking_config.thinking_level == "HIGH"
+
+    def test_build_generate_config_response_mime_and_schema(self):
+        """Test build_generate_config maps response_mime_type and response_schema."""
+        config_dict = {
+            "response_mime_type": "application/json",
+            "response_schema": {"type": "object"},
+        }
+        result = build_generate_config(config_dict)
+        assert result.response_mime_type == "application/json"
+        assert result.response_schema == {"type": "object"}
+
     @patch('src.llm.client.get_model_config')
     def test_get_model_name(self, mock_get_model_config):
         """Test get_model_name returns model version from config."""

@@ -8,7 +8,20 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     assetsDir: 'assets',
-    target: 'es2022'
+    target: 'es2022',
+    chunkSizeWarningLimit: 1500,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor-phaser',
+              test: /node_modules\/phaser/,
+            },
+          ],
+        },
+      },
+    },
   },
   server: {
     port: 3000,
