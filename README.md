@@ -76,7 +76,7 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 
 Maya features a built-in security layer that protects against:
 
-- **Prompt Injection & Toxicity**: Filters malicious instructions and toxic content in both user inputs and agent responses (powered by regex scanners with optional `llm-guard` fallback).
+- **Prompt Injection & Toxicity**: When the optional `llm-guard` dependency is installed, scans inputs for prompt injection and toxicity and outputs for toxicity. Without it, fallback regex checks cover only basic input-injection patterns; toxicity filtering and output scanning are unavailable.
 - **Application-Level Rate Limiting**: Multi-level token-bucket protection against Denial-of-Wallet (DoW), automated request floods, and Cartesia TTS credit exhaustion. Defaults are calibrated for GCP Vertex AI Paid Tier throughput (`MAYA_SESSION_RATE_LIMIT=60/min`, `MAYA_APP_RATE_LIMIT=500/min`, `MAYA_BURST_LIMIT=15/10s`).
 
 The security features fail open to ensure availability if scanning encounters unexpected errors.
