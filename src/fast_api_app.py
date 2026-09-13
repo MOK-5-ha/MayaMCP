@@ -82,6 +82,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         task_store=InMemoryTaskStore(),
         rpc_path=f"/a2a/{adk_app.name}",
     )
+    # Mount static frontend bundle directory if available (must be mounted after all API routes)
+    frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+    if os.path.exists(frontend_dist) and not any(getattr(r, "name", "") == "static" for r in app.routes):
+        from fastapi.staticfiles import StaticFiles
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
     yield
 
 
@@ -132,13 +137,6 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """
     logger.log_struct(feedback.model_dump(), severity="INFO")
     return {"status": "success"}
-
-
-# Mount static frontend bundle directory if available (must be mounted after all API routes)
-frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
-if os.path.exists(frontend_dist):
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
 
 
 # Mount Gradio sub-app under /ui for backward compatibility / legacy interface access

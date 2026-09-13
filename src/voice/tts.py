@@ -178,20 +178,25 @@ def get_voice_audio(
 
         logger.info(f"Requesting TTS from Cartesia (Voice ID: {voice_id}) for: '{text_for_tts[:50]}...'")
 
-        # Call Cartesia TTS API
-        audio_generator = cartesia_client.tts.bytes(
+        # Call Cartesia TTS API (Cartesia 4.x generate)
+        audio_response = cartesia_client.tts.generate(
             model_id=config["model_id"],
             transcript=text_for_tts,
-            voice={
-                "mode": "id",
-                "id": voice_id,
-            },
+            voice={"id": voice_id},
             language=config["language"],
             output_format=config["output_format"],
         )
 
-        # Concatenate chunks from the generator for a blocking result
-        audio_data = b"".join(chunk for chunk in audio_generator)
+        if hasattr(audio_response, "read") and callable(audio_response.read):
+            audio_data = audio_response.read()
+        elif hasattr(audio_response, "iter_bytes") and callable(audio_response.iter_bytes):
+            audio_data = b"".join(chunk for chunk in audio_response.iter_bytes())
+        elif isinstance(audio_response, (bytes, bytearray)):
+            audio_data = bytes(audio_response)
+        elif hasattr(audio_response, "__iter__"):
+            audio_data = b"".join(chunk for chunk in audio_response)
+        else:
+            audio_data = b""
 
         if not audio_data:
             logger.warning("Cartesia TTS returned empty audio data.")

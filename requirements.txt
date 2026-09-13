@@ -20,8 +20,8 @@ rouge-score>=0.1.2
 # UI (Gradio 6.x - upgraded from 5.x to patch CVEs PYSEC-2026-63/64/65/66/2178/2179)
 gradio>=6.27.0,<7.0.0
 
-# TTS (stay on Cartesia 2.x for stability)
-cartesia>=2.0.0,<3.0.0
+# TTS (Cartesia 4.x unified SDK)
+cartesia>=4.2.0,<5.0.0
 
 # Visualization
 pillow>=12.3.0,<13.0
