@@ -110,6 +110,8 @@ class CryptoPaymentClient:
     async def _submit_cdp_transaction(self, amount: float, session_id: str, optimistic_tx_hash: str):
         """Submit real stablecoin transaction using the Coinbase CDP AgentKit SDK."""
         try:
+            from decimal import Decimal
+
             from cdp import CdpClient, parse_units
             logger.debug(f"Starting background CDP transaction submission for {session_id}...")
 
@@ -134,7 +136,9 @@ class CryptoPaymentClient:
                 # Try transferring USDC first, fallback to ETH if USDC fails
                 actual_tx_hash = optimistic_tx_hash
                 try:
-                    usdc_atomic_amount = parse_units(f"{amount:.2f}", 6)
+                    # Preserve full accepted decimal precision up to USDC's 6 atomic units
+                    dec_amount = Decimal(str(amount)).quantize(Decimal("0.000001")).normalize()
+                    usdc_atomic_amount = parse_units(format(dec_amount, "f"), 6)
                     transfer = await account.transfer(
                         to=self.receiver_address,
                         amount=usdc_atomic_amount,
@@ -145,7 +149,8 @@ class CryptoPaymentClient:
                     logger.info(f"CDP Transfer USDC initiated: tx_hash={actual_tx_hash}")
                 except Exception as usdc_err:
                     logger.warning(f"USDC transfer failed, trying ETH transfer instead: {usdc_err}")
-                    eth_atomic_amount = parse_units(f"{amount * 0.0001:.8f}", 18)
+                    dec_eth = (Decimal(str(amount)) * Decimal("0.0001")).quantize(Decimal("0.000000000000000001")).normalize()
+                    eth_atomic_amount = parse_units(format(dec_eth, "f"), 18)
                     transfer = await account.transfer(
                         to=self.receiver_address,
                         amount=eth_atomic_amount,

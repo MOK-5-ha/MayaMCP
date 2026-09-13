@@ -140,6 +140,18 @@ def test_payments_both_tip_percentage_and_amount_rejected(client):
     assert "Provide either tip_percentage or tip_amount" in response.json()["detail"]
 
 
+def test_payments_fractional_tip_amount_rounded_to_cents(client):
+    payload = {"tip_amount": 3.4567}
+    response = client.post(
+        "/api/v1/payments/tip",
+        json=payload,
+        headers={"X-Session-ID": "test-session-123"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["tip_amount"] == 3.46
+
+
 def test_add_to_order_negative_quantity_rejected():
     from src.llm.tools import add_to_order_with_balance
     result = add_to_order_with_balance(item_name="Martini", quantity=-1)
