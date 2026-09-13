@@ -84,7 +84,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     # Mount static frontend bundle directory if available (must be mounted after all API routes)
     frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
-    if os.path.exists(frontend_dist) and not any(getattr(r, "name", "") == "static" for r in app.routes):
+    if os.path.exists(frontend_dist) and not any(
+        getattr(r, "name", "") == "static" for r in app.routes
+    ):
         from fastapi.staticfiles import StaticFiles
         app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
     yield
