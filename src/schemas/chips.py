@@ -1,20 +1,20 @@
 """Pydantic v2 models for suggestion chips."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class ChipType(str, Enum):
+class ChipType(StrEnum):
     """Chip type enumeration."""
 
     DIALOGUE = "dialogue"
     ACTION = "action"
 
 
-class ActionID(str, Enum):
+class ActionID(StrEnum):
     """Valid action identifiers for action chips."""
 
     PAYMENT = "payment"

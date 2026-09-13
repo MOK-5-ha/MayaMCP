@@ -74,7 +74,7 @@ python tests/eval/eval_crypto_payment.py
 
 ### Linting & Formatting
 ```bash
-ruff check src/ tests/    # Lint (line-length: 88, target: py310)
+ruff check src/ tests/    # Lint (line-length: 88, target: py311)
 mypy src/                 # Type checking
 ```
 
