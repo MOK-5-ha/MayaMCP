@@ -200,27 +200,6 @@ class MayaSessionManager:
         with self._lock:
             return len(self._sessions)
 
-    def get_session_info(self, session_id: str) -> SessionData | None:
-        """Get session information without updating access time."""
-        with self._lock:
-            session_data = self._sessions.get(session_id)
-            if session_data is None:
-                return None
-
-            # Return a shallow copy to prevent external mutation
-            return SessionData(
-                session_id=session_data.session_id,
-                created_at=session_data.created_at,
-                last_access=session_data.last_access,
-                memory_allocated_mb=session_data.memory_allocated_mb,
-                api_key_hash=session_data.api_key_hash
-            )
-
-    def get_all_session_ids(self) -> set[str]:
-        """Get all active session IDs."""
-        with self._lock:
-            return set(self._sessions.keys())
-
     def get_statistics(self) -> dict[str, Any]:
         """
         Get session manager statistics for monitoring.
@@ -253,26 +232,6 @@ class MayaSessionManager:
                 "expiry_seconds": session_expiry_seconds,
                 "default_session_memory_mb": default_session_memory_mb
             }
-
-    def get_memory_status(self) -> dict[str, Any]:
-        """
-        Get memory status for admission decisions.
-
-        Returns:
-            Dictionary with memory status information
-        """
-        memory_metrics = self._memory_monitor.get_memory_metrics()
-        stats = self.get_statistics()
-
-        return {
-            "memory_available": memory_metrics["available_mb"],
-            "memory_utilization": memory_metrics["utilization"],
-            "memory_pressure": memory_metrics["pressure"],
-            "sessions_per_container": stats["current_sessions"],
-            "max_sessions_per_container": stats["max_sessions"],
-            "estimated_session_memory": stats["default_session_memory_mb"],
-            "can_create_session": self._can_admit_session(memory_metrics, stats)
-        }
 
 
 # Global session manager instance

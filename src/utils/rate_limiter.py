@@ -49,17 +49,6 @@ class TokenBucket:
                 return True
             return False
 
-    def peek(self) -> int:
-        """
-        Get current token count without consuming.
-
-        Returns:
-            Current number of tokens in bucket
-        """
-        with self._lock:
-            self._refill()
-            return self.tokens
-
     def _refill(self) -> None:
         """Refill tokens based on elapsed time."""
         now = time.time()
@@ -68,21 +57,6 @@ class TokenBucket:
 
         self.tokens = min(self.capacity, self.tokens + tokens_to_add)
         self.last_refill = now
-
-    def stats(self) -> dict[str, int]:
-        """
-        Get consistent snapshot of bucket statistics.
-
-        Returns:
-            Dictionary with tokens, capacity, and refill_rate per minute
-        """
-        with self._lock:
-            self._refill()
-            return {
-                "tokens": int(self.tokens),
-                "capacity": self.capacity,
-                "refill_rate": int(self.refill_rate * 60)  # per minute
-            }
 
 
 class RateLimiter:
@@ -144,62 +118,6 @@ class RateLimiter:
         except (ValueError, TypeError):
             logger.warning(f"Invalid rate limit in {env_var}, using default {default}")
         return default
-
-    def check_session_limit(self, session_id: str, consume: bool = True) -> tuple[bool, str]:
-        """
-        Check if session can make a request.
-
-        Args:
-            session_id: Unique session identifier
-            consume: Whether to consume a token (True) or just check (False)
-
-        Returns:
-            Tuple of (allowed, reason) where reason is empty if allowed
-        """
-        # Check burst limit (records attempt even if subsequent limits fail,
-        # providing intentional DoS protection against rapid retries)
-        if not self._check_burst_limit(session_id):
-            return False, "Too many requests in quick succession"
-
-        # Get or create session bucket
-        with self._session_lock:
-            if session_id not in self._session_buckets:
-                self._session_buckets[session_id] = TokenBucket(
-                    capacity=self.session_limit,
-                    refill_rate=self.session_limit / 60.0  # per second
-                )
-            bucket = self._session_buckets[session_id]
-
-        # Check session rate limit
-        if consume:
-            if not bucket.consume():
-                return False, f"Session rate limit exceeded ({self.session_limit}/min)"
-        else:
-            # Check-only mode: verify we have enough tokens using peek()
-            if bucket.peek() < 1:
-                return False, f"Session rate limit exceeded ({self.session_limit}/min)"
-
-        return True, ""
-
-    def check_app_limit(self, consume: bool = True) -> tuple[bool, str]:
-        """
-        Check if application can handle a request.
-
-        Args:
-            consume: Whether to consume a token (True) or just check (False)
-
-        Returns:
-            Tuple of (allowed, reason) where reason is empty if allowed
-        """
-        if consume:
-            if not self._app_bucket.consume():
-                return False, f"Application rate limit exceeded ({self.app_limit}/min)"
-        else:
-            # Check-only mode: verify we have enough tokens using peek()
-            if self._app_bucket.peek() < 1:
-                return False, f"Application rate limit exceeded ({self.app_limit}/min)"
-
-        return True, ""
 
     def check_limits(self, session_id: str) -> tuple[bool, str]:
         """
@@ -320,32 +238,6 @@ class RateLimiter:
                 f"{history_expired_count} request histories "
                 f"(total: {total_cleaned})"
             )
-
-    def get_session_stats(self, session_id: str) -> dict[str, int]:
-        """
-        Get rate limiting statistics for a session.
-
-        Args:
-            session_id: Unique session identifier
-
-        Returns:
-            Dictionary with rate limiting statistics
-        """
-        with self._session_lock:
-            bucket = self._session_buckets.get(session_id)
-            if not bucket:
-                return {"tokens": 0, "capacity": self.session_limit}
-
-            return bucket.stats()
-
-    def get_app_stats(self) -> dict[str, int]:
-        """
-        Get application-wide rate limiting statistics.
-
-        Returns:
-            Dictionary with application rate limiting statistics
-        """
-        return self._app_bucket.stats()
 
 
 # Global rate limiter instance

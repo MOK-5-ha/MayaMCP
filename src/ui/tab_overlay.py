@@ -565,9 +565,3 @@ class AnimationQueue:
     def is_running(self) -> bool:
         """Return whether an animation is currently running."""
         return self._is_running
-
-    def reset(self) -> None:
-        """Reset the queue to initial state (for testing)."""
-        self._queue.clear()
-        self._is_running = False
-        self._last_enqueue_time = 0
