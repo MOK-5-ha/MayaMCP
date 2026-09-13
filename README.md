@@ -327,7 +327,7 @@ This project includes comprehensive tests for all major components. Tests are or
 - Build frontend: `cd frontend && npm install && npm run build`
 - Run headless browser runtime test: `npm test`
 
-Prerequisites: Python 3.11+ and Node.js 20+; activate your virtual environment if using one.
+Prerequisites: Python 3.11+ and Node.js 22.12.0+; activate your virtual environment if using one. Frontend browser smoke tests also require Chrome or Chromium installed at a recognized path, or `CHROME_BIN` set to its executable path.
 
 ### Test Organization
 

@@ -29,7 +29,7 @@ Our test suite aims to be fast, reliable, and decoupled from external services.
 ## Running Tests and Evaluations
 
 - **Standard Python Test Suite**: `pytest` or `pytest -m "not slow"`. Requires Python 3.11+.
-- **Frontend Browser Smoke Tests**: `cd frontend && npm test`. Runs headless Chrome smoke tests verifying canvas boot, manifest parsing, and scene transitions (`BootScene` → `PreloadScene` → `BarScene` + `HUDOverlayScene`).
+- **Frontend Browser Smoke Tests**: `cd frontend && npm test`. Runs headless Chrome smoke tests verifying canvas boot, manifest parsing, and scene transitions (`BootScene` → `PreloadScene` → `BarScene` + `HUDOverlayScene`). Requires Node.js 22.12.0+ and Chrome/Chromium installed locally or configured via `CHROME_BIN`.
 - **Vertex AI Gen AI Evaluation Pipeline**: `python scripts/run_evals.py` (or `agents-cli eval grade`). Authenticate via `gcloud auth application-default login`.
 - **Deterministic Payment Failure & Malfunction Recovery**: `python tests/eval/eval_crypto_payment.py`.
 - **Telemetry & Tracing**: All evaluation and conversational runs export OpenTelemetry spans directly to Google Cloud Trace (`CloudTraceSpanExporter`) using Application Default Credentials (ADC) with non-blocking local fallbacks.
