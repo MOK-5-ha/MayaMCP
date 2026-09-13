@@ -404,12 +404,13 @@ class ChipGenerator:
             # Build prompt
             prompt = self._build_chip_prompt(context)
 
-            # Build the generation config for structured output
+            # Build the generation config for structured output (disable thinking for sub-second latency)
             generation_config = {
                 "max_output_tokens": self.MAX_OUTPUT_TOKENS,
                 "temperature": 0.7,
                 "response_mime_type": "application/json",
                 "response_schema": SuggestionChipSet.model_json_schema(),
+                "thinking_budget": 0,
             }
 
             # Call LLM via centralized client wrapper
