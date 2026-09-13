@@ -80,7 +80,7 @@ When reviewing code, pull requests, and commits:
 - **ADK Stream Mock Event Contracts**: Test doubles for Google ADK runner streams (`Runner.run_async`) must set `event.author = 'model'` and populate `event.content.parts = [Mock(text="...")]`. Stream assertions must verify yielded event types (`'text_chunk'`, `'sentence'`, `'complete'`) rather than generic names like `'content'` to ensure fidelity with `process_order_stream` event mapping.
 
 ### Rule 10: FastAPI & Decoupled Architecture
-- FastAPI is served at the application root (`/`), with native REST/SSE routers mounted at `/api/v1/*` (`session`, `payments`, `chat`), Agent-to-Agent protocol routes at `/a2a/*`, and the Gradio UI mounted under `/ui`.
+- FastAPI is served at the application root (`/`), with native REST/SSE routers mounted at `/api/v1/*` (`session`, `payments`, `chat`), the Phaser 4 canvas SPA served at `/`, and the Gradio UI mounted under `/ui`.
 - All API endpoints must use Pydantic v2 data models (`src/schemas/`) and routers (`src/routers/`).
 - Distributed session state must use `get_session_store(request)` to read `request.app.state.session_store` dynamically for multi-container Modal deployments (`max_containers > 1`).
 
