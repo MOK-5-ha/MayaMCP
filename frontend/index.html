@@ -23,15 +23,19 @@
       align-items: center;
     }
     #game-container {
+      position: relative;
       width: 100vw;
       height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      overflow: hidden;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
     }
+    #game-container > div {
+      top: 0;
+      left: 0;
+    }
     canvas {
+      display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
@@ -39,7 +43,7 @@
   </style>
 </head>
 <body>
-  <div id="game-container"></div>
+  <main id="game-container"></main>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

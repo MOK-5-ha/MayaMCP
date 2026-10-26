@@ -95,4 +95,4 @@ def validate_gemini_key(
             return False, "Connection error. Please check your internet and try again."
 
         logger.error(f"GCP Vertex AI validation unexpected error: {e}")
-        return False, f"Vertex AI validation failed for project '{project}': {e}"
+        return False, "Vertex AI validation failed. Check the project and ADC configuration."

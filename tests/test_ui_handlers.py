@@ -19,15 +19,14 @@ def _make_request(session_id="test_session"):
 
 
 def _seed_session_keys(app_state, session_id="test_session"):
-    """Populate app_state with validated BYOK keys for the given session."""
-    from src.utils.state_manager import _deep_copy_defaults
-    defaults = _deep_copy_defaults()
-    defaults['api_keys'] = {
-        'gemini_key': 'test_gemini_key',
-        'cartesia_key': 'test_cartesia_key',
-        'keys_validated': True,
-    }
-    app_state[session_id] = defaults
+    from src.utils.state_manager import set_api_keys
+
+    set_api_keys(
+        session_id,
+        app_state,
+        gcp_project="test_project",
+        cartesia_key="test_cartesia_key",
+    )
 
 
 class TestHandleGradioInput:
@@ -86,6 +85,10 @@ class TestHandleGradioInput:
         call_args = mock_process_order.call_args
         assert call_args[1]['user_input_text'] == "I'd like a Martini"
         assert call_args[1]['llm'] is mock_llm
+        assert call_args[1]['api_key'] == "test_rag_key"
+        mock_get_llm.assert_called_once_with(
+            'test_session', tools=[], gcp_project='test_project'
+        )
 
         mock_get_voice_audio.assert_called_once_with("Here's your drink!", mock_tts)
 
@@ -137,6 +140,10 @@ class TestHandleGradioInput:
             tools=[], app_state=test_state
         )
 
+        mock_get_llm.assert_called_once_with(
+            'test_session', tools=[], gcp_project='test_project'
+        )
+        assert mock_process_order.call_args[1]['api_key'] is None
         mock_get_voice_audio.assert_not_called()
         assert result[4] is None
 
@@ -387,7 +394,7 @@ class TestHandleGradioInput:
         )
 
         assert result[0] == ""
-        assert "API keys" in result[1][-1]['content']
+        assert "GCP project" in result[1][-1]['content']
 
 
 class TestClearChatState:
@@ -436,6 +443,26 @@ class TestHandleGradioStreamingInput:
         )
         assert result == ["event"]
 
+    @patch('src.ui.handlers.get_session_llm')
+    def test_handle_gradio_input_stream_requires_validated_project(self, mock_get_llm):
+        generator = handle_gradio_input_stream(
+            user_input="Hi",
+            session_history_state=[],
+            current_tab=0.0,
+            current_balance=1000.0,
+            current_tip_percentage=None,
+            current_tip_amount=0.0,
+            request=_make_request(),
+            app_state={},
+        )
+
+        events = list(generator)
+
+        assert len(events) == 1
+        assert events[0]['type'] == 'error'
+        assert "GCP project" in events[0]['content']
+        mock_get_llm.assert_not_called()
+
     @patch('src.ui.handlers.process_order_stream')
     @patch('src.ui.handlers.get_session_tts')
     @patch('src.ui.handlers.get_session_llm')
@@ -476,46 +503,39 @@ class TestHandleKeySubmission:
     """Test cases for handle_key_submission in Vertex AI Mode."""
 
     @patch('src.ui.api_key_modal.validate_gemini_key')
-    def test_handle_key_submission_empty_key_validates_server_vertex_config(
-        self, mock_validate_key
-    ):
-        """Test handle_key_submission accepts empty key and validates server GCP_PROJECT/ADC."""
+    def test_handle_key_submission_rejects_empty_project(self, mock_validate_key):
         from src.ui.api_key_modal import handle_key_submission
-        mock_validate_key.return_value = (True, "")
-
-        req = _make_request()
-        test_state = {}
 
         err, col_keys, col_chat, validated = handle_key_submission(
-            gemini_key="",
+            gcp_project="",
             cartesia_key="",
-            request=req,
-            app_state=test_state,
+            request=_make_request(),
+            app_state={},
         )
 
-        mock_validate_key.assert_called_once_with(gcp_project=None)
-        assert err == ""
-        assert validated is True
+        mock_validate_key.assert_not_called()
+        assert "GCP Project ID is required" in err
+        assert validated is False
 
     @patch('src.ui.api_key_modal.validate_gemini_key')
-    def test_handle_key_submission_custom_project_override(
-        self, mock_validate_key
-    ):
-        """Test handle_key_submission passes custom GCP project ID override to validate_gemini_key."""
+    def test_handle_key_submission_stores_exact_project(self, mock_validate_key):
         from src.ui.api_key_modal import handle_key_submission
-        mock_validate_key.return_value = (True, "")
+        from src.utils.state_manager import get_api_key_state
 
-        req = _make_request()
+        mock_validate_key.return_value = (True, "")
         test_state = {}
 
         err, col_keys, col_chat, validated = handle_key_submission(
-            gemini_key="my-custom-project",
+            gcp_project="my-custom-project",
             cartesia_key="cartesia_123",
-            request=req,
+            request=_make_request(),
             app_state=test_state,
         )
 
         mock_validate_key.assert_called_once_with(gcp_project="my-custom-project")
+        stored = get_api_key_state("test_session", test_state)
+        assert stored['gcp_project'] == "my-custom-project"
+        assert stored['cartesia_key'] == "cartesia_123"
         assert err == ""
         assert validated is True
 

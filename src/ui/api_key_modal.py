@@ -28,21 +28,14 @@ def create_quota_error_html() -> str:
           padding: 32px; max-width: 520px; width: 90%; color: #eee;
           font-family: sans-serif; box-shadow: 0 8px 32px rgba(233,69,96,0.3);
       ">
-        <h2 style="margin-top:0; color:#e94560;">Rate Limit Reached</h2>
-        <p>Your free-tier Gemini API key has exceeded its usage quota.</p>
-        <p><strong>To continue using Maya, you can:</strong></p>
+        <h2 style="margin-top:0; color:#e94560;">Vertex AI Quota Reached</h2>
+        <p>Your GCP project has exceeded its Vertex AI usage quota.</p>
+        <p><strong>To continue using Maya:</strong></p>
         <ol style="line-height:1.8;">
-          <li>Wait for your quota to reset (free tier resets daily)</li>
-          <li>Enable billing on your Google AI Studio account:
-            <br><a href="https://aistudio.google.com/apikey"
-                   target="_blank" rel="noopener"
-                   style="color:#4fc3f7;">https://aistudio.google.com/apikey</a>
-          </li>
-          <li>Refresh this page and enter an upgraded API key</li>
+          <li>Check Vertex AI quotas and billing in Google Cloud Console.</li>
+          <li>Confirm Application Default Credentials can access this project.</li>
+          <li>Retry after the quota becomes available.</li>
         </ol>
-        <p style="font-size:0.85em; color:#aaa;">
-          Free tier limits: ~15 requests/minute, 1,500 requests/day.
-        </p>
         <button onclick="document.getElementById('quota-error-popup').style.display='none'"
                 style="
                     margin-top: 12px; padding: 10px 28px;
@@ -63,12 +56,12 @@ def create_help_instructions_md() -> str:
 
 MayaMCP runs in **100% GCP Vertex AI Mode** using Google Cloud billing credits and Application Default Credentials (ADC).
 
-1. Ensure **`GCP_PROJECT`** is set in your `.env` file or environment.
-2. Authenticate locally with Application Default Credentials:
+1. Authenticate with Application Default Credentials:
    ```bash
    gcloud auth application-default login
    ```
-3. Optional: Enter a custom **GCP Project ID** above to override the server default.
+2. Enter a **GCP Project ID** that those credentials can access.
+3. Ensure Vertex AI is enabled and the project has billing configured.
 
 ---
 
@@ -84,27 +77,27 @@ MayaMCP runs in **100% GCP Vertex AI Mode** using Google Cloud billing credits a
 
 
 def handle_key_submission(
-    gemini_key: str,
+    gcp_project: str,
     cartesia_key: str,
     request: gr.Request,
     app_state: MutableMapping | None = None,
 ) -> tuple[str, gr.Column, gr.Column, bool]:
-    """Validate GCP Vertex AI configuration, store session state, and toggle UI visibility.
-
-    Returns:
-        Tuple of (error_markdown, api_key_column_update, chat_column_update,
-                  keys_validated_state)
-    """
+    """Validate Vertex AI access, store session credentials, and show chat."""
     if app_state is None:
         app_state = {}
 
     session_id = extract_session_id(request)
-
-    # --- Validate GCP Vertex AI configuration (gcp_project or server ADC) ---
-    project_override = gemini_key.strip() if gemini_key and gemini_key.strip() else None
+    project = gcp_project.strip() if gcp_project else ""
+    if not project:
+        return (
+            "**Error:** GCP Project ID is required.",
+            gr.Column(visible=True),
+            gr.Column(visible=False),
+            False,
+        )
 
     try:
-        is_valid, error_msg = validate_gemini_key(gcp_project=project_override)
+        is_valid, error_msg = validate_gemini_key(gcp_project=project)
     except Exception:
         logger.exception("Exception during Vertex AI configuration validation")
         return (
@@ -121,17 +114,15 @@ def handle_key_submission(
             False,
         )
 
-    # --- Store keys in session state ---
     set_api_keys(
         session_id,
         app_state,
-        gemini_key=project_override or "vertexai",
+        gcp_project=project,
         cartesia_key=cartesia_key.strip() if cartesia_key else None,
     )
 
-    logger.info(f"BYOK keys validated and stored for session {session_id}")
+    logger.info("Vertex AI configuration validated and stored for session %s", session_id)
 
-    # Success: hide form, show chat
     return (
         "",
         gr.Column(visible=False),

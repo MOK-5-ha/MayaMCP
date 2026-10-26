@@ -227,7 +227,8 @@ class TestHandleGradioStreamingInput:
             yield {'type': 'complete', 'content': 'Hello world.'}
 
         with patch('src.ui.handlers.process_order_stream', mock_process_order_stream), \
-             patch('src.ui.handlers.get_api_key_state', return_value={'gemini_key': 'test-gemini', 'cartesia_key': 'test-cartesia'}), \
+             patch('src.ui.handlers.has_valid_keys', return_value=True), \
+             patch('src.ui.handlers.get_api_key_state', return_value={'gcp_project': 'test-project', 'cartesia_key': 'test-cartesia'}), \
              patch('src.ui.handlers.get_session_llm', return_value=mock_llm), \
              patch('src.ui.handlers.get_session_tts', return_value=mock_cartesia_client), \
              patch('src.ui.handlers.get_voice_audio', return_value=b"audio_data"):
@@ -278,7 +279,7 @@ class TestHandleGradioStreamingInput:
 
         with patch('src.ui.handlers.process_order', mock_process_order_traditional), \
              patch('src.ui.handlers.has_valid_keys', return_value=True), \
-             patch('src.ui.handlers.get_api_key_state', return_value={'gemini_key': 'test-gemini', 'cartesia_key': 'test-cartesia'}), \
+             patch('src.ui.handlers.get_api_key_state', return_value={'gcp_project': 'test-project', 'cartesia_key': 'test-cartesia'}), \
              patch('src.ui.handlers.get_session_llm', return_value=mock_llm), \
              patch('src.ui.handlers.get_session_tts', return_value=mock_cartesia_client):
             result = handle_gradio_streaming_input(

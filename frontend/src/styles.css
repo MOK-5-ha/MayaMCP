@@ -1,0 +1,186 @@
+.start-form,
+.soundtrack-player {
+  pointer-events: auto;
+  box-sizing: border-box;
+  font-family: "Courier New", monospace;
+  color: #e8f2ff;
+  background: rgba(7, 10, 22, 0.96);
+  border: 2px solid #00d9e8;
+  box-shadow: 0 0 18px rgba(0, 217, 232, 0.22);
+}
+
+.start-form {
+  width: 292px;
+  padding: 10px 12px 12px;
+}
+
+.start-form h2 {
+  margin: 0 0 8px;
+  color: #00f0ff;
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
+.start-field {
+  margin-block-end: 7px;
+}
+
+.start-field label {
+  display: block;
+  margin-block-end: 3px;
+  color: #e8f2ff;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.start-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid #7284a6;
+  border-radius: 0;
+  background: #10182a;
+  color: #ffffff;
+  font: 16px "Courier New", monospace;
+}
+
+.start-field input::placeholder {
+  color: #a9b6cb;
+}
+
+.start-hint {
+  display: block;
+  margin-block-start: 3px;
+  color: #bfcbe0;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.password-row {
+  position: relative;
+}
+
+.password-row input {
+  padding-inline-end: 64px;
+}
+
+.password-visibility {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  min-width: 58px;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-inline-start: 1px solid #7284a6;
+  background: #1d2940;
+  color: #ffffff;
+  font: bold 10px "Courier New", monospace;
+  cursor: pointer;
+}
+
+.start-error {
+  min-height: 26px;
+  margin: 3px 0;
+  color: #ffb0ba;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.start-submit {
+  width: 100%;
+  min-height: 44px;
+  border: 2px solid #00f0ff;
+  background: #00d9e8;
+  color: #07101c;
+  font: bold 13px "Courier New", monospace;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+.start-submit:disabled {
+  border-color: #7284a6;
+  background: #46546c;
+  color: #ffffff;
+  cursor: wait;
+}
+
+.start-form button:focus-visible,
+.start-form input:focus-visible,
+.soundtrack-player button:focus-visible {
+  outline: 3px solid #ffd166;
+  outline-offset: 2px;
+}
+
+.soundtrack-player {
+  position: relative;
+  width: 192px;
+  height: 72px;
+  padding: 4px 6px;
+}
+
+.track-title {
+  height: 14px;
+  overflow: hidden;
+  color: #00f0ff;
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.track-controls {
+  display: flex;
+  gap: 5px;
+  height: 44px;
+  margin-block-start: 4px;
+}
+
+.track-controls button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid #00d9e8;
+  background: #16263a;
+  color: #ffffff;
+  font: bold 9px "Courier New", monospace;
+  cursor: pointer;
+}
+
+.track-controls button:disabled {
+  border-color: #59677c;
+  background: #2a3341;
+  color: #c2c9d4;
+  cursor: not-allowed;
+}
+
+.soundtrack-player.is-unavailable .track-title {
+  display: none;
+}
+
+.soundtrack-player.is-unavailable .track-status {
+  position: static;
+  width: auto;
+  height: 20px;
+  overflow: visible;
+  clip-path: none;
+  color: #ffd166;
+  font-size: 8px;
+  line-height: 10px;
+  white-space: normal;
+}
+
+.soundtrack-player.is-unavailable .track-controls {
+  margin-block-start: 0;
+}

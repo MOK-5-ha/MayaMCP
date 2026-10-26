@@ -563,7 +563,7 @@ DEFAULT_CURRENT_ORDER = {
 }
 
 DEFAULT_API_KEY_STATE = {
-    'gemini_key': None,
+    'gcp_project': None,
     'cartesia_key': None,
     'keys_validated': False,
 }
@@ -1210,12 +1210,12 @@ def get_api_key_state(session_id: str, store: MutableMapping) -> dict[str, Any]:
         # Decrypt keys if present
         # We catch broad exceptions from decryption but log specific details
         # to avoid crashing on corrupted or key-mismatched data.
-        if state.get('gemini_key'):
+        if state.get('gcp_project'):
             try:
-                state['gemini_key'] = encryption_manager.decrypt(state['gemini_key'])
+                state['gcp_project'] = encryption_manager.decrypt(state['gcp_project'])
             except Exception as e:
-                logger.warning(f"Failed to decrypt gemini_key for {session_id}: {str(e)}")
-                state['gemini_key'] = None
+                logger.warning(f"Failed to decrypt gcp_project for {session_id}: {str(e)}")
+                state['gcp_project'] = None
 
         if state.get('cartesia_key'):
             try:
@@ -1230,7 +1230,7 @@ def get_api_key_state(session_id: str, store: MutableMapping) -> dict[str, Any]:
 def set_api_keys(
     session_id: str,
     store: MutableMapping,
-    gemini_key: str,
+    gcp_project: str,
     cartesia_key: str | None = None,
 ) -> None:
     """Store user-provided API keys for a session (encrypted).
@@ -1238,7 +1238,7 @@ def set_api_keys(
     Args:
         session_id: Unique identifier for the user session.
         store: Mutable mapping to store state.
-        gemini_key: User's Gemini API key.
+        gcp_project: GCP project ID accessible to server ADC.
         cartesia_key: User's Cartesia API key (optional).
     """
     lock = get_session_lock(session_id)
@@ -1248,21 +1248,21 @@ def set_api_keys(
         data = _get_session_data(session_id, store)
 
         # Encrypt keys before storage
-        stripped_gemini = gemini_key.strip() if gemini_key else None
-        encrypted_gemini = encryption_manager.encrypt(stripped_gemini) if stripped_gemini else None
+        stripped_project = gcp_project.strip() if gcp_project else None
+        encrypted_project = encryption_manager.encrypt(stripped_project) if stripped_project else None
 
         encrypted_cartesia = None
         if cartesia_key and cartesia_key.strip():
-             encrypted_cartesia = encryption_manager.encrypt(cartesia_key.strip())
+            encrypted_cartesia = encryption_manager.encrypt(cartesia_key.strip())
 
         data['api_keys'] = {
-            'gemini_key': encrypted_gemini,
+            'gcp_project': encrypted_project,
             'cartesia_key': encrypted_cartesia,
             'keys_validated': True,
         }
         _save_session_data(session_id, store, data)
 
-    logger.info(f"API keys stored (encrypted) for session {session_id}")
+    logger.info("Session credentials stored (encrypted) for session %s", session_id)
 
 
 def has_valid_keys(session_id: str, store: MutableMapping) -> bool:
@@ -1273,13 +1273,13 @@ def has_valid_keys(session_id: str, store: MutableMapping) -> bool:
         store: Mutable mapping to store state.
 
     Returns:
-        True if the session has at least a validated Gemini key.
+        True if the session has a validated GCP project.
     """
     lock = get_session_lock(session_id)
     with lock:
         data = _get_session_data(session_id, store)
         api_keys = data.get('api_keys', {})
-        return bool(api_keys.get('keys_validated') and api_keys.get('gemini_key'))
+        return bool(api_keys.get('keys_validated') and api_keys.get('gcp_project'))
 
 
 # =============================================================================

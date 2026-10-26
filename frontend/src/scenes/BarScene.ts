@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MayaCharacter } from '../components/MayaCharacter';
+import { MANIFEST_REGISTRY_KEY, type AssetManifest } from '../utils/assetManifest';
 import { SoundManager } from '../utils/SoundManager';
 
 export class BarScene extends Phaser.Scene {
@@ -54,9 +55,18 @@ export class BarScene extends Phaser.Scene {
     // Instantiate Multi-Layer Maya Character Component at Center Stage
     this.mayaCharacter = new MayaCharacter(this, width * 0.5, height * 0.34);
 
-    // Initialize Cyberpunk Sound & Jukebox Manager
     this.soundManager = new SoundManager(this);
-    this.soundManager.playBGM('bgm_lounge');
+    const manifest = this.registry.get(MANIFEST_REGISTRY_KEY) as AssetManifest | undefined;
+    const audioByKey = new Map((manifest?.audio ?? []).map((track) => [track.key, track]));
+    const playlist = (manifest?.soundtrack?.playlist ?? []).flatMap((key) => {
+      const track = audioByKey.get(key);
+      return track?.type === 'music'
+        ? [{ key, title: track.title ?? key }]
+        : [];
+    });
+    this.soundManager.setPlaylist(playlist);
+    this.soundManager.playTrack(0);
+    this.scene.launch('HUDOverlayScene', { soundManager: this.soundManager });
 
     console.log('[BarScene] Cyberpunk pixel-art bar environment & Maya character initialized');
   }

@@ -77,7 +77,7 @@ def handle_gradio_input(
 
     # --- Get per-session API keys ---
     if not has_valid_keys(session_id, app_state):
-        safe_history = append_to_history(session_history_state, user_input, 'Please provide your API keys first.')
+        safe_history = append_to_history(session_history_state, user_input, 'Please provide a validated GCP project first.')
         overlay_html = create_tab_overlay_html(
             tab_amount=current_tab, balance=current_balance,
             prev_tab=current_tab, prev_balance=current_balance,
@@ -92,15 +92,14 @@ def handle_gradio_input(
         )
 
     api_key_state = get_api_key_state(session_id, app_state)
-    gemini_key = api_key_state['gemini_key']
+    gcp_project = api_key_state['gcp_project']
     cartesia_key = api_key_state.get('cartesia_key')
 
     # Lazy-initialise per-session LLM and TTS
-    llm = get_session_llm(session_id, gemini_key, tools)
+    llm = get_session_llm(session_id, tools=tools, gcp_project=gcp_project)
     cartesia_client = get_session_tts(session_id, cartesia_key)
 
-    # Use the user's gemini key for RAG if no dedicated RAG key was provided
-    effective_rag_key = rag_api_key or gemini_key
+    effective_rag_key = rag_api_key
 
     # Call text processing logic
     quota_error_html = ""
@@ -120,7 +119,7 @@ def handle_gradio_input(
             # Check for the quota-error sentinel returned by the processor
             if response_text == QUOTA_ERROR_SENTINEL:
                 quota_error_html = create_quota_error_html()
-                response_text = "It looks like your API key has hit its rate limit. Please check the popup for details."
+                response_text = "Your GCP project has reached its Vertex AI quota. Please check the popup for details."
                 updated_history = append_to_history(session_history_state, user_input, response_text)
                 updated_history_for_gradio = updated_history
 
@@ -169,7 +168,7 @@ def handle_gradio_input(
             # No quota error popup for session limit exceeded
         elif is_quota_error(e):
             quota_error_html = create_quota_error_html()
-            friendly = "It looks like your API key has hit its rate limit. Please check the popup for details."
+            friendly = "Your GCP project has reached its Vertex AI quota. Please check the popup for details."
         else:
             logger.exception(f"Error during process_order: {e}")
             friendly = "I'm having a small hiccup behind the bar, but I can still help you with drinks while I sort it out."
@@ -248,14 +247,22 @@ def handle_gradio_input_stream(
     if not request:
         logger.warning("No request object provided, using default session ID")
 
-    # Get API keys
+    if not has_valid_keys(session_id, app_state):
+        yield {
+            'type': 'error',
+            'content': 'Please provide a validated GCP project before streaming.',
+            'history': session_history_state,
+            'audio': None,
+        }
+        return
+
     api_key_state = get_api_key_state(session_id, app_state)
-    gemini_key = api_key_state['gemini_key']
+    gcp_project = api_key_state['gcp_project']
     cartesia_key = api_key_state.get('cartesia_key')
 
     # Get session-specific clients
     try:
-        llm = get_session_llm(session_id, gemini_key, tools)
+        llm = get_session_llm(session_id, tools=tools, gcp_project=gcp_project)
         cartesia_client = get_session_tts(session_id, cartesia_key)
     except Exception as e:
         logger.error(f"Failed to get session clients: {e}")
@@ -270,8 +277,7 @@ def handle_gradio_input_stream(
 
     # Start streaming processing
     try:
-        # Use the user's gemini key for RAG if no dedicated RAG key was provided
-        effective_rag_key = rag_api_key or gemini_key
+        effective_rag_key = rag_api_key
 
         # Start streaming processing
         response_stream = process_order_stream(
@@ -374,7 +380,7 @@ def handle_gradio_input_stream(
         # Handle quota errors and other exceptions
         if is_quota_error(e):
             quota_error_html = create_quota_error_html()
-            error_message = "It looks like your API key has hit its rate limit. Please check the popup for details."
+            error_message = "Your GCP project has reached its Vertex AI quota. Please check the popup for details."
         else:
             logger.exception(f"Critical error in handle_gradio_input_stream: {e}")
             error_message = "I'm sorry, an unexpected error occurred. Please try again."
