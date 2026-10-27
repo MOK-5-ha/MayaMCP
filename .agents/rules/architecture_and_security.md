@@ -14,6 +14,7 @@ This document specifies the backend architectural patterns, concurrency invarian
 - **Vertex AI Mode Sessions**: Per-session LLM clients are lazily created via `src/llm/session_registry.py` utilizing Application Default Credentials (ADC).
 - **Dynamic Model Verification**: Diagnostic scripts (`verify_environment.py`) must import and inspect `get_model_config()["model_version"]` to guarantee exact parity with runtime LLM configuration.
 - **UI Contract Synchronization**: When modifying backend configuration semantics (such as shifting from API keys to Vertex AI ADC), all UI form labels, placeholders, Pydantic schemas, and modal instruction markdown must be updated in lockstep.
+- **Validated Vertex Session Contract**: Session onboarding must validate a nonblank GCP project with `validate_gemini_key()`/ADC before mutating session state, store the exact validated value encrypted under the canonical `api_keys.gcp_project` field (never a sentinel or legacy API-key alias), and treat Cartesia as optional for text-only operation. REST, SSE, and Gradio paths must enforce the same validity gate and pass the decrypted project into `get_session_llm(..., gcp_project=...)`; never route it through the deprecated `api_key` parameter or substitute it as a RAG API key.
 
 ---
 

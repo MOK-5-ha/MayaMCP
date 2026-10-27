@@ -164,7 +164,7 @@ python burst_test.py 20
 
 Note: `pip install -r requirements.txt` installs the Agent Development Kit (`google-adk`) and the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project has been fully migrated to ADK 2.0 and does not use LangChain.
 
-## API Keys & Credentials Required
+## Credentials & Configuration
 
 ### GCP Vertex AI (Google Cloud Platform)
 
@@ -177,7 +177,7 @@ Note: `pip install -r requirements.txt` installs the Agent Development Kit (`goo
 4. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
 5. At the Phaser start screen, enter a GCP project ID accessible to those ADC credentials. Maya validates it before starting the session.
 
-### Cartesia TTS API
+### Cartesia TTS API (Optional Voice)
 
 1. Visit [Cartesia](https://cartesia.ai/)
 2. Sign up for free tier
@@ -482,17 +482,18 @@ Use these to:
 - Monitor headroom vs. actual usage
 - Iterate on `MODAL_MEMORY_MB` and `MODAL_MAX_CONTAINERS` based on load and p95 latency
 
-Environment configuration (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`, `CARTESIA_API_KEY`) is expected via environment variables/secrets as before.
+Required Vertex AI configuration (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`) is expected via environment variables/secrets as before. `CARTESIA_API_KEY` is optional; omit it to run Maya in text-only mode.
 
 ### Deployment checklist
 
 Use this quick checklist when deploying on Modal:
 
-- GCP & Service Credentials configured
+- Vertex AI configuration
   - `GCP_PROJECT`
   - `GCP_LOCATION`
   - `GEMINI_TIER=paid`
-  - `CARTESIA_API_KEY`
+- Voice configuration (optional)
+  - `CARTESIA_API_KEY` — omit for text-only mode
 - Resource tuning (optional)
   - `MODAL_MEMORY_MB` (e.g., 4096, 8192)
   - `MODAL_MAX_CONTAINERS` (e.g., 3, 5)

@@ -52,3 +52,10 @@ This document outlines testing standards, mock double conventions, BDD acceptanc
 - **Prefix Invariant Caching**: To leverage GCP Context Caching in LLM judge routines, structure prompts with static evaluation rubrics and instructions at the prompt prefix (Invariant Prefix), placing dynamic test case inputs at the prompt tail.
 - **Non-Prescriptive Prompt State vs Scripted Responses**: When exposing background failures (like register malfunctions) to conversational agents via system prompt context, provide only factual state indicators (e.g. `PAYMENT STATUS: Failed (register malfunction during settlement)`) rather than prescriptive behavioral instructions (e.g. "Apologize and offer retry"), ensuring evaluation benchmarks measure authentic agent behavior rather than scripted prompt directives.
 - **Evaluation Scorer Guard Discipline**: In LLM evaluation scorers checking list outputs (like derived visemes), empty lists `[]` must NOT evaluate to `True` via fall-through guards like `... if visemes else True`. Scorers must strictly enforce non-empty lists (`bool(visemes) and len(visemes) == len(turns)`).
+
+---
+
+## 6. Browser Smoke Testing & Manifest Fixtures
+
+- **Real Manifest Contract Isolation**: Browser tests should validate the real asset manifest's structure and soundtrack references (types, paths, titles, boolean placeholder flags, and key existence), but must not bind assertions to mutable `placeholder` values or an exact playlist. Use independent intercepted fixture manifests for all-placeholder and partial-playlist cases so installing or removing real audio does not invalidate the test suite.
+- **Deterministic Playback Transition Assertions**: After clicking playlist controls, first assert that the sound manager's current track actually changed away from the prior key before asserting the expected wrapped destination. This prevents a race where the assertion observes the pre-click snapshot, especially when an unavailable intermediate track is skipped.

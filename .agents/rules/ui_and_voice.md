@@ -1,6 +1,6 @@
 # UI, Suggestion Chips & Voice Rules
 
-This document outlines frontend architecture, Gradio components, Cartesia voice streaming, Phaser 3 gaming assets, and contextual suggestion chip guidelines for MayaMCP.
+This document outlines frontend architecture, Gradio components, Cartesia voice streaming, Phaser 4 gaming assets, and contextual suggestion chip guidelines for MayaMCP.
 
 ---
 
@@ -38,6 +38,9 @@ This document outlines frontend architecture, Gradio components, Cartesia voice 
 - **Phaser 4 Secondary Loader Pass**: When queuing assets dynamically from a loaded JSON manifest in `create()`, Phaser's loader queue does not automatically start unless `this.load.start()` is explicitly invoked, accompanied by a `this.load.once('complete', ...)` listener before starting downstream scenes (`BarScene`).
 - **Phaser 4 Audio Cache Verification**: In Phaser 4 audio management, `this.scene.sound.get(key)` only queries already-instantiated sound objects. To verify whether an audio asset was preloaded into cache before calling `sound.add(key)`, check `this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null`.
 - **Phaser Component & Timer Teardown Safety**: Composite GameObjects (such as `MayaCharacter`) that create internal looping scene timers (e.g. `MouthFlapController`'s viseme flap timer) must implement a `destroy()` method that explicitly cancels active timers and destroys child graphics objects upon container/scene teardown.
+- **Phaser DOM Controls & Container Placement**: Use `dom.createContainer: true` with Phaser DOM elements for native forms and buttons that need keyboard, mobile-input, or assistive-technology support. Keep `#game-container` block/relative and force Phaser's generated DOM container to `top: 0; left: 0`; flex centering can preserve a static-position offset that conflicts with ScaleManager canvas margins and push scaled DOM overlays outside the viewport. Verify DOM and canvas rects at native and scaled viewports.
+- **Credential Start Gate UX**: Use a native `<form>` with explicit labels, required/password semantics, visible focus indicators, 44×44 logical-pixel targets, and `role="alert"` errors. Never persist credentials or project IDs in browser storage; only persist the session ID, clear sensitive inputs on success, and abort in-flight requests on scene shutdown.
+- **Manifest-Driven Soundtrack Lifecycle**: Audio manifest entries should declare `title` and a boolean `placeholder`. Preload skips placeholders, and `SoundManager` must recheck `cache.audio` before playback. Start music is scene-owned, fixed, and looping; stop it before bar playlist playback. `NEXT` and natural track completion search forward while `PREV` searches backward across unavailable entries, with wrapping. Pause/resume must preserve the same sound instance, and speech audio must remain independent of soundtrack state.
 
 ---
 
