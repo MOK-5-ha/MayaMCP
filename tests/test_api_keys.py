@@ -88,3 +88,17 @@ class TestGCPVertexConfig:
         import src.config.api_keys
         importlib.reload(src.config.api_keys)
         mock_load_dotenv.assert_called_once()
+
+
+@patch('src.llm.key_validator.genai')
+def test_validator_does_not_expose_unexpected_exception_details(mock_genai, monkeypatch):
+    from src.llm.key_validator import validate_gemini_key
+
+    monkeypatch.setenv("GCP_PROJECT", "test-project")
+    mock_genai.Client.side_effect = RuntimeError("sensitive SDK response")
+
+    is_valid, error = validate_gemini_key()
+
+    assert is_valid is False
+    assert error == "Vertex AI validation failed. Check the project and ADC configuration."
+    assert "sensitive SDK response" not in error

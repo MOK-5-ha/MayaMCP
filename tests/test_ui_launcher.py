@@ -222,6 +222,12 @@ class TestLaunchBartenderInterface:
         assert calls[1][1]['label'] == "Live Voice"
         assert calls[1][1]['streaming'] is True
 
+        textbox_calls = mock_textbox.call_args_list
+        assert textbox_calls[0][1]['label'] == "GCP Project ID (required)"
+        assert textbox_calls[0][1]['type'] == "text"
+        assert textbox_calls[1][1]['label'] == "Cartesia API Key (optional, for voice)"
+        assert textbox_calls[1][1]['type'] == "password"
+
         # At least 3 buttons: Start Chatting, Clear, Send
         assert mock_button.call_count >= 3
 

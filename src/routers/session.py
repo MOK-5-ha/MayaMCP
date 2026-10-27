@@ -5,6 +5,8 @@ from collections.abc import MutableMapping
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
+from ..config.logging_config import get_logger
+from ..llm.key_validator import validate_gemini_key
 from ..schemas.session import KeySubmissionRequest, SessionStatusResponse
 from ..utils.state_manager import (
     get_session_lock,
@@ -13,6 +15,7 @@ from ..utils.state_manager import (
     set_api_keys,
 )
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/session", tags=["Session"])
 
 # Process-local fallback store
@@ -63,14 +66,26 @@ def submit_session_keys(
 ) -> dict:
     session_id = resolve_session_id(x_session_id)
     response.headers["X-Session-ID"] = session_id
-    if not request_data.gemini_key or not request_data.gemini_key.strip():
-        raise HTTPException(status_code=400, detail="Gemini API key is required.")
+    project = request_data.gcp_project.strip()
+    if not project:
+        raise HTTPException(status_code=400, detail="GCP project ID is required.")
+
+    try:
+        is_valid, error_message = validate_gemini_key(gcp_project=project)
+    except Exception:
+        logger.exception("Vertex AI validation failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to validate Vertex AI configuration.",
+        ) from None
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
 
     store = get_session_store(request)
     set_api_keys(
         session_id=session_id,
         store=store,
-        gemini_key=request_data.gemini_key.strip(),
+        gcp_project=project,
         cartesia_key=request_data.cartesia_key.strip() if request_data.cartesia_key else None
     )
     valid = has_valid_keys(session_id, store)

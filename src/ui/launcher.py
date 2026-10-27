@@ -136,14 +136,14 @@ def launch_bartender_interface(
         with gr.Column(visible=True) as api_key_column:
             gr.Markdown(
                 "## Welcome to MOK 5-ha!\n"
-                "Maya runs in GCP Vertex AI Mode (Paid Tier). Click **Start Chatting** to begin, "
-                "or optionally provide a custom GCP Project ID below."
+                "Maya runs in GCP Vertex AI Mode (Paid Tier). Enter a GCP Project ID "
+                "accessible to the server's Application Default Credentials to begin."
             )
 
-            gemini_key_input = gr.Textbox(
-                label="GCP Project ID (optional override)",
-                placeholder="Enter GCP Project ID (leave blank to use server default)...",
-                type="password",
+            gcp_project_input = gr.Textbox(
+                label="GCP Project ID (required)",
+                placeholder="Enter GCP Project ID...",
+                type="text",
             )
             cartesia_key_input = gr.Textbox(
                 label="Cartesia API Key (optional, for voice)",
@@ -155,7 +155,7 @@ def launch_bartender_interface(
 
             submit_keys_btn = gr.Button("Start Chatting", variant="primary")
 
-            with gr.Accordion("How to get API keys", open=False):
+            with gr.Accordion("How to configure access", open=False):
                 gr.Markdown(create_help_instructions_md())
 
         # =================================================================
@@ -224,7 +224,7 @@ def launch_bartender_interface(
 
         submit_keys_btn.click(
             handle_key_submission_fn,
-            inputs=[gemini_key_input, cartesia_key_input],
+            inputs=[gcp_project_input, cartesia_key_input],
             outputs=[key_error_display, api_key_column, chat_column, keys_validated_state],
         )
 

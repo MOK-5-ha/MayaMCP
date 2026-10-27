@@ -10,12 +10,15 @@ import pytest
 from src.utils.state_manager import (
     atomic_payment_complete,
     cleanup_session_lock,
+    get_api_key_state,
     get_conversation_state,
     get_current_order_state,
     get_order_history,
+    has_valid_keys,
     initialize_state,
     is_order_finished,
     reset_session_state,
+    set_api_keys,
     update_conversation_state,
     update_order_state,
 )
@@ -62,6 +65,28 @@ class TestStateManager:
         # Verify current order state
         current_order = get_current_order_state(self.session_id, self.store)
         assert current_order == []
+
+    def test_api_key_state_encrypts_project_and_optional_cartesia(self):
+        set_api_keys(
+            self.session_id,
+            self.store,
+            gcp_project=" test-project ",
+            cartesia_key=" cartesia-secret ",
+        )
+
+        raw_state = self.store[self.session_id]['api_keys']
+        assert raw_state['gcp_project'] != "test-project"
+        assert 'gemini_key' not in raw_state
+        assert "test-project" not in str(raw_state)
+        assert "cartesia-secret" not in str(raw_state)
+
+        decrypted = get_api_key_state(self.session_id, self.store)
+        assert decrypted == {
+            'gcp_project': "test-project",
+            'cartesia_key': "cartesia-secret",
+            'keys_validated': True,
+        }
+        assert has_valid_keys(self.session_id, self.store) is True
 
     def test_get_conversation_state_returns_copy(self):
         """Test that get_conversation_state returns a copy, not reference."""

@@ -43,7 +43,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Architecture Updates
 
-- **Phaser 4 HTML5 Canvas Game Engine & Vite 8**: Integrated interactive 2D retro canvas frontend (`phaser@4.2.1`) served at root `/`, with Vite 8 Rolldown bundling, headless browser runtime smoke testing (`npm test`), and graceful asset fallbacks.
+- **Phaser 4 HTML5 Canvas Game Engine & Vite 8**: Integrated interactive 2D retro canvas frontend (`phaser@4.2.1`) served at root `/`, with Vite 8 Rolldown bundling, a credential-gated exterior start screen, bottom-left bar soundtrack controls, and headless browser smoke testing (`npm test`).
 - **Cartesia 4.x Unified TTS SDK**: Migrated voice synthesis to `cartesia>=4.2.0,<5.0.0`, using modern `cartesia_client.tts.generate()` binary response handling, non-blocking audio streaming, and sub-millisecond session cache key derivation.
 - **FastAPI 0.141.1 & Decoupled Architecture**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, mounting the Phaser 4 SPA at root `/` alongside native REST (`/api/v1/*`) and SSE interfaces.
 - **Python 3.11+ Baseline**: Modernized project configuration (`pyproject.toml`, `setup.py`) to require Python `>=3.11`, enabling `enum.StrEnum` models and compatibility with `scikit-learn>=1.9.1`.
@@ -58,7 +58,7 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 | Endpoint | Method | Description | Headers / Query |
 |---|---|---|---|
 | `/api/v1/session/status` | GET | Retrieve session key validation status | `X-Session-ID` (optional) |
-| `/api/v1/session/keys` | POST | Submit BYOK Gemini & Cartesia API keys | `X-Session-ID` (optional) |
+| `/api/v1/session/keys` | POST | Validate a GCP project through ADC and store an optional Cartesia key | `X-Session-ID` (optional) |
 | `/api/v1/session/reset` | POST | Reset session order & payment state | `X-Session-ID` (optional) |
 | `/api/v1/payments/tab` | GET | Fetch running tab, balance, and tip status | `X-Session-ID` (optional) |
 | `/api/v1/payments/tip` | POST | Set or update tip percentage or amount | `X-Session-ID` (optional) |
@@ -164,7 +164,7 @@ python burst_test.py 20
 
 Note: `pip install -r requirements.txt` installs the Agent Development Kit (`google-adk`) and the native Google GenAI SDK (`google-genai`) used throughout `src/`. This project has been fully migrated to ADK 2.0 and does not use LangChain.
 
-## API Keys & Credentials Required
+## Credentials & Configuration
 
 ### GCP Vertex AI (Google Cloud Platform)
 
@@ -175,13 +175,15 @@ Note: `pip install -r requirements.txt` installs the Agent Development Kit (`goo
    gcloud auth application-default login
    ```
 4. Configure `GCP_PROJECT` and `GCP_LOCATION` in `.env`.
+5. At the Phaser start screen, enter a GCP project ID accessible to those ADC credentials. Maya validates it before starting the session.
 
-### Cartesia TTS API
+### Cartesia TTS API (Optional Voice)
 
 1. Visit [Cartesia](https://cartesia.ai/)
 2. Sign up for free tier
 3. Generate API key
 4. Add to `.env` as `CARTESIA_API_KEY`
+5. Optionally enter the key on the Phaser start screen for session voice. Leave it blank to use text-only mode.
 
 #### Cartesia Free Tier Limitations
 
@@ -334,6 +336,10 @@ This project includes comprehensive tests for all major components. Tests are or
 
 Prerequisites: Python 3.11+ and Node.js 22.12.0+; activate your virtual environment if using one. Frontend browser smoke tests also require Chrome or Chromium installed at a recognized path, or `CHROME_BIN` set to its executable path.
 
+#### Soundtrack assets
+
+The start screen and bar player read `frontend/public/assets/manifest.json`. Place correctly encoded audio at the configured paths (or update the paths and titles), then set each ready entry's `placeholder` flag to `false`. `soundtrack.startTrack` selects the fixed start theme; `soundtrack.playlist` defines bar playback order. Placeholder or failed tracks are skipped, and the player disables its controls when no usable tracks remain.
+
 ### Test Organization
 
 - **Unit Tests**: Test individual functions and classes in isolation (using `DummyLLM` and ADK test doubles instead of legacy `MagicMock`).
@@ -476,17 +482,18 @@ Use these to:
 - Monitor headroom vs. actual usage
 - Iterate on `MODAL_MEMORY_MB` and `MODAL_MAX_CONTAINERS` based on load and p95 latency
 
-Environment configuration (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`, `CARTESIA_API_KEY`) is expected via environment variables/secrets as before.
+Required Vertex AI configuration (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`) is expected via environment variables/secrets as before. `CARTESIA_API_KEY` is optional; omit it to run Maya in text-only mode.
 
 ### Deployment checklist
 
 Use this quick checklist when deploying on Modal:
 
-- GCP & Service Credentials configured
+- Vertex AI configuration
   - `GCP_PROJECT`
   - `GCP_LOCATION`
   - `GEMINI_TIER=paid`
-  - `CARTESIA_API_KEY`
+- Voice configuration (optional)
+  - `CARTESIA_API_KEY` — omit for text-only mode
 - Resource tuning (optional)
   - `MODAL_MEMORY_MB` (e.g., 4096, 8192)
   - `MODAL_MAX_CONTAINERS` (e.g., 3, 5)

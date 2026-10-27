@@ -35,8 +35,9 @@ def test_session_status_no_keys(client):
     assert data["has_valid_keys"] is False
 
 
-def test_session_submit_keys(client):
-    payload = {"gemini_key": "dummy-gemini-key", "cartesia_key": "dummy-cartesia-key"}
+@patch("src.routers.session.validate_gemini_key", return_value=(True, ""))
+def test_session_submit_keys(mock_validate, client):
+    payload = {"gcp_project": "dummy-project", "cartesia_key": "dummy-cartesia-key"}
     response = client.post(
         "/api/v1/session/keys",
         json=payload,
@@ -46,6 +47,69 @@ def test_session_submit_keys(client):
     data = response.json()
     assert data["status"] == "success"
     assert data["has_valid_keys"] is True
+    mock_validate.assert_called_once_with(gcp_project="dummy-project")
+
+
+@patch("src.routers.session.validate_gemini_key")
+def test_session_submit_keys_rejects_blank_project(mock_validate, client):
+    response = client.post(
+        "/api/v1/session/keys",
+        json={"gcp_project": "   "},
+        headers={"X-Session-ID": "blank-project-session"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "GCP project ID is required."
+    mock_validate.assert_not_called()
+
+
+def test_session_submit_keys_requires_project_field(client):
+    response = client.post(
+        "/api/v1/session/keys",
+        json={"cartesia_key": "voice-only"},
+        headers={"X-Session-ID": "missing-project-session"},
+    )
+
+    assert response.status_code == 422
+
+
+@patch("src.routers.session.set_api_keys")
+@patch("src.routers.session.validate_gemini_key", return_value=(False, "ADC access denied"))
+def test_session_submit_keys_preserves_state_when_validation_fails(
+    mock_validate, mock_set_keys, client
+):
+    response = client.post(
+        "/api/v1/session/keys",
+        json={"gcp_project": "inaccessible-project"},
+        headers={"X-Session-ID": "invalid-project-session"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "ADC access denied"
+    mock_set_keys.assert_not_called()
+    status = client.get(
+        "/api/v1/session/status",
+        headers={"X-Session-ID": "invalid-project-session"},
+    )
+    assert status.json()["has_valid_keys"] is False
+
+
+@patch("src.routers.session.validate_gemini_key", return_value=(True, ""))
+def test_session_submit_keys_allows_text_only(mock_validate, client):
+    response = client.post(
+        "/api/v1/session/keys",
+        json={"gcp_project": "text-only-project"},
+        headers={"X-Session-ID": "text-only-session"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["has_valid_keys"] is True
+    from src.routers.session import _SESSION_STORE
+    from src.utils.state_manager import get_api_key_state
+
+    state = get_api_key_state("text-only-session", _SESSION_STORE)
+    assert state["gcp_project"] == "text-only-project"
+    assert state["cartesia_key"] is None
 
 
 def test_session_reset(client):
@@ -66,12 +130,12 @@ def test_chat_without_keys_fails(client):
         headers={"X-Session-ID": "no-keys-session"}
     )
     assert response.status_code == 400
-    assert "API keys" in response.json()["detail"]
+    assert "GCP project" in response.json()["detail"]
 
 
 @patch("src.routers.chat.process_order")
 @patch("src.routers.chat.has_valid_keys", return_value=True)
-@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key", "cartesia_key": "fake-key"})
+@patch("src.routers.chat.get_api_key_state", return_value={"gcp_project": "test-project", "cartesia_key": "fake-key"})
 @patch("src.routers.chat.get_session_llm")
 @patch("src.routers.chat.get_session_tts")
 def test_chat_successful_response(mock_tts, mock_llm, mock_keys_state, mock_has_keys, mock_process_order, client):
@@ -94,6 +158,8 @@ def test_chat_successful_response(mock_tts, mock_llm, mock_keys_state, mock_has_
     assert data["response_text"] == "Here is your whiskey neat!"
     assert len(data["current_order"]) == 1
     assert data["current_order"][0]["item"] == "whiskey neat"
+    mock_llm.assert_called_once_with("valid-session", gcp_project="test-project")
+    assert mock_process_order.call_args.kwargs["api_key"] is None
 
 
 def test_payments_tab_info(client):
@@ -161,7 +227,7 @@ def test_add_to_order_negative_quantity_rejected():
 
 @patch("src.routers.chat.get_session_llm")
 @patch("src.routers.chat.has_valid_keys", return_value=True)
-@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key"})
+@patch("src.routers.chat.get_api_key_state", return_value={"gcp_project": "test-project"})
 def test_chat_session_limit_exceeded_returns_429(mock_keys_state, mock_has_keys, mock_llm, client):
     from src.llm.session_registry import SessionLimitExceededError
     mock_llm.side_effect = SessionLimitExceededError("Bar capacity reached")
@@ -176,7 +242,8 @@ def test_chat_session_limit_exceeded_returns_429(mock_keys_state, mock_has_keys,
     assert "Bar capacity reached" in response.json()["detail"]
 
 
-def test_concurrent_session_status_and_keys_race_safety(client):
+@patch("src.routers.session.validate_gemini_key", return_value=(True, ""))
+def test_concurrent_session_status_and_keys_race_safety(mock_validate, client):
     import threading
     session_id = "race-test-session-999"
     results = []
@@ -186,7 +253,7 @@ def test_concurrent_session_status_and_keys_race_safety(client):
         results.append(("status", resp.status_code))
 
     def call_submit_keys():
-        payload = {"gemini_key": "race-test-key-valid"}
+        payload = {"gcp_project": "race-test-project"}
         resp = client.post("/api/v1/session/keys", json=payload, headers={"X-Session-ID": session_id})
         results.append(("keys", resp.status_code))
 
@@ -205,7 +272,7 @@ def test_concurrent_session_status_and_keys_race_safety(client):
 
 @patch("src.routers.chat.process_order_stream", return_value=iter([]))
 @patch("src.routers.chat.has_valid_keys", return_value=True)
-@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key"})
+@patch("src.routers.chat.get_api_key_state", return_value={"gcp_project": "test-project"})
 @patch("src.routers.chat.get_session_llm")
 def test_chat_stream_query_session_id_and_initial_session_event(mock_llm, mock_keys, mock_has_keys, mock_stream, client):
     response = client.get("/api/v1/chat/stream?message=hello&session_id=query-session-777")
@@ -215,11 +282,13 @@ def test_chat_stream_query_session_id_and_initial_session_event(mock_llm, mock_k
     assert len(lines) >= 1
     event_data = json.loads(lines[0].replace("data: ", ""))
     assert event_data == {"type": "session", "session_id": "query-session-777"}
+    mock_llm.assert_called_once_with("query-session-777", gcp_project="test-project")
+    assert mock_stream.call_args.kwargs["api_key"] is None
 
 
 @patch("src.routers.chat.process_order_stream")
 @patch("src.routers.chat.has_valid_keys", return_value=True)
-@patch("src.routers.chat.get_api_key_state", return_value={"gemini_key": "fake-key"})
+@patch("src.routers.chat.get_api_key_state", return_value={"gcp_project": "test-project"})
 @patch("src.routers.chat.get_session_llm")
 def test_chat_stream_post_endpoint_and_viseme_enrichment(mock_llm, mock_keys, mock_has_keys, mock_stream, client):
     mock_stream.return_value = iter([

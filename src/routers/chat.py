@@ -51,17 +51,17 @@ def chat_endpoint(
     if not has_valid_keys(session_id, store):
         raise HTTPException(
             status_code=400,
-            detail="Please provide your API keys first before sending messages."
+            detail="Please provide a validated GCP project before sending messages."
         )
 
     api_key_state = get_api_key_state(session_id, store)
-    gemini_key = api_key_state["gemini_key"]
+    gcp_project = api_key_state["gcp_project"]
     cartesia_key = api_key_state.get("cartesia_key")
 
     current_history = get_session_chat_history(session_id, store)
 
     try:
-        llm = get_session_llm(session_id, gemini_key)
+        llm = get_session_llm(session_id, gcp_project=gcp_project)
         cartesia_client = get_session_tts(session_id, cartesia_key)
 
         response_text, updated_history, _, updated_order, _ = process_order(
@@ -69,7 +69,7 @@ def chat_endpoint(
             current_session_history=current_history,
             llm=llm,
             rag_retriever=None,
-            api_key=gemini_key,
+            api_key=None,
             session_id=session_id,
             app_state=store,
         )
@@ -108,7 +108,7 @@ def chat_endpoint(
     except Exception as e:
         if is_quota_error(e):
             return ChatResponse(
-                response_text="It looks like your API key has hit its rate limit.",
+                response_text="Your GCP project has reached its Vertex AI quota.",
                 history=current_history,
                 current_order=get_current_order_state(session_id, store),
                 quota_error_html=create_quota_error_html()
@@ -164,11 +164,11 @@ async def chat_stream_endpoint(
     if not has_valid_keys(effective_session_id, store):
         raise HTTPException(
             status_code=400,
-            detail="Please provide your API keys first before streaming."
+            detail="Please provide a validated GCP project before streaming."
         )
 
     api_key_state = get_api_key_state(effective_session_id, store)
-    gemini_key = api_key_state["gemini_key"]
+    gcp_project = api_key_state["gcp_project"]
 
     current_history = get_session_chat_history(effective_session_id, store)
 
@@ -178,14 +178,14 @@ async def chat_stream_endpoint(
             init_event = {"type": "session", "session_id": effective_session_id}
             yield f"data: {json.dumps(init_event)}\n\n"
 
-            llm = get_session_llm(effective_session_id, gemini_key)
+            llm = get_session_llm(effective_session_id, gcp_project=gcp_project)
 
             stream = process_order_stream(
                 user_input_text=input_message,
                 current_session_history=current_history,
                 llm=llm,
                 rag_retriever=None,
-                api_key=gemini_key,
+                api_key=None,
                 session_id=effective_session_id,
                 app_state=store,
             )

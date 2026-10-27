@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "spritesheets": [
     {
       "key": "maya_portrait",
@@ -8,21 +8,49 @@
       "frameHeight": 128
     }
   ],
+  "images": [
+    {
+      "key": "start_bar_exterior",
+      "path": "assets/images/start-bar-exterior.png"
+    }
+  ],
   "audio": [
+    {
+      "key": "bgm_start_rain",
+      "path": "assets/audio/start-rain.wav",
+      "type": "music",
+      "title": "Rain at the Door",
+      "placeholder": true
+    },
     {
       "key": "bgm_lounge",
       "path": "assets/audio/bgm_lounge.mp3",
-      "type": "music"
+      "type": "music",
+      "title": "Lounge",
+      "placeholder": true
+    },
+    {
+      "key": "bgm_afterhours",
+      "path": "assets/audio/afterhours.wav",
+      "type": "music",
+      "title": "After Hours",
+      "placeholder": true
     },
     {
       "key": "sfx_pour",
       "path": "assets/audio/pour.wav",
-      "type": "sfx"
+      "type": "sfx",
+      "placeholder": true
     },
     {
       "key": "sfx_clink",
       "path": "assets/audio/clink.wav",
-      "type": "sfx"
+      "type": "sfx",
+      "placeholder": true
     }
-  ]
+  ],
+  "soundtrack": {
+    "startTrack": "bgm_start_rain",
+    "playlist": ["bgm_lounge", "bgm_afterhours"]
+  }
 }
