@@ -40,10 +40,10 @@ export class SoundManager {
     this.emitChange();
   }
 
-  public playTrack(index: number): boolean {
+  public playTrack(index: number, direction: 'forward' | 'backward' = 'forward'): boolean {
     if (this.destroyed) return false;
 
-    const availableIndex = this.findAvailableIndex(index);
+    const availableIndex = this.findAvailableIndex(index, direction);
     if (availableIndex < 0) {
       this.stopCurrent();
       this.emitChange();
@@ -58,12 +58,12 @@ export class SoundManager {
   }
 
   public nextTrack(): boolean {
-    return this.playTrack(this.currentIndex < 0 ? 0 : this.currentIndex + 1);
+    return this.playTrack(this.currentIndex < 0 ? 0 : this.currentIndex + 1, 'forward');
   }
 
   public previousTrack(): boolean {
     const index = this.currentIndex < 0 ? this.playlist.length - 1 : this.currentIndex - 1;
-    return this.playTrack(index);
+    return this.playTrack(index, 'backward');
   }
 
   public playBGM(key: string, loop = true, title?: string): boolean {
@@ -177,13 +177,19 @@ export class SoundManager {
     return this.scene.cache.audio.exists(key) || this.scene.sound.get(key) !== null;
   }
 
-  private findAvailableIndex(startIndex: number): number {
+  private findAvailableIndex(
+    startIndex: number,
+    direction: 'forward' | 'backward'
+  ): number {
     const count = this.playlist.length;
     if (count === 0) return -1;
 
     const normalized = ((startIndex % count) + count) % count;
     for (let offset = 0; offset < count; offset += 1) {
-      const index = (normalized + offset) % count;
+      const shifted = direction === 'backward'
+        ? normalized - offset
+        : normalized + offset;
+      const index = ((shifted % count) + count) % count;
       if (this.hasAudio(this.playlist[index].key)) return index;
     }
     return -1;

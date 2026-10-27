@@ -29,12 +29,16 @@ const MUSIC_FILES = {
   bgm_start_rain: 'start-rain.wav',
   bgm_lounge: 'lounge.wav',
   bgm_afterhours: 'afterhours.wav',
+  bgm_midnight: 'midnight.wav',
 };
 const MUSIC_TITLES = {
   bgm_start_rain: 'Start Rain',
   bgm_lounge: 'Lounge',
   bgm_afterhours: 'Afterhours',
+  bgm_midnight: 'Midnight',
 };
+const BASE_PLAYLIST = ['bgm_lounge', 'bgm_afterhours'];
+const PARTIAL_PLAYLIST = [...BASE_PLAYLIST, 'bgm_midnight'];
 
 // Find a guaranteed free ephemeral port to prevent port conflicts with other checkouts
 const getFreePort = () =>
@@ -95,11 +99,11 @@ function createWavBuffer(durationSeconds, frequency) {
   return buffer;
 }
 
-function buildMediaManifest(realManifest) {
+function buildFixtureManifest(realManifest, unavailableTracks) {
   const manifest = structuredClone(realManifest);
-  const contractedKeys = new Set(Object.keys(MUSIC_FILES));
+  const fixtureKeys = new Set(Object.keys(MUSIC_FILES));
   const otherAudio = (manifest.audio || []).filter(
-    (entry) => entry.type !== 'music' || !contractedKeys.has(entry.key)
+    (entry) => entry.type !== 'music' || !fixtureKeys.has(entry.key)
   );
   manifest.audio = [
     ...otherAudio,
@@ -108,13 +112,31 @@ function buildMediaManifest(realManifest) {
       path: `assets/audio/${filename}`,
       type: 'music',
       title: MUSIC_TITLES[key],
-      placeholder: false,
+      placeholder: unavailableTracks.has(key),
     })),
   ];
+  manifest.soundtrack = {
+    startTrack: 'bgm_start_rain',
+    playlist: BASE_PLAYLIST,
+  };
   return manifest;
 }
 
-function validateManifestContract(manifest, { placeholders }) {
+function buildMediaManifest(realManifest) {
+  return buildFixtureManifest(realManifest, new Set());
+}
+
+function buildPlaceholderManifest(realManifest) {
+  return buildFixtureManifest(realManifest, new Set(Object.keys(MUSIC_FILES)));
+}
+
+function buildPartialManifest(realManifest) {
+  const manifest = buildFixtureManifest(realManifest, new Set(['bgm_afterhours']));
+  manifest.soundtrack.playlist = PARTIAL_PLAYLIST;
+  return manifest;
+}
+
+function validateManifestStructure(manifest) {
   assert.ok(manifest && typeof manifest === 'object', 'Asset manifest must be an object.');
   assert.ok(
     typeof manifest.version === 'string' || typeof manifest.version === 'number',
@@ -131,25 +153,63 @@ function validateManifestContract(manifest, { placeholders }) {
     'Manifest must include the real start_bar_exterior artwork.'
   );
 
-  const music = manifest.audio.filter((entry) => entry.type === 'music');
-  const musicKeys = new Set(music.map((entry) => entry.key));
-  assert.ok(
-    Object.keys(MUSIC_FILES).every((key) => musicKeys.has(key)),
-    'Manifest must contain all three contracted music keys.'
-  );
-  for (const entry of music) {
+  const musicByKey = new Map();
+  for (const entry of manifest.audio) {
+    if (entry.type !== 'music') continue;
+
+    assert.ok(
+      !musicByKey.has(entry.key),
+      `Duplicate music key in real manifest: ${entry.key}`
+    );
+    assert.equal(typeof entry.key, 'string', 'Music entries need string keys.');
     assert.equal(typeof entry.path, 'string', `${entry.key} must have an audio path.`);
     assert.equal(typeof entry.title, 'string', `${entry.key} must have a title.`);
     assert.equal(
-      entry.placeholder,
-      placeholders,
-      `${entry.key} must have placeholder:${placeholders} in this pass.`
+      typeof entry.placeholder,
+      'boolean',
+      `${entry.key} must explicitly declare whether it is a placeholder.`
+    );
+    musicByKey.set(entry.key, entry);
+  }
+
+  const soundtrack = manifest.soundtrack;
+  assert.ok(soundtrack && typeof soundtrack === 'object', 'Manifest needs soundtrack config.');
+  assert.equal(typeof soundtrack.startTrack, 'string', 'Manifest needs a fixed start track.');
+  assert.ok(
+    musicByKey.has(soundtrack.startTrack),
+    `soundtrack.startTrack references missing music: ${soundtrack.startTrack}`
+  );
+  assert.ok(Array.isArray(soundtrack.playlist), 'Manifest needs a soundtrack playlist.');
+  for (const key of soundtrack.playlist) {
+    assert.equal(typeof key, 'string', 'Soundtrack playlist keys must be strings.');
+    assert.ok(
+      musicByKey.has(key),
+      `soundtrack.playlist references missing music: ${key}`
     );
   }
-  assert.deepEqual(manifest.soundtrack, {
-    startTrack: 'bgm_start_rain',
-    playlist: ['bgm_lounge', 'bgm_afterhours'],
-  });
+}
+
+function validateFixtureManifest(manifest, expectedPlaylist, unavailableTracks) {
+  const fixtureKeys = new Set(Object.keys(MUSIC_FILES));
+  const musicByKey = new Map(
+    manifest.audio.filter((entry) => entry.type === 'music').map((entry) => [entry.key, entry])
+  );
+
+  assert.ok(
+    [...fixtureKeys].every((key) => musicByKey.has(key)),
+    'Soundtrack fixture is missing one or more test music tracks.'
+  );
+  for (const [key, entry] of musicByKey) {
+    if (!fixtureKeys.has(key)) continue;
+
+    assert.equal(
+      entry.placeholder,
+      unavailableTracks.has(key),
+      `${key} has the wrong fixture placeholder state.`
+    );
+  }
+  assert.deepEqual(manifest.soundtrack.startTrack, 'bgm_start_rain');
+  assert.deepEqual(manifest.soundtrack.playlist, expectedPlaylist);
 }
 
 function validateSnapshot(snapshot, label) {
@@ -460,6 +520,7 @@ async function runMediaPass(browser, realManifest, diagnostics) {
     'start-rain.wav': createWavBuffer(12, 220),
     'lounge.wav': createWavBuffer(12, 330),
     'afterhours.wav': createWavBuffer(1.5, 440),
+    'midnight.wav': createWavBuffer(12, 550),
   };
   const credentialBodies = [];
   let credentialRequestCount = 0;
@@ -525,7 +586,7 @@ async function runMediaPass(browser, realManifest, diagnostics) {
 
   await page.goto(diagnostics.origin, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await waitForStartGate(page);
-  validateManifestContract(realManifest, { placeholders: true });
+  validateFixtureManifest(mediaManifest, BASE_PLAYLIST, new Set());
   assert.deepEqual(diagnostics.interceptionErrors, []);
   await assertStartSemantics(page);
   await assertResponsiveLayout(page, 'maya-start-form');
@@ -667,11 +728,20 @@ async function runPlaceholderPass(browser, realManifest, diagnostics) {
   const page = await browser.newPage();
   diagnostics.attach(page);
 
+  const placeholderManifest = buildPlaceholderManifest(realManifest);
   const credentialBodies = [];
   await page.setRequestInterception(true);
   page.on('request', (request) => {
     void (async () => {
       const url = new URL(request.url());
+      if (url.pathname === '/assets/manifest.json') {
+        await request.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(placeholderManifest),
+        });
+        return;
+      }
       if (url.pathname === '/api/session/keys' && request.method() === 'POST') {
         credentialBodies.push(JSON.parse(request.postData() || 'null'));
         await request.respond({
@@ -691,7 +761,11 @@ async function runPlaceholderPass(browser, realManifest, diagnostics) {
 
   await page.goto(diagnostics.origin, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await waitForStartGate(page);
-  validateManifestContract(realManifest, { placeholders: true });
+  validateFixtureManifest(
+    placeholderManifest,
+    BASE_PLAYLIST,
+    new Set(Object.keys(MUSIC_FILES))
+  );
   await assertStartSemantics(page);
   await submitAndEnterBar(page, { includeCartesiaKey: false });
   assert.equal(credentialBodies.length, 1);
@@ -720,14 +794,11 @@ async function runPartialPass(browser, realManifest, diagnostics) {
   const page = await browser.newPage();
   diagnostics.attach(page);
 
-  const partialManifest = buildMediaManifest(realManifest);
-  const unavailableTrack = partialManifest.audio.find(
-    (entry) => entry.key === 'bgm_afterhours'
-  );
-  unavailableTrack.placeholder = true;
+  const partialManifest = buildPartialManifest(realManifest);
   const wavBuffers = {
     'start-rain.wav': createWavBuffer(6, 220),
     'lounge.wav': createWavBuffer(6, 330),
+    'midnight.wav': createWavBuffer(6, 550),
   };
   let afterhoursRequested = false;
 
@@ -775,16 +846,25 @@ async function runPartialPass(browser, realManifest, diagnostics) {
 
   await page.goto(diagnostics.origin, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await waitForStartGate(page);
+  validateFixtureManifest(partialManifest, PARTIAL_PLAYLIST, new Set(['bgm_afterhours']));
   await submitAndEnterBar(page, { includeCartesiaKey: false });
   await waitForSnapshot(page, 'BarScene', {
     currentKey: 'bgm_lounge',
     isPlaying: true,
-    playlistKeys: ['bgm_lounge', 'bgm_afterhours'],
+    playlistKeys: PARTIAL_PLAYLIST,
   });
 
   await page.click('#track-next');
-  await waitForSnapshot(page, 'BarScene', { currentKey: 'bgm_lounge', isPlaying: true });
+  await waitForSnapshot(page, 'BarScene', { currentKey: 'bgm_midnight', isPlaying: true });
   await page.click('#track-prev');
+  await page.waitForFunction(
+    () => {
+      const scene = window.__MAYA_GAME__?.scene.getScene('BarScene');
+      const snapshot = scene?.getSoundManager?.().getSnapshot();
+      return snapshot && snapshot.currentKey !== 'bgm_midnight';
+    },
+    { timeout: 5000, polling: 100 }
+  );
   await waitForSnapshot(page, 'BarScene', { currentKey: 'bgm_lounge', isPlaying: true });
   assert.equal(afterhoursRequested, false, 'Placeholder audio must not be requested or played.');
 
@@ -812,6 +892,7 @@ async function runSmokeTest() {
     const realManifest = JSON.parse(
       await readFile(new URL('../public/assets/manifest.json', import.meta.url), 'utf8')
     );
+    validateManifestStructure(realManifest);
     const PORT = await getFreePort();
     const origin = `http://localhost:${PORT}/`;
     console.log(`[smoke-test] Allocated isolated preview port: ${PORT}`);
@@ -945,6 +1026,7 @@ async function runSmokeTest() {
     console.log('   - Native accessible controls and keyboard submission verified');
     console.log('   - Start/bar music lifecycle, wrapping, pause/resume, and auto-advance verified');
     console.log('   - Placeholder and partial soundtrack filtering verified');
+    console.log('   - Three-track partial playlist backward wrapping verified');
     console.log('   - Zero unexpected browser/asset errors verified');
 
     await cleanup(browser, previewProcess, 0);
