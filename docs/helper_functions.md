@@ -8,14 +8,14 @@ This document catalogs the centralized helper functions located in `src/utils/he
 
 ### `extract_session_id(request: Any = None, default: str = "default") -> str`
 - **Location**: [`src/utils/helpers.py`](../src/utils/helpers.py)
-- **Purpose**: Safely extracts the active `session_id` string from FastAPI request objects, state dictionaries, or direct strings with a fallback default.
-- **Use Cases**: API endpoints (`src/routers/`), session-aware request handlers.
+- **Purpose**: Safely extracts the active `session_id` string from state dictionaries or direct strings with a fallback default. Request-like objects are only recognized via a legacy `session_hash` attribute — real FastAPI request objects are NOT supported.
+- **Use Cases**: Legacy callers and state-dictionary flows. For HTTP request handling, use `resolve_session_id` in [`src/routers/session.py`](../src/routers/session.py) instead — it resolves the `X-Session-ID` header/query parameter and emits a token-based fallback.
 
 ```python
-from src.utils.helpers import extract_session_id
+from src.routers.session import resolve_session_id
 
 # Example usage in a FastAPI router:
-session_id = extract_session_id(request)
+session_id = resolve_session_id(x_session_id)
 ```
 
 ---
