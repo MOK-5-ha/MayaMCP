@@ -873,6 +873,171 @@ async function runPartialPass(browser, realManifest, diagnostics) {
   await page.close();
 }
 
+
+async function runChipsPass(browser, realManifest, diagnostics) {
+  console.log('[smoke-test] Pass 4: chat send flow and suggestion chips...');
+  const page = await browser.newPage();
+  diagnostics.attach(page);
+
+  const wavBuffers = {
+    'start-rain.wav': createWavBuffer(6, 220),
+    'lounge.wav': createWavBuffer(6, 330),
+    'afterhours.wav': createWavBuffer(6, 550),
+  };
+  let streamRequestCount = 0;
+  let chipsRequestCount = 0;
+  const TURN_ONE_TEXT = 'A classic Old Fashioned, straight up. A timeless choice.';
+  const TURN_TWO_TEXT = 'The full menu is chalked on the wall above the bar.';
+  const chipsPayload = {
+    session_id: SESSION_ID,
+    generation_seq: 1,
+    failure_count: 0,
+    chips: [
+      { text: 'Show me the menu', type: 'action', action_id: 'menu' },
+      { text: 'An Old Fashioned, please', type: 'dialogue' },
+      { text: 'Surprise me', type: 'dialogue' },
+    ],
+  };
+
+  const sseBody = (text) =>
+    [
+      { type: 'session', session_id: SESSION_ID },
+      { type: 'text_chunk', content: text },
+      { type: 'complete', content: text, full_response: text, session_id: SESSION_ID },
+    ]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join('');
+
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    void (async () => {
+      const url = new URL(request.url());
+      if (url.pathname === '/assets/manifest.json') {
+        await request.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(realManifest),
+        });
+        return;
+      }
+      const wavEntry = Object.keys(wavBuffers).find((filename) =>
+        url.pathname.endsWith(`/${filename}`)
+      );
+      if (wavEntry) {
+        await request.respond({
+          status: 200,
+          contentType: 'audio/wav',
+          body: wavBuffers[wavEntry],
+        });
+        return;
+      }
+      if (url.pathname === '/api/session/keys' && request.method() === 'POST') {
+        await request.respond({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'X-Session-ID': SESSION_ID },
+          body: JSON.stringify({ status: 'success', session_id: SESSION_ID, has_valid_keys: true }),
+        });
+        return;
+      }
+      if (url.pathname === '/api/v1/chat/stream' && request.method() === 'GET') {
+        streamRequestCount += 1;
+        const text = streamRequestCount === 1 ? TURN_ONE_TEXT : TURN_TWO_TEXT;
+        await request.respond({
+          status: 200,
+          contentType: 'text/event-stream',
+          headers: { 'Cache-Control': 'no-store' },
+          body: sseBody(text),
+        });
+        return;
+      }
+      if (url.pathname === '/api/v1/chips' && request.method() === 'GET') {
+        chipsRequestCount += 1;
+        // First poll of each turn sees the generation still in flight; the
+        // second poll returns the seeded chips to exercise the polling loop.
+        const body =
+          chipsRequestCount % 2 === 1
+            ? { session_id: SESSION_ID, chips: [], generation_seq: 0, failure_count: 0 }
+            : chipsPayload;
+        await request.respond({
+          status: 200,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify(body),
+        });
+        return;
+      }
+      await request.continue();
+    })().catch((error) => {
+      diagnostics.interceptionErrors.push(error.message);
+      void request.abort().catch(() => {});
+    });
+  });
+
+  await page.goto(diagnostics.origin, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await waitForStartGate(page);
+  await page.click('#gcp-project');
+  await page.type('#gcp-project', DUMMY_GCP_PROJECT);
+  await page.type('#cartesia-key', DUMMY_CARTESIA_KEY);
+  await page.click('#start-submit');
+  await waitForBar(page);
+  await assertResponsiveLayout(page, 'chat-input-row');
+
+  // Turn 1: type a message and submit via the form (Enter key path).
+  await page.type('#chat-input', 'Give me something classic');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(
+    (expected) => {
+      const scene = window.__MAYA_GAME__.scene.getScene('HUDOverlayScene');
+      return scene?.dialogueBoxText?.text?.includes(expected);
+    },
+    { timeout: 5000, polling: 100 },
+    TURN_ONE_TEXT
+  );
+  assert.equal(streamRequestCount, 1, 'Turn 1 must stream exactly once.');
+
+  // Chip bar polls (first poll empty, second returns chips) and renders.
+  await page.waitForFunction(
+    () => document.querySelectorAll('#chip-buttons .chip-button').length === 3,
+    { timeout: 5000, polling: 100 }
+  );
+  assert.ok(chipsRequestCount >= 2, 'Chip polling must retry past the empty first poll.');
+  await assertResponsiveLayout(page, 'chip-bar');
+  const chipSemantics = await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('#chip-buttons .chip-button')];
+    return {
+      count: buttons.length,
+      types: buttons.every((b) => b.type === 'button'),
+      minHeights: buttons.map((b) => Number.parseFloat(getComputedStyle(b).minHeight)),
+      ariaLabel: document.getElementById('chip-bar')?.getAttribute('aria-label'),
+      liveRegion: document.getElementById('chip-status')?.getAttribute('aria-live'),
+    };
+  });
+  assert.equal(chipSemantics.count, 3);
+  assert.ok(chipSemantics.types, 'Chip buttons must be type="button".');
+  for (const minHeight of chipSemantics.minHeights) {
+    assert.ok(minHeight >= 44, `Chip buttons must meet 44px targets (got ${minHeight}).`);
+  }
+  assert.equal(chipSemantics.ariaLabel, 'Suggested replies');
+  assert.equal(chipSemantics.liveRegion, 'polite');
+
+  // Turn 2: clicking a chip sends its text as the next user message.
+  await page.click('#chip-buttons .chip-button');
+  await page.waitForFunction(
+    (expected) => {
+      const scene = window.__MAYA_GAME__.scene.getScene('HUDOverlayScene');
+      return scene?.dialogueBoxText?.text?.includes(expected);
+    },
+    { timeout: 5000, polling: 100 },
+    TURN_TWO_TEXT
+  );
+  assert.equal(streamRequestCount, 2, 'Chip click must stream a second turn.');
+
+  diagnostics.assertClean(page);
+  console.log('✅ [smoke-test] Chat send flow and suggestion chips passed.');
+  await page.close();
+}
+
 async function runSmokeTest() {
   let browser = null;
   let previewProcess = null;
@@ -1017,6 +1182,7 @@ async function runSmokeTest() {
     await runMediaPass(browser, realManifest, diagnostics);
     await runPlaceholderPass(browser, realManifest, diagnostics);
     await runPartialPass(browser, realManifest, diagnostics);
+    await runChipsPass(browser, realManifest, diagnostics);
     diagnostics.assertClean();
 
     console.log('✅ [smoke-test] All browser passes completed successfully:');
