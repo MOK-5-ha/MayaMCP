@@ -1,6 +1,8 @@
 export interface StreamEvent {
   type: string;
   content?: string;
+  full_response?: string;
+  sentence?: string;
   text_chunk?: string;
   viseme?: string;
   session_id?: string;
