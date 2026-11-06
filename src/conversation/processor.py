@@ -55,6 +55,10 @@ logger = get_logger(__name__)
 # Timeout for RAG pipeline calls to prevent indefinite blocking
 RAG_TIMEOUT = 10.0  # seconds
 
+# Author name on real ADK events from the streaming agent ("bartender");
+# test doubles use "model" per the stream mock contract.
+_STREAM_AGENT_AUTHOR = "bartender"
+
 # Thread pool for fire-and-forget chip generation triggers (non-blocking)
 _chip_trigger_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=5, thread_name_prefix="chip_trigger"
@@ -596,7 +600,7 @@ def process_order_stream(
 
                         # Instantiate ADK Agent
                         agent = Agent(
-                            name="bartender",
+                            name=_STREAM_AGENT_AUTHOR,
                             model=llm,
                             instruction=system_instruction,
                             tools=get_all_tools()
@@ -682,7 +686,10 @@ def process_order_stream(
 
                     elif msg_type == 'event':
                         event: Event = data
-                        if event.author == 'model' and event.content and event.content.parts:
+                        # Real ADK events carry the agent's name as author
+                        # (_STREAM_AGENT_AUTHOR); test doubles use "model"
+                        # per the stream mock contract.
+                        if event.author in {_STREAM_AGENT_AUTHOR, 'model'} and event.content and event.content.parts:
                             text_chunk = "".join(part.text for part in event.content.parts if part.text)
 
                             if text_chunk:
