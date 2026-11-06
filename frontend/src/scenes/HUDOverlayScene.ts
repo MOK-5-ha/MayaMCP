@@ -60,7 +60,7 @@ export class HUDOverlayScene extends Phaser.Scene {
       onError: (message) => this.setDialogueText(message),
     });
 
-    this.chipBar = new ChipBar(this, dialogueX, height - 215, {
+    this.chipBar = new ChipBar(this, dialogueX, height - 215, dialogueWidth, {
       onChipClick: (text) => chat.send(text),
     });
 

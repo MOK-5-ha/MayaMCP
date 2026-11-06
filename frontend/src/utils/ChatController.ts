@@ -21,6 +21,7 @@ export class ChatController {
   private client = new SSEClient();
   private hud: ChatControllerCallbacks | null = null;
   private busy = false;
+  private completedTurn = false;
 
   /** Bind the HUD callbacks (called by HUDOverlayScene on scene create). */
   public bindHUD(callbacks: ChatControllerCallbacks): void {
@@ -37,11 +38,15 @@ export class ChatController {
       return;
     }
     this.busy = true;
+    this.completedTurn = false;
     this.hud.onSend(trimmed);
     this.client.connectAndStream(
       trimmed,
       (event) => this.handleEvent(event),
       () => {
+        // EventSource fires error when the server closes the stream after
+        // 'complete'; suppress it so the reply is not overwritten.
+        if (this.completedTurn) return;
         this.busy = false;
         this.hud?.onError("I'm sorry — the connection to the bar was interrupted. Please try again.");
       },
@@ -65,6 +70,7 @@ export class ChatController {
     }
     if (event.type === 'complete') {
       this.busy = false;
+      this.completedTurn = true;
       this.hud.onComplete(event.full_response ?? event.content ?? '');
       return;
     }

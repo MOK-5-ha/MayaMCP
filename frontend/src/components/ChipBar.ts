@@ -31,7 +31,13 @@ export class ChipBar {
   private pollCount = 0;
   private destroyed = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, callbacks: ChipBarCallbacks) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    width: number,
+    callbacks: ChipBarCallbacks
+  ) {
     this.scene = scene;
     this.callbacks = callbacks;
     this.domElement = this.scene.add.dom(x, y).createFromHTML(`
@@ -42,6 +48,7 @@ export class ChipBar {
     `).setOrigin(0, 0);
 
     this.root = this.domElement.node.querySelector<HTMLElement>('#chip-bar')!;
+    this.root.style.width = `${width}px`;
     this.status = this.root.querySelector<HTMLElement>('#chip-status')!;
     this.buttons = this.root.querySelector<HTMLElement>('#chip-buttons')!;
     this.status.textContent = '';
