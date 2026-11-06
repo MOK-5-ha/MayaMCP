@@ -131,18 +131,6 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     return {"status": "success"}
 
 
-# Mount Gradio sub-app under /ui for backward compatibility / legacy interface access
-try:
-    from gradio.routes import mount_gradio_app
-
-    from src.ui.launcher import launch_bartender_interface
-
-    gradio_blocks = launch_bartender_interface()
-    app = mount_gradio_app(app, gradio_blocks, path="/ui")
-except Exception as gradio_err:
-    logger.info(f"Gradio mounting skipped: {gradio_err}")
-
-
 # Main execution
 if __name__ == "__main__":
     import os
