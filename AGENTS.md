@@ -12,7 +12,7 @@ src/
 ├── memvid/          # Memvid RAG implementation
 ├── payments/        # Coinbase CDP crypto payment client and logic
 ├── rag/             # RAG pipeline (embeddings, retrieval, vector store)
-├── routers/         # FastAPI REST & SSE v1 API routers (chat, payments, session)
+├── routers/         # FastAPI REST & SSE v1 API routers (chat, payments, session, chips)
 ├── schemas/         # Pydantic v2 data transfer schemas
 ├── security/        # Input/output scanning, encryption, scan config
 ├── utils/           # Errors, helpers, state management
