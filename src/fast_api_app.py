@@ -95,7 +95,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             from fastapi.staticfiles import StaticFiles
 
             app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
-    yield
+
+    # Session cleanup must run in the process serving requests; uvicorn
+    # reload workers are separate processes that never see CLI-side init.
+    from src.utils.state_manager import start_session_cleanup, stop_session_cleanup
+
+    start_session_cleanup()
+    try:
+        yield
+    finally:
+        stop_session_cleanup()
 
 
 app: FastAPI = get_fast_api_app(
