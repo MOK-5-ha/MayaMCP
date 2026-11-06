@@ -1,24 +1,14 @@
 """Suggestion chip delivery endpoints."""
 
-from collections.abc import MutableMapping
-
 from fastapi import APIRouter, Header, Request, Response
 
 from ..config.logging_config import get_logger
 from ..schemas.chips import ChipsResponse, SuggestionChipSet
 from ..utils.state_manager import get_chip_state
+from .session import get_session_store
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/chips", tags=["Chips"])
-
-# Process-local fallback store
-_SESSION_STORE = {}
-
-
-def get_session_store(request: Request) -> MutableMapping:
-    if hasattr(request.app.state, "session_store") and request.app.state.session_store is not None:
-        return request.app.state.session_store
-    return _SESSION_STORE
 
 
 def _coerce_chips(value) -> list:

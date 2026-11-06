@@ -402,3 +402,19 @@ def test_chips_dual_prefix_mount(client, chips_store):
         response = client.get(path, headers={"X-Session-ID": "chips-alt-prefix"})
         assert response.status_code == 200
         assert len(response.json()["chips"]) == 3
+
+
+def test_chips_reads_shared_chat_session_store(client):
+    """Without an injected app store, the chips endpoint must read the same
+    fallback store the chat router writes to. A private per-router fallback
+    dict splits the write and read paths and silently returns empty chips."""
+    from src.routers.session import _SESSION_STORE
+
+    sid = "chips-shared-store-session"
+    set_current_chips(sid, _SESSION_STORE, _sample_chip_set())
+    try:
+        response = client.get("/api/v1/chips", headers={"X-Session-ID": sid})
+        assert response.status_code == 200
+        assert len(response.json()["chips"]) == 3
+    finally:
+        _SESSION_STORE.pop(sid, None)
