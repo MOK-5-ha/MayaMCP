@@ -74,11 +74,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.agent_app_name = adk_app.name
     # Mount static frontend bundle directory if available (must be mounted after all API routes)
     frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
-    if os.path.exists(frontend_dist) and not any(
-        getattr(r, "name", "") == "static" for r in app.routes
-    ):
-        from fastapi.staticfiles import StaticFiles
-        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+    if os.path.exists(frontend_dist):
+        # ADK's get_fast_api_app registers a "/" redirect to /dev-ui/ plus a
+        # "static"-named mount for its own assets; drop the root redirect so
+        # the Phaser SPA can claim root, and only skip mounting when our dist
+        # is already mounted.
+        app.router.routes = [
+            r
+            for r in app.router.routes
+            if not (
+                getattr(r, "path", None) == "/"
+                and getattr(r, "name", "") == "redirect_root_to_dev_ui"
+            )
+        ]
+        if not any(
+            getattr(r, "name", "") == "static"
+            and getattr(getattr(r, "app", None), "directory", None) == frontend_dist
+            for r in app.routes
+        ):
+            from fastapi.staticfiles import StaticFiles
+
+            app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
     yield
 
 
