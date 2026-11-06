@@ -11,7 +11,7 @@ try:
 except ImportError:
     genai = None
 
-_VALIDATION_TIMEOUT_S = 10
+_VALIDATION_TIMEOUT_MS = 10_000  # HttpOptions.timeout is milliseconds, not seconds
 
 
 def validate_gemini_key(
@@ -59,7 +59,7 @@ def validate_gemini_key(
             vertexai=True,
             project=project,
             location=location,
-            http_options={"timeout": _VALIDATION_TIMEOUT_S},
+            http_options={"timeout": _VALIDATION_TIMEOUT_MS},
         )
         next(iter(client.models.list(config={"page_size": 1})), None)
         logger.info("GCP Vertex AI Mode validated successfully for project %s", project)
