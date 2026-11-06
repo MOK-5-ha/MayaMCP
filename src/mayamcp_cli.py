@@ -15,6 +15,13 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+# uvicorn reload/watch subprocesses don't inherit in-process sys.path
+# mutations; propagate the checkout path via PYTHONPATH so the app target
+# ("src.fast_api_app:app") resolves in every worker regardless of cwd.
+if str(_REPO_ROOT) not in os.environ.get("PYTHONPATH", ""):
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(_REPO_ROOT), os.environ.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
 
 import uvicorn
 
@@ -23,7 +30,6 @@ from src.config.logging_config import setup_logging
 from src.config.model_config import get_model_config, is_valid_gemini_model
 from src.utils import initialize_state
 from src.utils.rate_limiter import get_rate_limiter
-from src.utils.state_manager import start_session_cleanup, stop_session_cleanup
 
 
 def main():
@@ -51,9 +57,9 @@ def main():
 
     # Initialize application state and security services
     initialize_state()
-    start_session_cleanup()
     get_rate_limiter()  # Initialize singleton
-    logger.info("Application state and security services initialized")
+    # NOTE: session cleanup starts in fast_api_app's lifespan so it runs in
+    # whichever process serves requests (uvicorn reload spawns workers).
 
     frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
     if not os.path.isdir(frontend_dist):
@@ -62,16 +68,12 @@ def main():
             "Build the Phaser SPA: cd frontend && npm install && npm run build"
         )
 
-    try:
-        uvicorn.run(
-            "src.fast_api_app:app",
-            host=os.getenv("HOST", "0.0.0.0"),  # nosec B104 - overridable via HOST env var; intentional for containerised deployment
-            port=int(os.getenv("PORT", "8000")),
-            reload=os.getenv("DEBUG", "False").lower() == "true",
-        )
-    finally:
-        stop_session_cleanup()
-        logger.info("Security services stopped")
+    uvicorn.run(
+        "src.fast_api_app:app",
+        host=os.getenv("HOST", "0.0.0.0"),  # nosec B104 - overridable via HOST env var; intentional for containerised deployment
+        port=int(os.getenv("PORT", "8000")),
+        reload=os.getenv("DEBUG", "False").lower() == "true",
+    )
 
 
 if __name__ == "__main__":
