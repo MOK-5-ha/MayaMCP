@@ -61,19 +61,14 @@ markers = [
     "memvid: marks tests related to Memvid functionality",
     "rag: marks tests related to RAG functionality",
     "llm: marks tests related to LLM functionality",
-    "ui: marks tests related to UI functionality",
     "bdd: marks tests as BDD acceptance tests"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:websockets.*:",
-    "ignore::DeprecationWarning:gradio.*:",
-    "ignore::DeprecationWarning:gradio_client.*:",
     "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated.*:DeprecationWarning:starlette\\.testclient:",
     "ignore:BaseAgentConfig is deprecated and will be removed.*:DeprecationWarning:",
     "ignore:\\[EXPERIMENTAL\\].*:UserWarning:google\\.adk\\..*:",
     "ignore:Passing (nodeid|baseid) to .*:pytest.PytestRemovedIn10Warning:",
-    "ignore:The parameters have been moved from the Blocks constructor to the launch\\(\\) method in Gradio 6\\.0.*:UserWarning:",
-    "ignore:.*tag was found in the content of a `gr\\.HTML` component.*:UserWarning:gradio.*:",
 ]
 
 
@@ -123,4 +118,3 @@ ignore = [
 "tests/*" = ["B007", "B011", "B017", "B904", "E402", "E731", "F401", "F811", "F841", "S101", "S105", "S106", "S110", "S603", "W291", "W293"]  # test doubles and assertions
 "src/payments/crypto_client.py" = ["S106"]  # 'eth'/'usdc' are blockchain token symbols, not passwords
 "src/llm/tools.py" = ["E402"]  # tool() decorator factory is intentionally defined before downstream imports
-"src/ui/tab_overlay.py" = ["E402"]

@@ -95,7 +95,7 @@ def get_session_llm(
     """Return a cached or newly created LLM instance for session strictly in Vertex AI Mode.
 
     Args:
-        session_id: Gradio session hash.
+        session_id: Session identifier.
         api_key: Optional deprecated parameter.
         tools: Tool definitions to bind to LLM.
         gcp_project: Optional GCP Project ID.
@@ -210,7 +210,7 @@ def get_session_tts(session_id: str, api_key: str | None = None):
     If ``api_key`` is ``None`` or empty, returns ``None`` (TTS disabled).
 
     Args:
-        session_id: Gradio session hash.
+        session_id: Session identifier.
         api_key: User-provided Cartesia API key (optional).
 
     Returns:

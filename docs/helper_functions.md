@@ -8,13 +8,13 @@ This document catalogs the centralized helper functions located in `src/utils/he
 
 ### `extract_session_id(request: Any = None, default: str = "default") -> str`
 - **Location**: [`src/utils/helpers.py`](../src/utils/helpers.py)
-- **Purpose**: Safely extracts the active `session_id` string from Gradio `gr.Request` objects, state dictionaries, or direct strings with a fallback default.
-- **Use Cases**: Gradio UI callbacks, API endpoints, BYOK session handlers (`src/ui/handlers.py`, `src/ui/api_key_modal.py`).
+- **Purpose**: Safely extracts the active `session_id` string from FastAPI request objects, state dictionaries, or direct strings with a fallback default.
+- **Use Cases**: API endpoints (`src/routers/`), session-aware request handlers.
 
 ```python
 from src.utils.helpers import extract_session_id
 
-# Example usage in Gradio handler:
+# Example usage in a FastAPI router:
 session_id = extract_session_id(request)
 ```
 

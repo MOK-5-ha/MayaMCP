@@ -10,10 +10,10 @@ logger = get_logger(__name__)
 
 
 def extract_session_id(request: Any = None, default: str = "default") -> str:
-    """Extract session_id from Gradio Request object, dictionary, or string with fallback.
+    """Extract session_id from a FastAPI request object, dictionary, or string with fallback.
 
     Args:
-        request: Gradio request object, dictionary containing session details, or session string.
+        request: FastAPI request object, dictionary containing session details, or session string.
         default: Fallback session ID string.
 
     Returns:

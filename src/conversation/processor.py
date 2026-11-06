@@ -142,13 +142,13 @@ def process_order(
 
     Args:
         user_input_text: User's input
-        current_session_history: Session history for Gradio
+        current_session_history: Session history for the response
         llm: Initialized LLM instance
         rag_retriever: Memvid retriever for video-based RAG (optional)
         api_key: API key for RAG pipeline (optional)
 
     Returns:
-        Tuple of (response_text, updated_history, updated_history_for_gradio, updated_order, audio_data)
+        Tuple of (response_text, updated_history, updated_history_for_client, updated_order, audio_data)
     """
     session_id, app_state = _get_store_and_session(session_id, app_state)
     tracer = get_tracer("mayamcp.conversation")
@@ -246,11 +246,11 @@ def process_order(
                 logger.warning("Output blocked by security scanner (speech act)")
                 agent_response_text = output_scan_result.sanitized_text
 
-            updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
+            updated_history_for_client = append_to_history(current_session_history, user_input_text, agent_response_text)
 
             # Return documented 5-tuple
             clear_current_session()
-            return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
+            return agent_response_text, updated_history_for_client, updated_history_for_client, get_current_order_state(session_id, app_state), None
 
         # Fallback to traditional intent detection (only if not asking about tips)
         elif intent_match['intent'] and intent_match['confidence'] >= 0.5 and not re.search(r'\btips?\b', user_input_text, re.IGNORECASE):
@@ -278,10 +278,10 @@ def process_order(
                 logger.warning("Output blocked by security scanner (intent)")
                 agent_response_text = output_scan_result.sanitized_text
 
-            updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
+            updated_history_for_client = append_to_history(current_session_history, user_input_text, agent_response_text)
 
             clear_current_session()
-            return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
+            return agent_response_text, updated_history_for_client, updated_history_for_client, get_current_order_state(session_id, app_state), None
 
         # Prepare message history
         # Get current phase and create appropriate prompt
@@ -296,7 +296,7 @@ def process_order(
 
         system_instruction = combined_prompt + "\n\nHere is the menu:\n" + menu_text + "\n\n" + order_context
 
-        # Convert Gradio history
+        # Convert chat history
         history_limit = 10
         limited_history = current_session_history[-history_limit:]
 
@@ -445,9 +445,9 @@ def process_order(
                     logger.warning("Output blocked by security scanner")
                     agent_response_text = output_scan_result.sanitized_text
 
-                updated_history_for_gradio = append_to_history(current_session_history, user_input_text, agent_response_text)
+                updated_history_for_client = append_to_history(current_session_history, user_input_text, agent_response_text)
 
-                return agent_response_text, updated_history_for_gradio, updated_history_for_gradio, get_current_order_state(session_id, app_state), None
+                return agent_response_text, updated_history_for_client, updated_history_for_client, get_current_order_state(session_id, app_state), None
 
             except Exception as e:
                 logger.exception(f"Critical error in process_order: {str(e)}")
@@ -474,7 +474,7 @@ def process_order_stream(
 
     Args:
         user_input_text: User's input
-        current_session_history: Session history for Gradio
+        current_session_history: Session history for the response
         llm: Initialized LLM instance
         rag_retriever: Memvid retriever for video-based RAG (optional)
         api_key: API key for RAG pipeline (optional)
@@ -515,7 +515,7 @@ def process_order_stream(
             }
             return
 
-        # Convert Gradio history to Gemini format with same window
+        # Convert chat history to Gemini format with same window
         history_limit = 10
         truncated_history = current_session_history[-history_limit:]
 
