@@ -81,6 +81,18 @@ class ChipGenerationContext(BaseModel):
     )
 
 
+class ChipsResponse(BaseModel):
+    """Suggestion chips delivered to the SPA via GET /api/v1/chips."""
+
+    session_id: str = Field(..., description="Session identifier")
+    chips: list[SuggestionChip] = Field(
+        default_factory=list,
+        description="Current suggestion chips (empty when none are ready)",
+    )
+    generation_seq: int = Field(0, description="Chip generation sequence counter")
+    failure_count: int = Field(0, description="Chip generation failure count")
+
+
 @dataclass
 class ChipState:
     """Per-session chip state stored in session manager."""
