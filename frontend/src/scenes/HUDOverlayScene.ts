@@ -10,7 +10,7 @@ interface HUDData {
 }
 
 export class HUDOverlayScene extends Phaser.Scene {
-  private dialogueBoxText: Phaser.GameObjects.Text | null = null;
+  private dialogueText: HTMLElement | null = null;
   private chatAccumulated = '';
   private chipBar: ChipBar | null = null;
 
@@ -38,20 +38,19 @@ export class HUDOverlayScene extends Phaser.Scene {
       color: '#000000'
     });
 
-    this.dialogueBoxText = this.add.text(
-      dialogueX + 15,
-      height - 155,
-      'Welcome to the bar, stranger. What can I get started for you today?',
-      {
-        font: '13px Courier, monospace',
-        color: '#e0e0ff',
-        wordWrap: { width: dialogueWidth - 30 }
-      }
-    );
+    const dialogueEl = this.add.dom(dialogueX + 15, height - 155).createFromHTML(`
+      <div id="dialogue-text" class="dialogue-text" role="log" aria-label="Maya's reply" tabindex="0"></div>
+    `).setOrigin(0, 0);
+    this.dialogueText = dialogueEl.node.querySelector<HTMLElement>('#dialogue-text')!;
+    this.dialogueText.style.width = `${dialogueWidth - 30}px`;
+    this.setDialogueText('Welcome to the bar, stranger. What can I get started for you today?');
 
     const chat = data.chat;
     chat.bindHUD({
-      onSend: () => this.setDialogueText('…'),
+      onSend: () => {
+        this.chatAccumulated = '';
+        this.setDialogueText('…');
+      },
       onDelta: (delta) => this.appendDialogueText(delta),
       onComplete: (full) => {
         this.setDialogueText(full);
@@ -60,7 +59,7 @@ export class HUDOverlayScene extends Phaser.Scene {
       onError: (message) => this.setDialogueText(message),
     });
 
-    this.chipBar = new ChipBar(this, dialogueX, height - 215, dialogueWidth, {
+    this.chipBar = new ChipBar(this, dialogueX, height - 310, dialogueWidth, {
       onChipClick: (text) => chat.send(text),
     });
 
@@ -74,9 +73,9 @@ export class HUDOverlayScene extends Phaser.Scene {
     const chatInput = chatInputEl.node.querySelector<HTMLInputElement>('#chat-input')!;
     chatForm.addEventListener('submit', (event) => {
       event.preventDefault();
-      const value = chatInput.value;
-      chatInput.value = '';
-      chat.send(value);
+      if (chat.send(chatInput.value)) {
+        chatInput.value = '';
+      }
     });
 
     const topHudBg = this.add.graphics();
@@ -99,15 +98,16 @@ export class HUDOverlayScene extends Phaser.Scene {
   }
 
   public setDialogueText(text: string): void {
-    if (this.dialogueBoxText) {
-      this.dialogueBoxText.setText(text);
+    if (this.dialogueText) {
+      this.dialogueText.textContent = text;
+      this.dialogueText.scrollTop = this.dialogueText.scrollHeight;
     }
   }
 
   private appendDialogueText(delta: string): void {
-    if (this.dialogueBoxText) {
+    if (this.dialogueText) {
       this.chatAccumulated += delta;
-      this.dialogueBoxText.setText(this.chatAccumulated);
+      this.setDialogueText(this.chatAccumulated);
     }
   }
 }

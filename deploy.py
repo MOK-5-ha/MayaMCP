@@ -207,12 +207,14 @@ def serve_maya():
     )
     web_app.state.session_store = state_store
 
-    from routers import chat_router, payments_router, session_router
+    from routers import chat_router, chips_router, payments_router, session_router
     web_app.include_router(chat_router, prefix="/api/v1")
+    web_app.include_router(chips_router, prefix="/api/v1")
     web_app.include_router(payments_router, prefix="/api/v1")
     web_app.include_router(session_router, prefix="/api/v1")
 
     web_app.include_router(chat_router, prefix="/api")
+    web_app.include_router(chips_router, prefix="/api")
     web_app.include_router(payments_router, prefix="/api")
     web_app.include_router(session_router, prefix="/api")
 

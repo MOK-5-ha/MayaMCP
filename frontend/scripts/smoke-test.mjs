@@ -886,16 +886,20 @@ async function runChipsPass(browser, realManifest, diagnostics) {
   };
   let streamRequestCount = 0;
   let chipsRequestCount = 0;
-  const TURN_ONE_TEXT = 'A classic Old Fashioned, straight up. A timeless choice.';
+  const TURN_ONE_TEXT =
+    'A classic Old Fashioned, straight up. A timeless choice. Let me walk you through the rest of the menu as well: we have a Negroni for the bitter lovers, a Margarita with fresh lime and a salted rim, a Mojito muddled with mint from the garden out back, an Espresso Martini for the late shift, a Whiskey Sour with a silky foam, and a zero-proof Spritz if you are pacing yourself tonight. Every one of them can be made with top-shelf pours or well spirits, your call. The kitchen also sends over spiced nuts and dark chocolate truffles that pair beautifully with the darker drinks. Take your time, stranger, the night is young and the bar is yours.';
   const TURN_TWO_TEXT = 'The full menu is chalked on the wall above the bar.';
   const chipsPayload = {
     session_id: SESSION_ID,
     generation_seq: 1,
     failure_count: 0,
     chips: [
-      { text: 'Show me the menu', type: 'action', action_id: 'menu' },
-      { text: 'An Old Fashioned, please', type: 'dialogue' },
-      { text: 'Surprise me', type: 'dialogue' },
+      { text: 'I would like to see the full menu', type: 'action', action_id: 'menu' },
+      { text: 'Tell me more about the Old Fashioned', type: 'dialogue' },
+      { text: 'What whisky do you recommend tonight', type: 'dialogue' },
+      { text: 'Show me something with gin instead', type: 'dialogue' },
+      { text: 'What is the most popular drink here', type: 'dialogue' },
+      { text: 'Surprise me with your own creation', type: 'dialogue' },
     ],
   };
 
@@ -988,17 +992,32 @@ async function runChipsPass(browser, realManifest, diagnostics) {
   await page.keyboard.press('Enter');
   await page.waitForFunction(
     (expected) => {
-      const scene = window.__MAYA_GAME__.scene.getScene('HUDOverlayScene');
-      return scene?.dialogueBoxText?.text?.includes(expected);
+      return document.getElementById('dialogue-text')?.textContent?.includes(expected);
     },
     { timeout: 5000, polling: 100 },
     TURN_ONE_TEXT
   );
   assert.equal(streamRequestCount, 1, 'Turn 1 must stream exactly once.');
+  const dialogueScroll = await page.evaluate(() => {
+    const el = document.getElementById('dialogue-text');
+    return {
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+      scrollTop: el.scrollTop,
+    };
+  });
+  assert.ok(
+    dialogueScroll.scrollHeight > dialogueScroll.clientHeight,
+    'Long replies must be scrollable inside the dialogue panel.'
+  );
+  assert.ok(
+    dialogueScroll.scrollTop + dialogueScroll.clientHeight >= dialogueScroll.scrollHeight - 2,
+    'Dialogue must auto-scroll to the newest text.'
+  );
 
   // Chip bar polls (first poll empty, second returns chips) and renders.
   await page.waitForFunction(
-    () => document.querySelectorAll('#chip-buttons .chip-button').length === 3,
+    () => document.querySelectorAll('#chip-buttons .chip-button').length === 6,
     { timeout: 5000, polling: 100 }
   );
   assert.ok(chipsRequestCount >= 2, 'Chip polling must retry past the empty first poll.');
@@ -1011,22 +1030,50 @@ async function runChipsPass(browser, realManifest, diagnostics) {
       minHeights: buttons.map((b) => Number.parseFloat(getComputedStyle(b).minHeight)),
       ariaLabel: document.getElementById('chip-bar')?.getAttribute('aria-label'),
       liveRegion: document.getElementById('chip-status')?.getAttribute('aria-live'),
+      buttonsClientHeight: document.getElementById('chip-buttons').clientHeight,
+      buttonsScrollHeight: document.getElementById('chip-buttons').scrollHeight,
     };
   });
-  assert.equal(chipSemantics.count, 3);
+  assert.equal(chipSemantics.count, 6);
+  assert.ok(
+    chipSemantics.buttonsClientHeight <= 94,
+    'Chip button area must stay bounded to two rows.'
+  );
+  assert.ok(
+    chipSemantics.buttonsScrollHeight > chipSemantics.buttonsClientHeight,
+    'Six long chips must overflow into the scrollable button area.'
+  );
   assert.ok(chipSemantics.types, 'Chip buttons must be type="button".');
   for (const minHeight of chipSemantics.minHeights) {
     assert.ok(minHeight >= 44, `Chip buttons must meet 44px targets (got ${minHeight}).`);
   }
   assert.equal(chipSemantics.ariaLabel, 'Suggested replies');
   assert.equal(chipSemantics.liveRegion, 'polite');
+  const geometry = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas').getBoundingClientRect();
+    const bar = document.getElementById('chip-bar').getBoundingClientRect();
+    const scale = canvas.height / 360;
+    return {
+      barTop: bar.top,
+      barBottom: bar.bottom,
+      nameTagTop: canvas.top + (360 - 185) * scale,
+      hudBottom: canvas.top + 32 * scale,
+    };
+  });
+  assert.ok(
+    geometry.barBottom <= geometry.nameTagTop + 1,
+    `Chip bar must not cover the name tag or dialogue: ${JSON.stringify(geometry)}`
+  );
+  assert.ok(
+    geometry.barTop >= geometry.hudBottom - 1,
+    `Chip bar must stay below the top HUD strip: ${JSON.stringify(geometry)}`
+  );
 
   // Turn 2: clicking a chip sends its text as the next user message.
   await page.click('#chip-buttons .chip-button');
   await page.waitForFunction(
     (expected) => {
-      const scene = window.__MAYA_GAME__.scene.getScene('HUDOverlayScene');
-      return scene?.dialogueBoxText?.text?.includes(expected);
+      return document.getElementById('dialogue-text')?.textContent?.includes(expected);
     },
     { timeout: 5000, polling: 100 },
     TURN_TWO_TEXT

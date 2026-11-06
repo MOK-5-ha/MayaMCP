@@ -29,6 +29,8 @@ export class ChipBar {
   private buttons: HTMLElement;
   private pollTimer: number | null = null;
   private pollCount = 0;
+  private pollRun = 0;
+  private abortController: AbortController | null = null;
   private destroyed = false;
 
   constructor(
@@ -43,7 +45,7 @@ export class ChipBar {
     this.domElement = this.scene.add.dom(x, y).createFromHTML(`
       <section id="chip-bar" class="chip-bar" aria-label="Suggested replies">
         <div id="chip-status" class="chip-status" aria-live="polite" aria-atomic="true"></div>
-        <div id="chip-buttons" class="chip-buttons" role="group" aria-label="Suggested reply buttons"></div>
+        <div id="chip-buttons" class="chip-buttons" role="group" aria-label="Suggested reply buttons" tabindex="0"></div>
       </section>
     `).setOrigin(0, 0);
 
@@ -61,6 +63,8 @@ export class ChipBar {
     if (this.destroyed) return;
     this.stopPolling();
     this.pollCount = 0;
+    this.pollRun += 1;
+    this.abortController = new AbortController();
     this.root.classList.remove('is-hidden');
     this.buttons.replaceChildren();
     this.status.textContent = 'Maya is thinking of suggestions…';
@@ -79,6 +83,8 @@ export class ChipBar {
       window.clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    this.abortController?.abort();
+    this.abortController = null;
     if (message !== undefined && !this.destroyed) {
       this.status.textContent = message;
     }
@@ -92,22 +98,27 @@ export class ChipBar {
       this.stopPolling();
       return;
     }
+    const run = this.pollRun;
+    const signal = this.abortController?.signal;
     try {
       const sessionId = localStorage.getItem('maya_session_id') ?? '';
       const response = await fetch('/api/v1/chips', {
         headers: sessionId ? { 'X-Session-ID': sessionId } : {},
+        signal,
       });
+      if (this.destroyed || run !== this.pollRun) return;
       if (!response.ok) {
         throw new Error(`chips poll failed: ${response.status}`);
       }
       const data: { chips?: ChipPayload[] } = await response.json();
+      if (this.destroyed || run !== this.pollRun) return;
       if (Array.isArray(data.chips) && data.chips.length > 0) {
         this.stopPolling();
         this.renderChips(data.chips);
       }
     } catch {
-      // Transient failures (generation still in flight, restarts): keep polling
-      // until the bounded window expires, then hide the bar silently.
+      // Transient failures (generation in flight, aborted superseded polls):
+      // keep polling until the bounded window expires, then hide silently.
     }
   }
 

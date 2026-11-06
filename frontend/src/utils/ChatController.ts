@@ -32,10 +32,11 @@ export class ChatController {
     return this.busy;
   }
 
-  public send(text: string): void {
+  /** Returns true when the message was accepted; false while busy or empty. */
+  public send(text: string): boolean {
     const trimmed = text.trim();
     if (!trimmed || this.busy || !this.hud) {
-      return;
+      return false;
     }
     this.busy = true;
     this.completedTurn = false;
@@ -51,6 +52,7 @@ export class ChatController {
         this.hud?.onError("I'm sorry — the connection to the bar was interrupted. Please try again.");
       },
     );
+    return true;
   }
 
   public disconnect(): void {

@@ -229,7 +229,16 @@
   cursor: default;
 }
 
-/* Suggestion chip bar (Phaser DOM overlay above the dialogue panel) */
+/* Suggestion chip bar (Phaser DOM overlay above the dialogue panel).
+   Fixed 120px box with bottom-aligned content: Phaser caches DOM element
+   sizes at creation, so a measured origin would drift as chips render. */
+.chip-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 120px;
+}
+
 .chip-bar.is-hidden {
   display: none;
 }
@@ -245,6 +254,31 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  max-height: 94px;
+  overflow-y: auto;
+}
+
+.chip-buttons:focus-visible {
+  outline: 3px solid #ff2ea6;
+  outline-offset: 1px;
+}
+
+/* Scrollable dialogue log inside the fixed-height panel */
+.dialogue-text {
+  max-height: 100px;
+  overflow-y: auto;
+  color: #e0e0ff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: auto;
+}
+
+.dialogue-text:focus-visible {
+  outline: 3px solid #ff2ea6;
+  outline-offset: 1px;
 }
 
 .chip-button {
