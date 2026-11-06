@@ -20,9 +20,6 @@ pandas>=3.1.1
 scikit-learn>=1.9.1
 rouge-score>=0.1.2
 
-# UI (Gradio 7.x development source, pinned until a Gradio 7 release supports Pillow 13)
-gradio @ git+https://github.com/gradio-app/gradio@dd82f435ee94c05ab9cdf946861a95ab77e72a47
-
 # TTS (Cartesia 4.x unified SDK)
 cartesia>=4.2.0,<5.0.0
 

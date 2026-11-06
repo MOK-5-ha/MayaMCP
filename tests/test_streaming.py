@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.llm.client import stream_gemini_api
-from src.ui.handlers import handle_gradio_streaming_input
 from src.utils.streaming import SentenceBuffer, create_streaming_response_generator
 from src.voice.streaming_tts import (
     create_pipelined_tts_generator,
@@ -208,99 +207,6 @@ class TestCreatePipelinedTTSGenerator:
             assert events[2]['type'] == 'sentence'  # Second sentence
             assert events[3]['type'] == 'audio_chunk'  # Second audio
             assert events[4]['type'] == 'generation_complete'  # Completion
-
-
-class TestHandleGradioStreamingInput:
-    """Test cases for streaming Gradio input handler."""
-
-    def test_handle_gradio_streaming_input_success(self):
-        """Test successful streaming input handling."""
-        # Mock dependencies
-        mock_llm = MagicMock()
-        mock_cartesia_client = MagicMock()
-        mock_app_state = {}
-
-        # Mock streaming response
-        def mock_process_order_stream(*args, **kwargs):
-            yield {'type': 'text_chunk', 'content': 'Hello ', 'partial': 'Hello '}
-            yield {'type': 'sentence', 'content': 'world.'}
-            yield {'type': 'complete', 'content': 'Hello world.'}
-
-        with patch('src.ui.handlers.process_order_stream', mock_process_order_stream), \
-             patch('src.ui.handlers.has_valid_keys', return_value=True), \
-             patch('src.ui.handlers.get_api_key_state', return_value={'gcp_project': 'test-project', 'cartesia_key': 'test-cartesia'}), \
-             patch('src.ui.handlers.get_session_llm', return_value=mock_llm), \
-             patch('src.ui.handlers.get_session_tts', return_value=mock_cartesia_client), \
-             patch('src.ui.handlers.get_voice_audio', return_value=b"audio_data"):
-            generator = handle_gradio_streaming_input(
-                user_input="Hello",
-                session_history_state=[],
-                current_tab=0.0,
-                current_balance=1000.0,
-                current_tip_percentage=None,
-                current_tip_amount=0.0,
-                streaming_enabled=True,
-                request=MagicMock(),
-                tools=[],
-                rag_retriever=None,
-                rag_api_key=None,
-                app_state=mock_app_state,
-                avatar_path="test_avatar.jpg"
-            )
-
-            events = list(generator)
-
-            # Should get text chunks
-            text_events = [e for e in events if e['type'] == 'text_chunk']
-            assert len(text_events) == 1
-            assert text_events[0]['content'] == 'Hello '
-
-            # Should get audio chunks for TTS
-            audio_events = [e for e in events if e['type'] == 'audio_chunk']
-            assert len(audio_events) == 1
-            assert audio_events[0]['content'] == b"audio_data"
-            assert audio_events[0]['sentence'] == 'world.'
-
-            # Should get completion
-            complete_events = [e for e in events if e['type'] == 'complete']
-            assert len(complete_events) == 1
-            assert complete_events[0]['content'] == 'Hello world.'
-
-    def test_handle_gradio_streaming_input_disabled(self):
-        """Test streaming input handler when streaming is disabled."""
-        # Mock dependencies
-        mock_llm = MagicMock()
-        mock_cartesia_client = MagicMock()
-        mock_app_state = {}
-
-        # Mock traditional response
-        def mock_process_order_traditional(*args, **kwargs):
-            return "Traditional response", [{"role": "assistant", "content": "Traditional response"}], [{"role": "assistant", "content": "Traditional response"}], [], None
-
-        with patch('src.ui.handlers.process_order', mock_process_order_traditional), \
-             patch('src.ui.handlers.has_valid_keys', return_value=True), \
-             patch('src.ui.handlers.get_api_key_state', return_value={'gcp_project': 'test-project', 'cartesia_key': 'test-cartesia'}), \
-             patch('src.ui.handlers.get_session_llm', return_value=mock_llm), \
-             patch('src.ui.handlers.get_session_tts', return_value=mock_cartesia_client):
-            result = handle_gradio_streaming_input(
-                user_input="Hello",
-                session_history_state=[],
-                current_tab=0.0,
-                current_balance=1000.0,
-                current_tip_percentage=None,
-                current_tip_amount=0.0,
-                streaming_enabled=False,
-                request=MagicMock(),
-                tools=[],
-                rag_retriever=None,
-                rag_api_key=None,
-                app_state=mock_app_state,
-                avatar_path="test_avatar.jpg"
-            )
-
-            assert isinstance(result, tuple)
-            history = result[1]
-            assert history[-1]['content'] == 'Traditional response'
 
 
 class TestStreamGeminiAPI:

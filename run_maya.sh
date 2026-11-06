@@ -44,10 +44,11 @@ python -m pip install -e .
 # Create assets directory if it doesn't exist
 mkdir -p assets
 
-# Run the application via console script (fallback to python main.py)
+# Run the application via console script
 echo "🚀 Launching Maya..."
 if command -v mayamcp &> /dev/null; then
     mayamcp
 else
-    python main.py
+    echo "❌ Error: mayamcp console script not found. Run 'pip install -e .' first."
+    exit 1
 fi

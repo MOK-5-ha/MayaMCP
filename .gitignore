@@ -82,9 +82,6 @@ embeddings/
 *.pkl
 *.bin
 
-# Gradio cache
-.gradio/
-
 # Temporary files that might be created during LLM operations
 temp_outputs/
 conversation_history/
@@ -100,10 +97,6 @@ maya_memvid_output.log
 # Memvid video memory files (generated at runtime)
 assets/maya_memory.mp4
 assets/maya_memory_index.json
-
-# Runtime files
-.gradio_cache/
-gradio_flagged/
 
 # Frontend Node dependencies & builds
 node_modules/

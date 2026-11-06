@@ -21,12 +21,12 @@ def test_extract_session_id():
     assert extract_session_id("session123") == "session123"
     assert extract_session_id("   ") == "default"
 
-    # Gradio Request object mock
+    # Request object mock exposing a session_hash attribute
     req_mock = MagicMock()
     req_mock.session_hash = "hash_abc_123"
     assert extract_session_id(req_mock) == "hash_abc_123"
 
-    # Gradio Request object mock with None session_hash
+    # Request object mock with None session_hash
     req_mock_none = MagicMock()
     req_mock_none.session_hash = None
     assert extract_session_id(req_mock_none) == "default"

@@ -13,9 +13,9 @@ from ..llm.session_registry import (
     get_session_tts,
 )
 from ..schemas.chat import ChatRequest, ChatResponse
-from ..ui.api_key_modal import create_quota_error_html
 from ..utils.errors import is_quota_error
 from ..utils.helpers import append_to_history, get_overlay_payment_data
+from ..utils.quota_errors import create_quota_error_html
 from ..utils.state_manager import (
     get_api_key_state,
     get_current_order_state,

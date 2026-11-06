@@ -74,12 +74,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.agent_app_name = adk_app.name
     # Mount static frontend bundle directory if available (must be mounted after all API routes)
     frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
-    if os.path.exists(frontend_dist) and not any(
-        getattr(r, "name", "") == "static" for r in app.routes
-    ):
-        from fastapi.staticfiles import StaticFiles
-        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
-    yield
+    if os.path.exists(frontend_dist):
+        # ADK's get_fast_api_app registers a "/" redirect to /dev-ui/ plus a
+        # "static"-named mount for its own assets; drop the root redirect so
+        # the Phaser SPA can claim root, and only skip mounting when our dist
+        # is already mounted.
+        app.router.routes = [
+            r
+            for r in app.router.routes
+            if not (
+                getattr(r, "path", None) == "/"
+                and getattr(r, "name", "") == "redirect_root_to_dev_ui"
+            )
+        ]
+        if not any(
+            getattr(r, "name", "") == "static"
+            and getattr(getattr(r, "app", None), "directory", None) == frontend_dist
+            for r in app.routes
+        ):
+            from fastapi.staticfiles import StaticFiles
+
+            app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+
+    # Session cleanup must run in the process serving requests; uvicorn
+    # reload workers are separate processes that never see CLI-side init.
+    from src.utils.state_manager import start_session_cleanup, stop_session_cleanup
+
+    start_session_cleanup()
+    try:
+        yield
+    finally:
+        stop_session_cleanup()
 
 
 app: FastAPI = get_fast_api_app(
@@ -129,18 +154,6 @@ def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """
     logger.log_struct(feedback.model_dump(), severity="INFO")
     return {"status": "success"}
-
-
-# Mount Gradio sub-app under /ui for backward compatibility / legacy interface access
-try:
-    from gradio.routes import mount_gradio_app
-
-    from src.ui.launcher import launch_bartender_interface
-
-    gradio_blocks = launch_bartender_interface()
-    app = mount_gradio_app(app, gradio_blocks, path="/ui")
-except Exception as gradio_err:
-    logger.info(f"Gradio mounting skipped: {gradio_err}")
 
 
 # Main execution

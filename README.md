@@ -17,7 +17,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - Multi-turn conversational ordering system
 - Menu management with several beverages
 - Real-time streaming voice chat
-- Gradio UI with agent avatar
+- Phaser 4 canvas SPA frontend with agent avatar
 - **Crypto Payment Integration** (Coinbase CDP AgentKit on Base Sepolia)
   - $1000 starting balance for simulated bar experience
   - Live tab counter overlay on Maya's avatar
@@ -233,10 +233,11 @@ This section covers typical usage patterns.
 
 ### Running the Application
 
-After setup, Maya will launch a Gradio web interface accessible at:
+After setup, Maya serves the Phaser 4 SPA and REST/SSE API at:
 
-- Local: `http://localhost:7860`
-- Public: Gradio will provide a shareable link
+- Local: `http://localhost:8000` (override via `HOST`/`PORT`)
+- Phaser canvas frontend: `/`
+- REST/SSE API: `/api/v1/*`
 
 ### Interacting with Maya
 

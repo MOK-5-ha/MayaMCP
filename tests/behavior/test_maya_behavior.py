@@ -74,9 +74,6 @@ def mock_external_apis(monkeypatch):
 
     monkeypatch.setattr(Runner, 'run_async', mock_run_async)
 
-    # Mock TTS
-    monkeypatch.setattr('src.ui.handlers.get_session_tts', lambda *args, **kwargs: None)
-
 
 
 @given(parsers.parse("the session is initialized with a balance of {balance:f}"))

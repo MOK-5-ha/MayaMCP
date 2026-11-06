@@ -77,11 +77,10 @@ if overrides:
 )
 @modal.asgi_app()
 def serve_maya():
-    """Serve Maya's Gradio interface on Modal"""
+    """Serve Maya's Phaser 4 SPA and REST/SSE API on Modal"""
     import os
     import sys
-    from functools import partial
-    
+
     # Access the distributed app state
     # Note: modal.Dict objects are available as global variables in the function scope if defined in the app
     # but strictly speaking we access the one attached to the app or defined globally.
@@ -92,11 +91,6 @@ def serve_maya():
 
     # Import Maya components using absolute package imports (package is installed in image)
     from config.logging_config import setup_logging
-    from llm.tools import get_all_tools
-    from rag.memvid_store import initialize_memvid_store
-    from ui.launcher import launch_bartender_interface
-    from ui.handlers import handle_gradio_input, clear_chat_state
-    from ui.api_key_modal import handle_key_submission
     from utils.state_manager import initialize_state
     # Setup logging
     logger = setup_logging()
@@ -182,61 +176,12 @@ def serve_maya():
         logger.warning(f"Failed to initialize session manager: {e}")
         cleanup_thread = None
 
-    # Get tool definitions (static, shared)
-    tools = get_all_tools()
-    logger.info(f"Loaded {len(tools)} tool definitions")
-
-    # Initialize RAG with Memvid (will build video on first run)
-    rag_index = None
-    rag_documents = None
-    rag_retriever = None
-
-    if gcp_project:
-        try:
-            logger.info("Initializing Memvid RAG system in Vertex AI Mode...")
-            rag_retriever, rag_documents = initialize_memvid_store()
-            logger.info(f"Memvid RAG initialized with {len(rag_documents)} documents")
-        except Exception as e:
-            logger.warning(f"Memvid initialization failed: {e}. Attempting FAISS fallback...")
-            try:
-                from rag.vector_store import initialize_vector_store
-                rag_index, rag_documents = initialize_vector_store()
-                logger.info(f"FAISS RAG initialized with {len(rag_documents)} documents")
-            except Exception as e2:
-                logger.warning(f"FAISS initialization also failed: {e2}. Continuing without RAG.")
-    else:
-        logger.info("Skipping RAG initialization (no GCP_PROJECT)")
-
     # NOTE: LLM and TTS are NOT initialised here (BYOK mode).
     # Per-session clients are lazily created via src/llm/session_registry.
 
-    # Create handler with dependencies
-    handle_input_with_deps = partial(
-        handle_gradio_input,
-        tools=tools,
-        rag_index=rag_index,
-        rag_documents=rag_documents,
-        rag_retriever=rag_retriever,
-        rag_api_key=None,
-        app_state=state_store
-    )
-
-    clear_state_with_deps = partial(clear_chat_state, app_state=state_store)
-
-    handle_keys_with_deps = partial(handle_key_submission, app_state=state_store)
-
-    # Create Gradio interface
-    logger.info("Creating Maya's Gradio interface...")
-    interface = launch_bartender_interface(
-        handle_input_fn=handle_input_with_deps,
-        clear_state_fn=clear_state_with_deps,
-        handle_key_submission_fn=handle_keys_with_deps,
-    )
-    
-    # Mount Gradio app with FastAPI for Modal
+    # ASGI app setup for Modal
     from fastapi import FastAPI
     from fastapi.responses import PlainTextResponse
-    from gradio.routes import mount_gradio_app
     from contextlib import asynccontextmanager
     
     # Track process start time for uptime metric
@@ -285,13 +230,6 @@ def serve_maya():
         except Exception as e:
             logger.warning(f"Memory health check failed: {e}")
         
-        # Check RAG availability (either Memvid or FAISS)
-        rag_available = False
-        if rag_retriever is not None or rag_index is not None:
-            # Check that we have documents
-            if rag_documents and len(rag_documents) > 0:
-                rag_available = True
-
         if checks:
             return PlainTextResponse(
                 f"unhealthy: {', '.join(checks)}",
@@ -300,22 +238,20 @@ def serve_maya():
             )
         return PlainTextResponse("ok", media_type="text/plain")
 
-    # Mount static Phaser 3 frontend if compiled Vite dist exists on Modal container
+    # Mount static Phaser 4 frontend if compiled Vite dist exists on Modal container
     frontend_dist = "/app/frontend/dist"
     if not os.path.exists(frontend_dist):
         frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
     if os.path.exists(frontend_dist):
         from fastapi.staticfiles import StaticFiles
-        logger.info(f"Mounting static Phaser 3 HTML5 SPA from {frontend_dist}")
+        logger.info(f"Mounting static Phaser 4 HTML5 SPA from {frontend_dist}")
         web_app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
         return web_app
     else:
-        logger.info("Static frontend dist not found; mounting legacy Gradio interface fallback")
-        return mount_gradio_app(
-            app=web_app,
-            blocks=interface,
-            path="/"
+        raise RuntimeError(
+            "frontend/dist not found. Build it before deploying: "
+            "cd frontend && npm install && npm run build"
         )
 
 @app.local_entrypoint()

@@ -1,6 +1,6 @@
 # UI, Suggestion Chips & Voice Rules
 
-This document outlines frontend architecture, Gradio components, Cartesia voice streaming, Phaser 4 gaming assets, and contextual suggestion chip guidelines for MayaMCP.
+This document outlines frontend architecture, Cartesia voice streaming, Phaser 4 gaming assets, and contextual suggestion chip guidelines for MayaMCP.
 
 ---
 
@@ -10,17 +10,14 @@ This document outlines frontend architecture, Gradio components, Cartesia voice 
 - **Structured Output Validation**: LLM structured outputs (e.g., suggestion chips) use Pydantic v2 schemas with field validators. Invalid outputs must log validation errors and return graceful fallback values (empty chip sets, generic greeting chips).
 - **Chip State Management**: Session state includes `chip_state` dictionary with `current_chips` (SuggestionChipSet), `last_generation_time`, `generation_count`, `failure_count`, and `pending_task` (Future). Thread-safe access via session RLock. Rate limiting: max 1 generation per 2 seconds per session. Concurrency: max 10 parallel generations across all sessions.
 - **Chip Generation Context Window**: `ChipGenerator` extracts last 4 conversation turns, current conversation phase (greeting, ordering, describing, payment, complete), payment status, and recent user messages (last 2) for deduplication and context-aware generation.
-- **Downstream Background Task Synchronization in UI Callbacks**: When parallel background tasks (such as suggestion chip generation via `ThreadPoolExecutor`) execute concurrently with streaming responses, downstream UI follow-up callbacks (e.g. `.then(refresh_chips_after_response)`) must explicitly synchronize with in-flight background futures (`task.result(timeout=...)` with safety timeout fallbacks) before querying session state. Never assume background tasks complete before streaming response callbacks fire.
+- **Downstream Background Task Synchronization in UI Callbacks**: When parallel background tasks (such as suggestion chip generation via `ThreadPoolExecutor`) execute concurrently with streaming responses, downstream frontend follow-up callbacks (e.g., Phaser-side response-completion handlers) must explicitly synchronize with in-flight background futures (`task.result(timeout=...)` with safety timeout fallbacks) before querying session state. Never assume background tasks complete before streaming response callbacks fire.
 - **Cooldown Persistence Across Failed Attempts**: Rate limiting cooldowns for background generation (such as suggestion chips) must persist across failed, timed-out, or invalid generation attempts. When a background generation task fails or times out (and is not superseded by a newer sequence), record `last_generation_time = time.time()` to enforce the cooldown period and prevent rapid retry loops during outages.
 - **State Dictionary Default Normalization**: When retrieving numerical timestamps, sequence IDs, or counters from session or state dictionaries where defaults initialize keys to `None` (e.g., `DEFAULT_CHIP_STATE = {"last_generation_time": None}`), never rely solely on `dict.get(key, default)`. Because the key exists with value `None`, `dict.get` returns `None` and ignores the fallback default. Always normalize using `dict.get(key) or default` or explicit `if value is not None` checks before performing arithmetic or comparisons.
 
 ---
 
-## 2. Gradio Component State & Event Handlers
+## 2. Intent Routing & Interaction Safety
 
-- **Gradio Event Chaining for Auto-Submissions (`.then()`)**: In Gradio UI components requiring automated submission (such as action chips or quick-actions), never use arbitrary timer delays (`setTimeout`) or uncoordinated DOM clicks in JavaScript. Timers race against input textbox state updates and submit stale or empty input. Always chain auto-submission strictly after the input population callback finishes using Gradio's native `.then()` event listener (`click_ev.then(fn=None, inputs=[submit_btn], js="...")`), ensuring the textbox state is guaranteed to be updated in the client before the submit button is clicked.
-- **Gradio Store and Session State Propagation**: All Gradio event wrappers, component registration helpers, and UI refresh callbacks must explicitly accept and pass `app_state` (or the injected session store) down to `get_session_state()` and `update_*()` calls. Never rely on module-level fallback singletons in UI callbacks, as this causes session isolation failures across multi-container environments.
-- **Gradio Component Input Argument Semantics**: In Gradio, passing a button component in `inputs=[btn]` passes only its displayed string `value` to callback handlers, never its HTML DOM attributes (such as `elem_id`). Action metadata, button indices, or entity IDs must be resolved via button position index closures or parsed from visible content prefixes (e.g. emoji prefixes from `ACTION_ICONS`), rather than expecting Gradio to provide DOM element attributes.
 - **Intent Routing Safety**: When implementing deterministic intent routing (e.g., bypassing the LLM for hardcoded commands like tips or payments), never use simple substring checks (like `'tip' in text`) as it is prone to false positives. Always use regex word boundaries (e.g., `re.search(r'\btips?\b', text, re.IGNORECASE)`) to guarantee precise matching.
 
 ---

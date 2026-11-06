@@ -10,10 +10,13 @@ logger = get_logger(__name__)
 
 
 def extract_session_id(request: Any = None, default: str = "default") -> str:
-    """Extract session_id from Gradio Request object, dictionary, or string with fallback.
+    """Extract session_id from a state dictionary or string with fallback.
 
     Args:
-        request: Gradio request object, dictionary containing session details, or session string.
+        request: Dictionary containing session details, plain session string,
+            or a legacy request-like object exposing a ``session_hash``
+            attribute. Real FastAPI request objects are NOT recognized; HTTP
+            routes should use ``src.routers.session.resolve_session_id``.
         default: Fallback session ID string.
 
     Returns:
