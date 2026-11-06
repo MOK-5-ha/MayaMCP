@@ -7,6 +7,14 @@ Serves the FastAPI application (Phaser 4 SPA at / and REST/SSE API at /api/v1).
 """
 
 import os
+import sys
+from pathlib import Path
+
+# App code imports through the `src.*` package namespace; console-script
+# entry points don't put the repo root on sys.path, so bootstrap it here.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import uvicorn
 
