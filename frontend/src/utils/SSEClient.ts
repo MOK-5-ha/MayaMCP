@@ -1,6 +1,8 @@
 export interface StreamEvent {
   type: string;
   content?: string;
+  full_response?: string;
+  sentence?: string;
   text_chunk?: string;
   viseme?: string;
   session_id?: string;
@@ -37,7 +39,7 @@ export class SSEClient {
 
     const activeSessionId = sessionId || this.getSessionId() || '';
     const encodedMessage = encodeURIComponent(message);
-    let streamUrl = `/api/chat/stream?message=${encodedMessage}`;
+    let streamUrl = `/api/v1/chat/stream?message=${encodedMessage}`;
     if (activeSessionId) {
       streamUrl += `&session_id=${encodeURIComponent(activeSessionId)}`;
     }

@@ -184,3 +184,116 @@
 .soundtrack-player.is-unavailable .track-controls {
   margin-block-start: 0;
 }
+
+/* Chat input row (Phaser DOM overlay, bottom of the dialogue panel) */
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  width: 400px;
+  align-items: stretch;
+}
+
+.chat-input-row input {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 10px;
+  background: #0e0d1a;
+  border: 2px solid #00f0ff;
+  border-radius: 0;
+  color: #e0e0ff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+}
+
+.chat-input-row button {
+  min-height: 44px;
+  min-width: 72px;
+  padding: 0 12px;
+  background: #00f0ff;
+  border: none;
+  color: #000000;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.chat-input-row button:focus-visible,
+.chat-input-row input:focus-visible {
+  outline: 3px solid #ff2ea6;
+  outline-offset: 1px;
+}
+
+.chat-input-row button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Suggestion chip bar (Phaser DOM overlay above the dialogue panel).
+   Fixed 120px box with bottom-aligned content: Phaser caches DOM element
+   sizes at creation, so a measured origin would drift as chips render. */
+.chip-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 120px;
+}
+
+.chip-bar.is-hidden {
+  display: none;
+}
+
+.chip-status {
+  min-height: 26px;
+  color: #ffd166;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+}
+
+.chip-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 94px;
+  overflow-y: auto;
+}
+
+.chip-buttons:focus-visible {
+  outline: 3px solid #ff2ea6;
+  outline-offset: 1px;
+}
+
+/* Scrollable dialogue log inside the fixed-height panel */
+.dialogue-text {
+  max-height: 100px;
+  overflow-y: auto;
+  color: #e0e0ff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: auto;
+}
+
+.dialogue-text:focus-visible {
+  outline: 3px solid #ff2ea6;
+  outline-offset: 1px;
+}
+
+.chip-button {
+  min-height: 44px;
+  padding: 0 12px;
+  background: #0e0d1a;
+  border: 2px solid #00f0ff;
+  border-radius: 0;
+  color: #e0e0ff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip-button:focus-visible {
+  outline: 3px solid #ff2ea6;
+  outline-offset: 1px;
+}

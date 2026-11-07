@@ -354,3 +354,33 @@ class TestStateManager:
 
             assert result is False
 
+
+def test_claim_chip_generation_seq_invalidates_previous_chips():
+    """Claiming a new generation must clear stale chips so pollers never
+    render the previous turn's suggestions while generation is in flight."""
+    from src.schemas.chips import ChipType, SuggestionChip, SuggestionChipSet
+    from src.utils.state_manager import (
+        claim_chip_generation_seq,
+        cleanup_session_lock,
+        get_current_chips,
+        set_current_chips,
+    )
+
+    session_id = "test_claim_invalidates_chips"
+    cleanup_session_lock(session_id)
+    store = {}
+    stale = SuggestionChipSet(
+        chips=[
+            SuggestionChip(text="Old suggestion one", type=ChipType.DIALOGUE),
+            SuggestionChip(text="Old suggestion two", type=ChipType.DIALOGUE),
+            SuggestionChip(text="Old suggestion three", type=ChipType.DIALOGUE),
+        ]
+    )
+    set_current_chips(session_id, store, stale)
+    assert get_current_chips(session_id, store) is not None
+
+    seq = claim_chip_generation_seq(session_id, store)
+
+    assert seq == 1
+    assert get_current_chips(session_id, store) is None
+    cleanup_session_lock(session_id)

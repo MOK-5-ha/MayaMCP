@@ -348,6 +348,8 @@ def claim_chip_generation_seq(
 
     Thread-safe across concurrent turns, background tasks, and batch contexts.
     Ensures that concurrent turns cannot claim duplicate sequence numbers.
+    Claiming clears ``current_chips``: stored chips always belong to the
+    latest claimed generation, never a superseded turn.
     """
     session_id, store = _get_store_and_session(session_id, store)
     lock = get_session_lock(session_id)
@@ -363,6 +365,9 @@ def claim_chip_generation_seq(
 
         chip_state = session_data.setdefault("chip_state", {})
         chip_state["generation_seq"] = claimed_seq
+        # A claimed generation invalidates the previous turn's result so
+        # pollers never read stale chips while the new set is in flight.
+        chip_state["current_chips"] = None
         session_data["chip_state"] = chip_state
         _save_session_data(session_id, store, session_data)
         return claimed_seq

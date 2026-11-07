@@ -35,7 +35,7 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 - `scripts/`: Utility scripts, including Google Cloud evaluation pipelines
 - `src/`: Core source code with modular organization
   - `src/eval/`: Vertex AI Gen AI Evaluation Service (`EvalTask`), Antigravity Agent-as-a-Judge rubrics, zero-trust sanitization, and token efficiency scoring
-  - `src/routers/`: FastAPI v1 REST and SSE API endpoints (`session`, `payments`, `chat`)
+  - `src/routers/`: FastAPI v1 REST and SSE API endpoints (`session`, `payments`, `chat`, `chips`)
   - `src/schemas/`: Pydantic v2 data transfer schemas
   - `src/utils/`: Errors, helpers (centralized DRY logic cataloged in `docs/helper_functions.md`), and thread-safe state management
 - `tests/`: pytest suite (unit, integration, property-based, API)
@@ -43,9 +43,9 @@ This second iteration of Maya, our AI agent, will be bolstered with the power of
 
 ## Architecture Updates
 
-- **Phaser 4 HTML5 Canvas Game Engine & Vite 8**: Integrated interactive 2D retro canvas frontend (`phaser@4.2.1`) served at root `/`, with Vite 8 Rolldown bundling, a credential-gated exterior start screen, bottom-left bar soundtrack controls, and headless browser smoke testing (`npm test`).
+- **Phaser 4 HTML5 Canvas Game Engine & Vite 8**: Integrated interactive 2D retro canvas frontend (`phaser@4.2.1`) served at root `/`, with Vite 8 Rolldown bundling, a credential-gated exterior start screen, bottom-left bar soundtrack controls, a chat input row with streamed dialogue, a post-turn suggestion chip bar, and headless browser smoke testing (`npm test`).
 - **Cartesia 4.x Unified TTS SDK**: Migrated voice synthesis to `cartesia>=4.2.0,<5.0.0`, using modern `cartesia_client.tts.generate()` binary response handling, non-blocking audio streaming, and sub-millisecond session cache key derivation.
-- **FastAPI 0.141.1 & Decoupled Architecture**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). Decoupled the Gradio frontend to `/ui`, mounting the Phaser 4 SPA at root `/` alongside native REST (`/api/v1/*`) and SSE interfaces.
+- **FastAPI 0.141.1 & Decoupled Architecture**: Upgraded application server to FastAPI 0.141.1 (providing ~50% memory footprint reduction per container). The Phaser 4 SPA is served at root `/` alongside native REST (`/api/v1/*`) and SSE interfaces; the legacy Gradio UI was fully removed.
 - **Python 3.11+ Baseline**: Modernized project configuration (`pyproject.toml`, `setup.py`) to require Python `>=3.11`, enabling `enum.StrEnum` models and compatibility with `scikit-learn>=1.9.1`.
 - **Google ADK 2.0 Integration**: Completely migrated the conversational orchestrator to Google's Agent Development Kit (ADK) using `google-adk`. Replaced legacy `langchain` and native `google-genai` wrappers with ADK's `Agent`, `Runner`, and `Gemini` models.
 - **Unified GenAI Client & 100% GCP Vertex AI Mode**: Centralized provider authentication and session registry management using GCP Vertex AI mode (`GCP_PROJECT`, `GCP_LOCATION`, `GEMINI_TIER=paid`), removing Google AI Studio API key dependencies.
@@ -64,6 +64,7 @@ Maya exposes a REST and SSE API to allow building custom web and mobile client i
 | `/api/v1/payments/tip` | POST | Set or update tip percentage or amount | `X-Session-ID` (optional) |
 | `/api/v1/chat` | POST | Send chat message (synchronous REST) | `X-Session-ID` (optional) |
 | `/api/v1/chat/stream` | GET | Real-time SSE response stream (`EventSource` compatible) | `session_id` query param or `X-Session-ID` header |
+| `/api/v1/chips` | GET | Current suggestion chips (empty while generation is in flight) | `X-Session-ID` (optional) |
 
 *Note*: For EventSource streaming, browser clients can pass `session_id` as a URL parameter (`/api/v1/chat/stream?message=hello&session_id=sess_123`). The stream yields an initial `{"type": "session", "session_id": "sess_123"}` event upon connection.
 

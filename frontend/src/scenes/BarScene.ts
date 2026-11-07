@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MayaCharacter } from '../components/MayaCharacter';
+import { ChatController } from '../utils/ChatController';
 import { MANIFEST_REGISTRY_KEY, type AssetManifest } from '../utils/assetManifest';
 import { SoundManager } from '../utils/SoundManager';
 
@@ -7,6 +8,7 @@ export class BarScene extends Phaser.Scene {
   private neonGlow: Phaser.GameObjects.Graphics | null = null;
   private mayaCharacter: MayaCharacter | null = null;
   private soundManager: SoundManager | null = null;
+  private chatController: ChatController | null = null;
 
   constructor() {
     super('BarScene');
@@ -66,7 +68,8 @@ export class BarScene extends Phaser.Scene {
     });
     this.soundManager.setPlaylist(playlist);
     this.soundManager.playTrack(0);
-    this.scene.launch('HUDOverlayScene', { soundManager: this.soundManager });
+    this.chatController = new ChatController();
+    this.scene.launch('HUDOverlayScene', { soundManager: this.soundManager, chat: this.chatController });
 
     console.log('[BarScene] Cyberpunk pixel-art bar environment & Maya character initialized');
   }

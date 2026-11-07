@@ -7,6 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.fast_api_app import app
+from src.schemas.chips import ActionID, ChipType, SuggestionChip, SuggestionChipSet
+from src.utils.state_manager import set_current_chips, update_chip_state
 
 
 @pytest.fixture
@@ -328,3 +330,91 @@ def test_derive_viseme_mapping():
     assert derive_viseme("Shhh") == "mouth_talk_a"
 
 
+@pytest.fixture
+def chips_store(client):
+    """Attach a dedicated session store for chips-endpoint tests."""
+    store = {}
+    client.app.state.session_store = store
+    yield store
+    del client.app.state.session_store
+
+
+def _sample_chip_set() -> SuggestionChipSet:
+    return SuggestionChipSet(
+        chips=[
+            SuggestionChip(text="Show me the menu", type=ChipType.ACTION, action_id=ActionID.MENU),
+            SuggestionChip(text="An Old Fashioned, please", type=ChipType.DIALOGUE),
+            SuggestionChip(text="Surprise me", type=ChipType.DIALOGUE),
+        ]
+    )
+
+
+def test_chips_unknown_session_returns_empty(client):
+    response = client.get("/api/v1/chips", headers={"X-Session-ID": "chips-unknown-session"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["chips"] == []
+    assert data["generation_seq"] == 0
+    assert response.headers["X-Session-ID"] == "chips-unknown-session"
+
+
+def test_chips_returns_injected_set(client, chips_store):
+    set_current_chips("chips-seeded-session", chips_store, _sample_chip_set())
+    response = client.get("/api/v1/chips", headers={"X-Session-ID": "chips-seeded-session"})
+    assert response.status_code == 200
+    data = response.json()
+    assert [c["text"] for c in data["chips"]] == [
+        "Show me the menu",
+        "An Old Fashioned, please",
+        "Surprise me",
+    ]
+    action_chip = next(c for c in data["chips"] if c["type"] == "action")
+    assert action_chip["action_id"] == "menu"
+    dialogue_chip = next(c for c in data["chips"] if c["type"] == "dialogue")
+    assert dialogue_chip["action_id"] is None
+
+
+def test_chips_reflects_generation_counters(client, chips_store):
+    set_current_chips("chips-counters-session", chips_store, _sample_chip_set())
+    update_chip_state(
+        "chips-counters-session",
+        chips_store,
+        {"generation_seq": 4, "failure_count": 2},
+    )
+    response = client.get("/api/v1/chips", headers={"X-Session-ID": "chips-counters-session"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["generation_seq"] == 4
+    assert data["failure_count"] == 2
+
+
+def test_chips_query_param_session(client, chips_store):
+    set_current_chips("chips-query-session", chips_store, _sample_chip_set())
+    response = client.get("/api/v1/chips?session_id=chips-query-session")
+    assert response.status_code == 200
+    assert response.json()["session_id"] == "chips-query-session"
+    assert len(response.json()["chips"]) == 3
+
+
+def test_chips_dual_prefix_mount(client, chips_store):
+    set_current_chips("chips-alt-prefix", chips_store, _sample_chip_set())
+    for path in ("/api/v1/chips", "/api/chips"):
+        response = client.get(path, headers={"X-Session-ID": "chips-alt-prefix"})
+        assert response.status_code == 200
+        assert len(response.json()["chips"]) == 3
+
+
+def test_chips_reads_shared_chat_session_store(client):
+    """Without an injected app store, the chips endpoint must read the same
+    fallback store the chat router writes to. A private per-router fallback
+    dict splits the write and read paths and silently returns empty chips."""
+    from src.routers.session import _SESSION_STORE
+
+    sid = "chips-shared-store-session"
+    set_current_chips(sid, _SESSION_STORE, _sample_chip_set())
+    try:
+        response = client.get("/api/v1/chips", headers={"X-Session-ID": sid})
+        assert response.status_code == 200
+        assert len(response.json()["chips"]) == 3
+    finally:
+        _SESSION_STORE.pop(sid, None)

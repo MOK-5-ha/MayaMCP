@@ -32,7 +32,7 @@ except ImportError:
 from src.app_utils import services
 from src.app_utils.telemetry import setup_telemetry
 from src.app_utils.typing import Feedback
-from src.routers import chat_router, payments_router, session_router
+from src.routers import chat_router, chips_router, payments_router, session_router
 
 load_dotenv()
 setup_telemetry()
@@ -132,10 +132,12 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(session_router, prefix="/api/v1")
+app.include_router(chips_router, prefix="/api/v1")
 
 app.include_router(chat_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 app.include_router(session_router, prefix="/api")
+app.include_router(chips_router, prefix="/api")
 
 @app.get("/healthz")
 def healthz():

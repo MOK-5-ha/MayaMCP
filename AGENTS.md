@@ -12,7 +12,7 @@ src/
 ├── memvid/          # Memvid RAG implementation
 ├── payments/        # Coinbase CDP crypto payment client and logic
 ├── rag/             # RAG pipeline (embeddings, retrieval, vector store)
-├── routers/         # FastAPI REST & SSE v1 API routers (chat, payments, session)
+├── routers/         # FastAPI REST & SSE v1 API routers (chat, payments, session, chips)
 ├── schemas/         # Pydantic v2 data transfer schemas
 ├── security/        # Input/output scanning, encryption, scan config
 ├── utils/           # Errors, helpers, state management
@@ -122,7 +122,7 @@ This section governs how AI agents must interpret, maintain, and update reposito
 Detailed engineering rules are organized modularly in the [`.agents/rules/`](.agents/rules/) directory:
 
 - [**Architecture & Security Rules**](.agents/rules/architecture_and_security.md): Concurrency locking, distributed session store, validated Vertex session onboarding, optimistic payments, async SSE unblocking, security scanning, batch caching, token budgeting, Vertex/ADK SDK surface invariants (HttpOptions ms timeouts, lifespan-owned lifecycle services, CLI entry-point path bootstrap), and developer tooling governance (CLI-first workflow & stateful MCP boundaries).
-- [**UI, Suggestion Chips & Voice Rules**](.agents/rules/ui_and_voice.md): Parallel suggestion chip generation, Phaser 4 asset and DOM lifecycle, credential start-gate UX, manifest-driven soundtrack controls, Cartesia 4.x TTS streaming, and WCAG accessibility.
+- [**UI, Suggestion Chips & Voice Rules**](.agents/rules/ui_and_voice.md): Parallel suggestion chip generation with post-stream REST polling delivery, Phaser 4 asset and DOM lifecycle, credential start-gate UX, manifest-driven soundtrack controls, Cartesia 4.x TTS streaming, and WCAG accessibility.
 - [**Testing, BDD & Evaluation Rules**](.agents/rules/testing_and_hygiene.md): Native SDK mocking, BDD Gherkin patterns, rate limit test safety, ADK stream mock event contracts and real-event author semantics, live boot smoke verification for serving-path changes, production invalidation testing, non-blocking streaming assertions, browser smoke fixtures, and Vertex AI evals.
 - [**Style, Linting & Formatting Rules**](.agents/rules/style_and_formatting.md): Ruff rules, Mypy typing standards, conventional commits, pre-commit hygiene, GitHub CLI (`gh`) operational guardrails, and CLI output hygiene & token conservation protocol.
 
