@@ -6,6 +6,8 @@ google-genai>=2.34.0
 # Core dependencies
 python-dotenv>=1.2.4
 requests>=2.34.2,<3.0.0
+# Floor pinned to 4.16.0 to eliminate pytest 10 CallSpec2 deprecation warning from anyio.pytest_plugin
+anyio>=4.16.0
 # Upper cap matches google-adk's websockets<16 requirement.
 websockets>=15.0.1,<16.0
 tenacity>=9.0.0
@@ -15,7 +17,10 @@ google-cloud-trace>=1.21.0
 # Capped: opentelemetry-semantic-conventions pins api==1.42.1; adk 2.13 allows <=1.44 headroom.
 opentelemetry-api>=1.20.0,<=1.42.1
 opentelemetry-sdk>=1.20.0,<=1.42.1
-opentelemetry-exporter-gcp-trace>=1.15.0
+# Replaces deprecated opentelemetry-exporter-gcp-trace (CloudTraceSpanExporter).
+# ADK's get_gcp_exporters() uses the standard OTLP exporter to send traces to
+# telemetry.googleapis.com — no proprietary GCP-specific exporter needed.
+opentelemetry-exporter-otlp-proto-http==1.42.1
 pandas>=3.1.1
 scikit-learn>=1.9.1
 rouge-score>=0.1.2

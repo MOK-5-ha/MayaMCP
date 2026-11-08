@@ -42,10 +42,7 @@ except ImportError:
     Status = Any  # type: ignore[assignment, misc]
     StatusCode = Any  # type: ignore[assignment, misc]
 
-try:
-    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
-except ImportError:
-    CloudTraceSpanExporter = None  # type: ignore[assignment, misc]
+
 
 logger = logging.getLogger(__name__)
 
@@ -168,18 +165,10 @@ def setup_telemetry() -> str | None:
                     otel_resource=otel_resource,
                 )
 
-                # Configure direct CloudTraceSpanExporter on TracerProvider if available
-                if (
-                    CloudTraceSpanExporter is not None
-                    and _TRACER_PROVIDER is not None
-                    and BatchSpanProcessor is not None
-                ):
-                    cloud_exporter = CloudTraceSpanExporter(
-                        project_id=project,
-                        credentials=credentials,
-                    )
-                    _TRACER_PROVIDER.add_span_processor(BatchSpanProcessor(cloud_exporter))
-                    logger.info(f"OpenTelemetry Google Cloud Trace exporter configured for project '{project}'")
+                # NOTE: Cloud Trace export is handled via ADK's get_gcp_exporters() above,
+                # which uses the standard OTLP exporter (opentelemetry-exporter-otlp-proto-http)
+                # targeting telemetry.googleapis.com. No direct CloudTraceSpanExporter needed.
+                logger.info(f"OpenTelemetry GCP exporters configured for project '{project}'")
 
                 # Set up GenAI SDK instrumentation
                 _setup_instrumentation_lib_if_installed()

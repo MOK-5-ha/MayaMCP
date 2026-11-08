@@ -69,6 +69,10 @@ filterwarnings = [
     "ignore:BaseAgentConfig is deprecated and will be removed.*:DeprecationWarning:",
     "ignore:\\[EXPERIMENTAL\\].*:UserWarning:google\\.adk\\..*:",
     "ignore:Passing (nodeid|baseid) to .*:pytest.PytestRemovedIn10Warning:",
+    "ignore:_pytest.python.CallSpec2 has been renamed to CallSpec.*:pytest.PytestRemovedIn10Warning:anyio\\.pytest_plugin:",
+    # Third-party ResourceWarnings from pytest runner and CPython thread GC during subprocess
+    # test teardown (integration tests). Not from project code.
+    "ignore:unclosed file <_io\\.TextIOWrapper.*:ResourceWarning:",
 ]
 
 
