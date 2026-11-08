@@ -2,6 +2,7 @@
 
 import os
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -114,7 +115,8 @@ class TestSetupTelemetry:
                 for sp in added_processors:
                     assert hasattr(sp, "span_exporter")
                     exporter = sp.span_exporter
-                    assert "telemetry.googleapis.com" in getattr(exporter, "_endpoint", "")
+                    endpoint = getattr(exporter, "_endpoint", "")
+                    assert urlparse(endpoint).hostname == "telemetry.googleapis.com"
             finally:
                 for sp in added_processors:
                     sp.shutdown()
