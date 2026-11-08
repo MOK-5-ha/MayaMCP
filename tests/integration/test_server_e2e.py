@@ -31,6 +31,11 @@ from requests.exceptions import RequestException
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.filterwarnings("ignore:unclosed file <_io\\.TextIOWrapper.*:ResourceWarning"),
+]
+
 BASE_URL = "http://127.0.0.1:8000"
 RUN_SSE_URL = BASE_URL + "/run_sse"
 HEALTH_URL = BASE_URL + "/healthz"

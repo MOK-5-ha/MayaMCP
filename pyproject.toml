@@ -69,6 +69,11 @@ filterwarnings = [
     "ignore:BaseAgentConfig is deprecated and will be removed.*:DeprecationWarning:",
     "ignore:\\[EXPERIMENTAL\\].*:UserWarning:google\\.adk\\..*:",
     "ignore:Passing (nodeid|baseid) to .*:pytest.PytestRemovedIn10Warning:",
+    "ignore:_pytest.python.CallSpec2 has been renamed to CallSpec.*:pytest.PytestRemovedIn10Warning:anyio\\.pytest_plugin:",
+    # Scoped third-party ResourceWarnings: subprocess pipes closed by CPython GC during
+    # server fixture cleanup and background thread execution in specific test suites.
+    "ignore:unclosed file <_io\\.TextIOWrapper.*:ResourceWarning:tests\\.unit\\.test_trace_instrumentation.*:",
+    "ignore:unclosed file <_io\\.TextIOWrapper.*:ResourceWarning:tests\\.integration\\.test_server_e2e.*:",
 ]
 
 
