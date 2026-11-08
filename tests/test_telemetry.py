@@ -86,6 +86,57 @@ class TestSetupTelemetry:
             assert bucket == "test-maya-logs-bucket"
             assert os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT") == "NO_CONTENT"
 
+    def test_setup_telemetry_attaches_cloud_trace_otlp_exporter(self, monkeypatch):
+        """Test setup_telemetry attaches ADK OTLP span processor targeting Cloud Trace endpoint."""
+        monkeypatch.delenv("INTEGRATION_TEST", raising=False)
+        monkeypatch.setenv("MAYA_DISABLE_CLOUD_TRACE", "false")
+        monkeypatch.setenv("MAYA_EXPORT_CLOUD_TRACE", "true")
+
+        import src.app_utils.telemetry as telemetry
+        telemetry._TELEMETRY_INITIALIZED = False
+
+        from opentelemetry.sdk.trace import TracerProvider
+
+        mock_provider = MagicMock(spec=TracerProvider)
+        mock_provider.add_span_processor = MagicMock()
+        mock_creds = MagicMock()
+
+        with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider), \
+             patch("google.auth.default", return_value=(mock_creds, "test-gcp-proj")):
+            telemetry.setup_telemetry()
+
+            added_processors = [
+                call[0][0] for call in mock_provider.add_span_processor.call_args_list
+            ]
+            try:
+                assert mock_provider.add_span_processor.called
+                assert len(added_processors) >= 1
+                for sp in added_processors:
+                    assert hasattr(sp, "span_exporter")
+                    exporter = sp.span_exporter
+                    assert "telemetry.googleapis.com" in getattr(exporter, "_endpoint", "")
+            finally:
+                for sp in added_processors:
+                    sp.shutdown()
+
+    def test_completed_spans_sent_to_active_span_processor(self):
+        """Test completed spans are received by the attached span processor with GenAI attributes."""
+        from opentelemetry.sdk.trace import TracerProvider
+
+        provider = TracerProvider()
+        mock_processor = MagicMock()
+        provider.add_span_processor(mock_processor)
+
+        with patch("src.app_utils.telemetry.get_tracer", return_value=provider.get_tracer("test.tracer")):
+            with trace_genai_span("test.completed.op", model="gemini-3.5-flash-lite", session_id="sess-xyz") as span:
+                assert span is not None
+
+        assert mock_processor.on_end.called
+        completed_span = mock_processor.on_end.call_args[0][0]
+        assert completed_span.name == "test.completed.op"
+        assert completed_span.attributes.get("gen_ai.request.model") == "gemini-3.5-flash-lite"
+        assert completed_span.attributes.get("session.id") == "sess-xyz"
+
 
 class TestGenAISpanInstrumentation:
     """Test GenAI semantic span attribute recording."""

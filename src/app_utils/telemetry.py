@@ -142,45 +142,50 @@ def setup_telemetry() -> str | None:
             except Exception as prov_err:
                 logger.warning(f"Failed to initialize OpenTelemetry TracerProvider ({prov_err})")
 
-        # Set up OpenTelemetry exporters for Cloud Trace and Cloud Logging
-        if export_to_cloud:
-            try:
-                credentials, project_id = google.auth.default()
-                project = (
-                    project_id
-                    or os.getenv("GCP_PROJECT")
-                    or os.getenv("GOOGLE_CLOUD_PROJECT")
-                )
+        if not _TELEMETRY_INITIALIZED:
+            # Set up OpenTelemetry exporters for Cloud Trace and Cloud Logging
+            if export_to_cloud:
+                try:
+                    credentials, project_id = google.auth.default()
+                    project = (
+                        project_id
+                        or os.getenv("GCP_PROJECT")
+                        or os.getenv("GOOGLE_CLOUD_PROJECT")
+                    )
 
-                # Configure ADK telemetry hooks
-                otel_hooks = get_gcp_exporters(
-                    enable_cloud_tracing=True,
-                    enable_cloud_metrics=False,
-                    enable_cloud_logging=True,
-                    google_auth=(credentials, project),
-                )
-                otel_resource = get_gcp_resource(project)
-                maybe_set_otel_providers(
-                    otel_hooks_to_setup=[otel_hooks],
-                    otel_resource=otel_resource,
-                )
+                    # Configure ADK telemetry hooks
+                    otel_hooks = get_gcp_exporters(
+                        enable_cloud_tracing=True,
+                        enable_cloud_metrics=False,
+                        enable_cloud_logging=True,
+                        google_auth=(credentials, project),
+                    )
+                    otel_resource = get_gcp_resource(project)
+                    maybe_set_otel_providers(
+                        otel_hooks_to_setup=[otel_hooks],
+                        otel_resource=otel_resource,
+                    )
 
-                # NOTE: Cloud Trace export is handled via ADK's get_gcp_exporters() above,
-                # which uses the standard OTLP exporter (opentelemetry-exporter-otlp-proto-http)
-                # targeting telemetry.googleapis.com. No direct CloudTraceSpanExporter needed.
-                logger.info(f"OpenTelemetry GCP exporters configured for project '{project}'")
+                    # Attach ADK's Cloud Trace OTLP span processor(s) directly to _TRACER_PROVIDER
+                    if _TRACER_PROVIDER is not None and hasattr(_TRACER_PROVIDER, "add_span_processor"):
+                        for sp in otel_hooks.span_processors:
+                            _TRACER_PROVIDER.add_span_processor(sp)
+                        logger.info(
+                            f"OpenTelemetry Cloud Trace OTLP exporter configured with "
+                            f"{len(otel_hooks.span_processors)} span processor(s) for project '{project}'"
+                        )
 
-                # Set up GenAI SDK instrumentation
-                _setup_instrumentation_lib_if_installed()
-            except Exception as otel_err:
-                logger.warning(
-                    f"Skipping OpenTelemetry GCP setup ({otel_err}); "
-                    "falling back to non-blocking local logging."
-                )
-        else:
-            logger.info("OpenTelemetry Cloud Trace export disabled or running in local mode.")
+                    # Set up GenAI SDK instrumentation
+                    _setup_instrumentation_lib_if_installed()
+                except Exception as otel_err:
+                    logger.warning(
+                        f"Skipping OpenTelemetry GCP setup ({otel_err}); "
+                        "falling back to non-blocking local logging."
+                    )
+            else:
+                logger.info("OpenTelemetry Cloud Trace export disabled or running in local mode.")
 
-        _TELEMETRY_INITIALIZED = True
+            _TELEMETRY_INITIALIZED = True
 
     return bucket
 

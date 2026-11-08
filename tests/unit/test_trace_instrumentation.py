@@ -104,6 +104,7 @@ class TestLLMClientTraceInstrumentation:
         mock_span.set_attribute.assert_any_call("gen_ai.response.finish_reasons", ["STOP"])
 
 
+@pytest.mark.filterwarnings("ignore:unclosed file <_io\\.TextIOWrapper.*:ResourceWarning")
 class TestProcessorTraceInstrumentation:
     """Test trace instrumentation and context propagation in conversation processor."""
 
