@@ -189,6 +189,11 @@ def mock_google_genai_client(monkeypatch):
                     tool_use_prompt_token_count=0,
                     thoughts_token_count=0,
                     cached_content_token_count=0,
+                    # adk 2.14 token telemetry reads these detail buckets directly.
+                    prompt_tokens_details=[],
+                    tool_use_prompt_tokens_details=[],
+                    candidates_tokens_details=[],
+                    cache_tokens_details=[],
                 )
                 self.grounding_metadata = None
                 self.citation_metadata = None
