@@ -14,13 +14,14 @@ tenacity>=9.0.0
 # Google Cloud Trace, OpenTelemetry & Vertex AI Gen AI Evaluation
 google-cloud-aiplatform>=2.7.0
 google-cloud-trace>=1.21.0
-# Capped: opentelemetry-semantic-conventions pins api==1.42.1; adk 2.13 allows <=1.44 headroom.
-opentelemetry-api>=1.20.0,<=1.42.1
-opentelemetry-sdk>=1.20.0,<=1.42.1
+# Pinned 1.45.2: CVE-2026-114603 fix requires >=1.45.1 (adk 2.14 raises the cap to <=1.45.2).
+# otel releases in lockstep (sdk pairs with semantic-conventions 0.66b2) — keep all four ==1.45.2.
+opentelemetry-api==1.45.2
+opentelemetry-sdk==1.45.2
 # Replaces deprecated opentelemetry-exporter-gcp-trace (CloudTraceSpanExporter).
 # ADK's get_gcp_exporters() uses the standard OTLP exporter to send traces to
 # telemetry.googleapis.com — no proprietary GCP-specific exporter needed.
-opentelemetry-exporter-otlp-proto-http==1.42.1
+opentelemetry-exporter-otlp-proto-http==1.45.2
 pandas>=3.1.1
 scikit-learn>=1.9.1
 rouge-score>=0.1.2
@@ -37,7 +38,8 @@ pytest>=9.2.0,<10.0.0
 pytest-bdd>=9.0.1
 
 # Google Agent Development Kit (ADK)
-google-adk>=2.13.0
+# 2.14.0 floor: raises otel cap to <=1.45.2, required by the CVE-2026-114603 fix (validated 2026-11).
+google-adk>=2.14.0
 # Floor held: fastapi 0.16x requires opentelemetry-api>=1.44, conflicting with the pinned otel stack.
 fastapi>=0.141.1,<1.0
 sse-starlette>=3.6.0
@@ -60,3 +62,11 @@ cryptography>=50.0.2
 
 # Coinbase Developer Platform (CDP) SDK
 cdp-sdk>=1.52.0
+
+# Security floors (pip-audit 2026-11): minimum versions resolving known CVEs in transitive deps.
+# joserfc: CVE-2026-119283/CVE-2026-119284 (via authlib); multidict: PYSEC-2026-4244 (via aiohttp/yarl);
+# nltk: PYSEC-2026-3740 (via rouge_score); pyasn1: CVE-2026-11919x family (via pyasn1_modules).
+joserfc>=1.7.6
+multidict>=6.9.1,<7.0
+nltk>=3.10.4
+pyasn1>=0.6.5,<0.7.0
