@@ -136,6 +136,12 @@ When reviewing code, pull requests, and commits:
 - **CLI Output Hygiene**: Mandate structured projections (`--json`, `--limit`, `--format`) on query subcommands and stream filtering (`jq`, `head`) or scratch file buffering for non-query commands (e.g. `docker build`) to prevent context window saturation.
 - **Architectural Perpetuation Invariant**: Future agents, child workflows, and pull requests must defend these boundaries and preserve token hygiene indefinitely.
 
+### Rule 17: Version-Free Rules Enforcement
+- Dependency version ranges live exclusively in the manifests (`requirements.txt`, `pyproject.toml`, `frontend/package.json`); vendor dependency metadata (installed distribution metadata / registry JSON) is the authoritative reference for any dependency verdict.
+- Never quote rule-prose version numbers as constraints, and never ask contributors to raise or lower manifests to match stale prose. Era-specific numbers in `.kiro/specs/**` and dated migration notes are historical drift evidence, not requirements — this review corpus includes spec archives, so spec-era dependency numbers MUST NOT be treated as current constraints.
+- Any review comment on a dependency version MUST cite the active manifest (or the active upstream release's declared range for mirror constraints), never historical rule text or spec prose.
+- Mirror-alignment recommendations MUST be verified against resolvability tooling (`pip install --dry-run` / `npm ci --dry-run`) before being raised.
+
 ---
 
 ## 3. Output Tone
